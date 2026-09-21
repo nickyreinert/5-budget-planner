@@ -2,7 +2,7 @@
 // Minimal offline app-shell cache: the app itself is entirely client-side
 // (localStorage-backed, no backend), so caching the static shell is enough
 // to let it load without a network connection after the first visit.
-const CACHE_NAME = 'money-money-analyzer-v15';
+const CACHE_NAME = 'money-money-analyzer-v16';
 const APP_SHELL = [
   './',
   './index.html',
@@ -23,6 +23,7 @@ const APP_SHELL = [
   './src/budgets.js',
   './src/keypad.js',
   './src/gocardless.js',
+  './src/sync.js',
   './src/transfers.js',
   './src/i18n.js',
   './src/csv_config.js',

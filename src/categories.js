@@ -14,3 +14,14 @@ export function sort_categories(categories, favorites = []) {
   const favs = new Set(favorites);
   return [...categories].sort((a, b) => Number(b === UNCATEGORIZED) - Number(a === UNCATEGORIZED) || Number(favs.has(b)) - Number(favs.has(a)) || a.localeCompare(b, 'de'));
 }
+
+// Fixed-cost rules define the reusable categories offered when a transaction
+// is turned into a recurring contract. General spending categories deliberately
+// do not appear in that picker.
+export function fixed_expense_categories(settings, favorites = []) {
+  const categories = (settings.rules || [])
+    .filter(rule => rule.group === 'fixed')
+    .map(rule => rule.category || rule.label)
+    .filter(Boolean);
+  return sort_categories([...new Set(categories)], favorites);
+}

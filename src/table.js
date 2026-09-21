@@ -155,8 +155,14 @@ function ensure_popover() {
   popoverEl = document.createElement('div');
   popoverEl.className = 'category-popover';
   popoverEl.hidden = true;
-  popoverEl.innerHTML = `<input type="text" class="category-popover-filter"><div class="category-popover-list"></div>`;
+  popoverEl.innerHTML = `<input type="text" class="category-popover-filter"><div class="category-popover-list"></div><form class="category-popover-create" hidden><input type="text" class="category-popover-new" maxlength="100"><button type="submit" class="category-popover-add"></button></form>`;
   document.body.appendChild(popoverEl);
+  // The picker can live inside a modal dialog. Keep its own interaction out
+  // of the document-level click-away handler, especially in Firefox where
+  // top-layer event retargeting can make an inside click look external.
+  ['click', 'pointerdown', 'mousedown'].forEach(type => {
+    popoverEl.addEventListener(type, event => event.stopPropagation());
+  });
   // Deferred via setTimeout: this is the popover's first-ever use, called
   // from inside the very click handler that's about to open it. Registering
   // synchronously would let this same click event's bubble phase reach the
@@ -165,7 +171,10 @@ function ensure_popover() {
   // closing the popover the instant it opens.
   setTimeout(() => {
     document.addEventListener('click', (e) => {
-      if (!popoverEl.hidden && !popoverEl.contains(e.target) && e.target !== popoverEl._anchor && !popoverEl._anchor?.contains(e.target)) {
+      const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+      const insidePopover = path.includes(popoverEl) || popoverEl.contains(e.target);
+      const insideAnchor = path.includes(popoverEl._anchor) || e.target === popoverEl._anchor || popoverEl._anchor?.contains(e.target);
+      if (!popoverEl.hidden && !insidePopover && !insideAnchor) {
         close_popover();
       }
     });
@@ -181,15 +190,41 @@ export function close_popover() {
 
 // Opens the shared category dropdown below `anchorBtn`, with a quick-filter
 // text input on top and the (deduplicated) list of known categories below;
-// clicking one calls `onPick(category)`. Exported so the quick-entry sheet's
-// "more categories" button can reuse the exact same picker.
-export function open_category_popover(anchorBtn, categoryOptions, onPick) {
+// clicking one calls `onPick(category)`. An optional `onCreate` callback adds
+// an inline creation form. Exported so the quick-entry sheet's "more
+// categories" button can reuse the exact same picker.
+export function open_category_popover(anchorBtn, categoryOptions, onPick, { onCreate = null } = {}) {
   const pop = ensure_popover();
+  // A modal dialog lives in the browser's top layer. Move the shared picker
+  // into that dialog while it is in use; a body child would otherwise open
+  // behind the dialog and look as though the trigger did nothing.
+  const overlayParent = anchorBtn.closest('dialog') || document.body;
+  if (pop.parentElement !== overlayParent) overlayParent.appendChild(pop);
   pop._anchor = anchorBtn;
   const filterInput = pop.querySelector('.category-popover-filter');
   const listEl = pop.querySelector('.category-popover-list');
+  const createForm = pop.querySelector('.category-popover-create');
+  const createInput = pop.querySelector('.category-popover-new');
+  const createButton = pop.querySelector('.category-popover-add');
   const current = anchorBtn.dataset.category || '';
   filterInput.placeholder = t('table.filterCategories');
+  createForm.hidden = !onCreate;
+  createInput.placeholder = t('table.newCategoryPlaceholder');
+  createInput.value = '';
+  createButton.textContent = t('table.addCategory');
+  createForm.onsubmit = event => {
+    event.preventDefault();
+    const category = createInput.value.trim();
+    if (!category) return;
+    if (categoryOptions.some(option => option.localeCompare(category, undefined, { sensitivity: 'accent' }) === 0)) {
+      createInput.setCustomValidity(t('table.categoryExists'));
+      createInput.reportValidity();
+      createInput.setCustomValidity('');
+      return;
+    }
+    onCreate(category);
+    close_popover();
+  };
 
   function renderList(query) {
     const q = (query || '').toLowerCase().trim();

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { category_catalog, sort_categories } from '../src/categories.js';
+import { category_catalog, fixed_expense_categories, sort_categories } from '../src/categories.js';
 import { classify, classify_all, apply_manual_overrides } from '../src/rules.js';
 import { enrich_row, tx_id } from '../src/data.js';
 import { default_csv_config, get_csv_config } from '../src/csv_config.js';
@@ -10,6 +10,17 @@ test('only settings names form the catalog, with favorites sorted first', () => 
   assert.deepEqual(sort_categories(category_catalog(settings), ['Food']), ['Unkategorisiert', 'Food', 'Daily', 'Dining', 'Zusätzliche Einnahmen']);
   assert.ok(!category_catalog(settings).includes('Crypto'));
   assert.deepEqual(category_catalog({ rules: [], mainCategories: [] }), ['Unkategorisiert', 'Zusätzliche Einnahmen']);
+});
+
+test('recurring-contract picker only offers reusable fixed-expense categories', () => {
+  const ruleSet = { rules: [
+    { category: 'Rent', group: 'fixed' },
+    { category: 'Insurance', group: 'fixed' },
+    { category: 'Food', group: 'essential' },
+    { category: 'Salary', group: 'income' },
+    { category: 'Rent', group: 'fixed' }
+  ] };
+  assert.deepEqual(fixed_expense_categories(ruleSet, ['Insurance']), ['Insurance', 'Rent']);
 });
 
 test('bank labels and obsolete overrides cannot introduce unknown categories', () => {

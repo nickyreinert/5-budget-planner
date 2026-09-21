@@ -159,6 +159,10 @@ input, select { font-family: inherit; margin: 0; padding: 8px 10px; border: 1px 
 .quickentry-delete { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 1.1em; padding: 0 6px; min-height: auto; }
 .contract-fix-btn { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 1.1em; padding: 0 6px; min-height: auto; }
 .contract-fix-btn:hover { color: var(--accent-dark); }
+.recurring-expense-btn { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 1.1em; padding: 0 6px; min-height: auto; }
+.recurring-expense-btn:hover { color: var(--accent-dark); }
+.dialog-hint { color: var(--text-muted); font-size: 0.9em; }
+.review-dialog select, .review-dialog input[type="text"] { width: 100%; box-sizing: border-box; }
 .num { text-align: right; white-space: nowrap; }
 
 /* Editable transaction rows: click name to reassign category, click a
@@ -334,6 +338,9 @@ input, select { font-family: inherit; margin: 0; padding: 8px 10px; border: 1px 
 .category-popover-item:hover { background: var(--accent-soft); border-color: transparent; }
 .category-popover-item.active { background: var(--accent-soft); font-weight: 600; }
 .category-popover-empty { color: var(--text-muted); padding: 8px 10px; font-style: italic; }
+.category-popover-create { display: flex; gap: 6px; border-top: 1px solid var(--border); margin-top: 6px; padding-top: 6px; }
+.category-popover-new { min-width: 0; flex: 1; }
+.category-popover-add { padding: 6px 8px; white-space: nowrap; min-height: auto; }
 
 /* ===== Analytics ("Übersicht") tab: visual tidy-up, same charts/drilldown ===== */
 #tab-overview .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 0 12px; background: none; border: none; min-height: 0; }
@@ -477,12 +484,7 @@ button.budget-totals-cell:hover { border-color: var(--accent); }
 .week-basis .main-budget summary { padding: 8px 0; }
 .icon { width: 20px; height: 20px; display: inline-block; vertical-align: middle; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 @media (min-width: 900px) {
-  #weekContent, #weekEmptyState { max-width: 1000px; }
-  #weekContent { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; align-items: start; }
-  #weekContent .week-hero { grid-column: 1 / -1; max-width: 560px; width: 100%; justify-self: center; }
-  #mainBudgetProgress { grid-column: 1; }
-  #weekContent .quickadd { grid-column: 2; grid-row: 2 / 4; }
-  #weekContent > .week-basis { grid-column: 1; }
+    #weekContent, #weekEmptyState { max-width: 560px; }
   #tab-overview { padding-left: max(24px, calc((100vw - 1200px) / 2)); padding-right: max(24px, calc((100vw - 1200px) / 2)); }
 }
 @media (max-width: 540px) {
