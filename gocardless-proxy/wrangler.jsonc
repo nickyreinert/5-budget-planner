@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "moneymoney-gocardless-proxy",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-20",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    // Not secret - the one browser origin allowed to call this Worker.
+    // Change this if you host the app somewhere else.
+    "ALLOWED_ORIGIN": "https://money.nickyreinert.de"
+  }
+}

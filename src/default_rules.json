@@ -1,0 +1,453 @@
+{
+  "version": 1,
+  "name": "Standardregeln (DE Banking / MoneyMoney)",
+  "groups": [
+    {
+      "id": "fixed",
+      "label": "Fixkosten (kaum beeinflussbar)",
+      "color": "#7f8c8d"
+    },
+    {
+      "id": "essential",
+      "label": "Notwendige Ausgaben",
+      "color": "#3498db"
+    },
+    {
+      "id": "discretionary",
+      "label": "Diskretionär (mögliche Geldlecks)",
+      "color": "#e74c3c"
+    },
+    {
+      "id": "reserve",
+      "label": "Rücklagen (unregelmäßig, planbar)",
+      "color": "#9b59b6"
+    },
+    {
+      "id": "savings",
+      "label": "Sparen & private Transfers",
+      "color": "#2ecc71"
+    },
+    {
+      "id": "income",
+      "label": "Einnahmen",
+      "color": "#27ae60"
+    },
+    {
+      "id": "internal_transfer",
+      "label": "Interne Umbuchung (kein Cashflow)",
+      "color": "#bdc3c7"
+    },
+    {
+      "id": "unclassified",
+      "label": "Unklassifiziert",
+      "color": "#95a5a6"
+    }
+  ],
+  "categoryGroupFallback": {
+    "wohnen": "reserve",
+    "versicherungen": "fixed",
+    "mobilität": "essential",
+    "mobilitaet": "essential",
+    "lebensmittel & drogerie": "essential",
+    "freizeit": "discretionary",
+    "urlaub": "reserve",
+    "einnahmen": "income"
+  },
+  "mainCategories": [
+    {
+      "id": "lebensmittel",
+      "label": "Lebensmittel",
+      "color": "#3498db"
+    },
+    {
+      "id": "freizeit",
+      "label": "Freizeit",
+      "color": "#e67e22"
+    },
+    {
+      "id": "kids",
+      "label": "Kids Entertainment",
+      "color": "#e84393"
+    },
+    {
+      "id": "tech",
+      "label": "Games & Tech",
+      "color": "#9b59b6"
+    },
+    {
+      "id": "mobilitaet",
+      "label": "Mobility",
+      "color": "#16a085"
+    },
+    {
+      "id": "sonstiges",
+      "label": "Sonstiges",
+      "entryCategory": "Sonstige Ausgaben",
+      "color": "#8b91a1"
+    }
+  ],
+  "rules": [
+    {
+      "id": "internal_paypal_funding",
+      "label": "PayPal-Finanzierung (Umbuchung, kein Ausgaben-Impact)",
+      "category": "PayPal-Funding",
+      "group": "internal_transfer",
+      "excludeFromTotals": true,
+      "namePattern": "^Bank Account( \\(direct debit\\))?$",
+      "verwendungPattern": "",
+      "kategoriePattern": "Paypal",
+      "matchType": "and",
+      "priority": 1000
+    },
+    {
+      "id": "internal_paypal_settlement",
+      "label": "PayPal-Sammeleinzug (Bank sammelt bereits einzeln erfasste PayPal-Käufe ein)",
+      "category": "PayPal-Sammeleinzug",
+      "group": "internal_transfer",
+      "excludeFromTotals": true,
+      "namePattern": "PayPal.{0,3}Europe.{0,25}S\\.?a\\.?\\s?r\\.?l\\.?",
+      "verwendungPattern": "",
+      "kategoriePattern": "",
+      "matchType": "or",
+      "priority": 999
+    },
+    {
+      "id": "rent",
+      "label": "Miete",
+      "category": "Wohnen: Miete",
+      "group": "fixed",
+      "namePattern": "",
+      "verwendungPattern": "\\bMiete\\b|Nebenkosten",
+      "kategoriePattern": "Miete",
+      "matchType": "or",
+      "priority": 900
+    },
+    {
+      "id": "utilities",
+      "label": "Strom & Gas",
+      "category": "Wohnen: Strom & Gas",
+      "group": "fixed",
+      "namePattern": "",
+      "verwendungPattern": "Strom|\\bGas\\b|Abschlag",
+      "kategoriePattern": "Strom|Gas",
+      "matchType": "or",
+      "priority": 890
+    },
+    {
+      "id": "insurance",
+      "label": "Versicherungen",
+      "category": "Versicherungen",
+      "group": "fixed",
+      "namePattern": "Versicherung|\\bARAG\\b|\\bHUK\\b|\\bAllianz\\b",
+      "verwendungPattern": "Versicherung",
+      "kategoriePattern": "Versicherung",
+      "matchType": "or",
+      "priority": 880
+    },
+    {
+      "id": "rundfunkbeitrag",
+      "label": "Rundfunkbeitrag",
+      "category": "Rundfunkbeitrag",
+      "group": "fixed",
+      "namePattern": "",
+      "verwendungPattern": "Rundfunk|\\bGEZ\\b",
+      "kategoriePattern": "",
+      "matchType": "or",
+      "priority": 870
+    },
+    {
+      "id": "telecom",
+      "label": "Handy & Internet",
+      "category": "Handy & Internet",
+      "group": "fixed",
+      "namePattern": "Telekom|Vodafone|\\bO2\\b|Congstar|1&1|Telefonica",
+      "verwendungPattern": "",
+      "kategoriePattern": "Handy|Hosting",
+      "matchType": "or",
+      "priority": 860
+    },
+    {
+      "id": "kredit",
+      "label": "Kredit / Darlehen",
+      "category": "Kredit",
+      "group": "fixed",
+      "namePattern": "",
+      "verwendungPattern": "Kredit|Darlehen",
+      "kategoriePattern": "",
+      "matchType": "or",
+      "priority": 840
+    },
+    {
+      "id": "unterhalt",
+      "label": "Unterhalt",
+      "category": "Unterhalt",
+      "group": "fixed",
+      "namePattern": "",
+      "verwendungPattern": "",
+      "kategoriePattern": "Unterhalt",
+      "matchType": "or",
+      "priority": 830
+    },
+    {
+      "id": "supermarket",
+      "label": "Lebensmittel",
+      "category": "Lebensmittel",
+      "group": "essential",
+      "budgetCategory": "lebensmittel",
+      "namePattern": "REWE|EDEKA|Lidl|Aldi|Kaufland|\\bNetto\\b|\\bPenny\\b|Denns|real,-|Getränke",
+      "verwendungPattern": "",
+      "kategoriePattern": "Lebensmittel",
+      "matchType": "or",
+      "priority": 600
+    },
+    {
+      "id": "tankstelle",
+      "label": "Tanken",
+      "category": "Tanken",
+      "group": "essential",
+      "budgetCategory": "mobilitaet",
+      "namePattern": "\\bShell\\b|\\bAral\\b|\\bEsso\\b|\\bTotal\\b|Tankstelle|\\bJet\\b|Autobahn-Rastst",
+      "verwendungPattern": "",
+      "kategoriePattern": "Tankstelle",
+      "matchType": "or",
+      "priority": 580
+    },
+    {
+      "id": "oepnv",
+      "label": "Öffentlicher Nahverkehr & Bahn",
+      "category": "Öffentlicher Nahverkehr & Bahn",
+      "group": "essential",
+      "budgetCategory": "mobilitaet",
+      "namePattern": "\\bBVG\\b|\\bHVV\\b|\\bMVV\\b|\\bVBB\\b|Deutsche Bahn|DB Vertrieb|DB Fernverkehr",
+      "verwendungPattern": "",
+      "kategoriePattern": "",
+      "matchType": "or",
+      "priority": 570
+    },
+    {
+      "id": "auto_werkstatt",
+      "label": "Auto: Werkstatt, Miete & Zubehör",
+      "category": "Auto: Werkstatt, Miete & Zubehör",
+      "group": "reserve",
+      "namePattern": "\\bADAC\\b|A\\.T\\.U\\b|Auto-Teile-Unger|Werkstatt|Autovermietung",
+      "verwendungPattern": "",
+      "kategoriePattern": "",
+      "matchType": "or",
+      "priority": 575
+    },
+    {
+      "id": "flights",
+      "label": "Flüge",
+      "category": "Flüge",
+      "group": "reserve",
+      "namePattern": "Ryanair|Lufthansa|Eurowings|Aegean Airlines|EasyJet|Wizz ?Air|Condor Flugdienst",
+      "verwendungPattern": "",
+      "kategoriePattern": "",
+      "matchType": "or",
+      "priority": 305
+    },
+    {
+      "id": "einrichtung",
+      "label": "Wohnen: Einrichtung",
+      "category": "Wohnen: Einrichtung",
+      "group": "reserve",
+      "namePattern": "\\bIKEA\\b|Matratzen|Möbel",
+      "verwendungPattern": "",
+      "kategoriePattern": "",
+      "matchType": "or",
+      "priority": 300
+    },
+    {
+      "id": "spenden",
+      "label": "Spenden",
+      "category": "Spenden",
+      "group": "savings",
+      "namePattern": "GoFundMe|Betterplace|Spende",
+      "verwendungPattern": "",
+      "kategoriePattern": "",
+      "matchType": "or",
+      "priority": 290
+    },
+    {
+      "id": "carsharing",
+      "label": "Carsharing / Mobility",
+      "category": "Carsharing",
+      "group": "discretionary",
+      "budgetCategory": "mobilitaet",
+      "namePattern": "Miles Mobility|Share ?Now|SIXT share",
+      "verwendungPattern": "",
+      "kategoriePattern": "Miles",
+      "matchType": "or",
+      "priority": 560
+    },
+    {
+      "id": "amazon",
+      "label": "Sonstige Ausgaben",
+      "category": "Sonstige Ausgaben",
+      "group": "discretionary",
+      "namePattern": "Amazon",
+      "verwendungPattern": "",
+      "kategoriePattern": "",
+      "matchType": "or",
+      "priority": 400,
+      "budgetCategory": "sonstiges"
+    },
+    {
+      "id": "gaming",
+      "label": "Gaming (Steam, PSN, Xbox, Nintendo, Epic)",
+      "category": "Gaming",
+      "group": "discretionary",
+      "budgetCategory": "tech",
+      "namePattern": "Steam|steampowered|PlayStation|Sony Interactive Entertainment|Nintendo|Xbox|Epic Games",
+      "verwendungPattern": "",
+      "kategoriePattern": "Steam",
+      "matchType": "or",
+      "priority": 390
+    },
+    {
+      "id": "streaming",
+      "label": "Streaming-Abos",
+      "category": "Streaming-Abos",
+      "group": "fixed",
+      "namePattern": "Netflix|Spotify|Deezer|Disney|DAZN|Amazon Prime|Prime Video",
+      "verwendungPattern": "",
+      "kategoriePattern": "Prime & Video",
+      "matchType": "or",
+      "priority": 380
+    },
+    {
+      "id": "appstore",
+      "label": "App- & Play-Store-Käufe",
+      "category": "App- & Play-Store-Käufe",
+      "group": "discretionary",
+      "budgetCategory": "tech",
+      "namePattern": "Google Play|Google Payment|Apple\\.com|iTunes|App Store",
+      "verwendungPattern": "",
+      "kategoriePattern": "",
+      "matchType": "or",
+      "priority": 370
+    },
+    {
+      "id": "delivery",
+      "label": "Lieferdienste",
+      "category": "Lieferdienste",
+      "group": "discretionary",
+      "budgetCategory": "freizeit",
+      "namePattern": "Lieferando|\\bWolt\\b|Uber Eats|Takeaway",
+      "verwendungPattern": "",
+      "kategoriePattern": "Lieferando|Wolt",
+      "matchType": "or",
+      "priority": 360
+    },
+    {
+      "id": "restaurants",
+      "label": "Restaurants, Bars & Cafés",
+      "category": "Restaurants, Bars & Cafés",
+      "group": "discretionary",
+      "budgetCategory": "freizeit",
+      "namePattern": "Restaurant|Café|Backerei|Bäckerei|Gastro|Gelateria|McDonald",
+      "verwendungPattern": "",
+      "kategoriePattern": "\\bBar$|Snacks",
+      "matchType": "or",
+      "priority": 350
+    },
+    {
+      "id": "onlineshopping",
+      "label": "Sonstige Ausgaben",
+      "category": "Sonstige Ausgaben",
+      "group": "discretionary",
+      "namePattern": "Zalando",
+      "verwendungPattern": "",
+      "kategoriePattern": "Onlineshopping",
+      "matchType": "or",
+      "priority": 340,
+      "budgetCategory": "sonstiges"
+    },
+    {
+      "id": "news_subs",
+      "label": "Zeitschriften & News-Abos",
+      "category": "Zeitschriften & News-Abos",
+      "group": "fixed",
+      "namePattern": "Spiegel|Zeit Online|\\bFAZ\\b|Sueddeutsche|Süddeutsche",
+      "verwendungPattern": "",
+      "kategoriePattern": "",
+      "matchType": "or",
+      "priority": 330
+    },
+    {
+      "id": "klarna",
+      "label": "Sonstige Ausgaben",
+      "category": "Sonstige Ausgaben",
+      "group": "discretionary",
+      "namePattern": "Klarna",
+      "verwendungPattern": "",
+      "kategoriePattern": "",
+      "matchType": "or",
+      "priority": 320,
+      "budgetCategory": "sonstiges"
+    },
+    {
+      "id": "urlaub",
+      "label": "Urlaub & Reisen",
+      "category": "Urlaub & Reisen",
+      "group": "reserve",
+      "namePattern": "Booking\\.com",
+      "verwendungPattern": "",
+      "kategoriePattern": "Urlaub",
+      "matchType": "or",
+      "priority": 310
+    },
+    {
+      "id": "paypal_private_transfer",
+      "label": "Sonstige Ausgaben",
+      "category": "Sonstige Ausgaben",
+      "group": "discretionary",
+      "namePattern": "",
+      "verwendungPattern": "Umsatzart:\\s*Transfer",
+      "kategoriePattern": "Paypal",
+      "matchType": "and",
+      "priority": 200,
+      "budgetCategory": "sonstiges"
+    },
+    {
+      "id": "gehalt",
+      "label": "Gehalt",
+      "category": "Gehalt",
+      "group": "income",
+      "namePattern": "",
+      "verwendungPattern": "Gehalt|\\bLohn\\b|Salary",
+      "kategoriePattern": "Gehalt",
+      "matchType": "or",
+      "priority": 100,
+      "incomeType": "salary"
+    },
+    {
+      "id": "drugstore",
+      "label": "Drogerie",
+      "category": "Drogerie",
+      "group": "essential",
+      "budgetCategory": "lebensmittel",
+      "namePattern": "dm[.\\- ]?drogerie|Rossmann|M(ü|ue)ller",
+      "kategoriePattern": "Drogerie",
+      "matchType": "or",
+      "priority": 610
+    }
+  ],
+  "categoryMappings": {
+    "Lebensmittel": "lebensmittel",
+    "Drogerie": "lebensmittel",
+    "Restaurant": "freizeit",
+    "Food Delivery": "freizeit",
+    "Cinema": "freizeit",
+    "Kino": "freizeit",
+    "Ausflug mit Kind": "kids",
+    "Tech gadgets": "tech",
+    "Supermarkt & Drogerie": "lebensmittel",
+    "Gaming": "tech",
+    "Auto: Werkstatt, Miete & Zubehör": "sonstiges",
+    "Flüge": "sonstiges",
+    "Wohnen: Einrichtung": "sonstiges",
+    "Spenden": "sonstiges",
+    "Urlaub & Reisen": "sonstiges"
+  }
+}

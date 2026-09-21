@@ -1,0 +1,2353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>MoneyMoney Analyzer</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="mask-icon" href="favicon.svg" color="#0066cc">
+    <link rel="apple-touch-icon" href="favicon.svg">
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#0066cc">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="MM Analyzer">
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <script>
+        if ('serviceWorker' in navigator && !['localhost', '127.0.0.1'].includes(location.hostname)) {
+            let refreshing = false;
+            const hadController = !!navigator.serviceWorker.controller;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (hadController && !refreshing) { refreshing = true; window.location.reload(); }
+            });
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW registration failed:', err));
+            });
+        }
+    </script>
+
+    <header class="app-header">
+        <h1 data-i18n="app.title">5</h1>
+        <div class="main-tabs">
+            <button class="main-tab-btn active" data-main-tab="week" data-i18n="mainTabs.week">📅 Woche</button>
+            <button class="main-tab-btn" data-main-tab="overview" data-i18n="mainTabs.overview">📊 Übersicht</button>
+        </div>
+        <button type="button" id="configRulesBtn" class="settings-gear" data-i18n-title="filters.settings" title="Einstellungen" aria-label="Einstellungen"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6l1 3 3 1v8l-3 1-1 3H9l-1-3-3-1V8l3-1z"/><circle cx="12" cy="12" r="3"/></svg></button>
+    </header>
+
+    <div class="pager" id="pager">
+        <div class="pager-track" id="pagerTrack">
+            <div id="tab-week" class="tab-pane">
+                <div id="weekEmptyState" class="empty-state" hidden>
+                    <p data-i18n="week.emptyStateText">Noch keine Daten. Importiere eine CSV oder starte mit Beispieldaten.</p>
+                    <div class="empty-state-actions">
+                        <button type="button" id="emptyLoadSampleBtn" data-i18n="filters.loadSample">Beispieldaten laden</button>
+                        <button type="button" id="emptyOpenSettingsBtn" data-i18n="week.emptyImportCsv">CSV importieren</button>
+                    </div>
+                </div>
+
+                <div id="weekContent">
+                    <div class="week-hero">
+                        <div class="week-hero-progress" id="weekHeroProgress" role="meter" aria-valuemin="0" aria-valuemax="100">
+                            <div class="week-hero-fill" id="weekHeroFill"></div>
+                            <div class="week-hero-amount">
+                                <button id="weekPrevBtn" class="week-nav-btn" data-i18n-aria-label="week.prevWeek" aria-label="Vorherige Woche"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></button>
+                                <div class="week-left" id="weekLeftAmount"></div>
+                                <button id="weekNextBtn" class="week-nav-btn" data-i18n-aria-label="week.nextWeek" aria-label="Nächste Woche"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+                            </div>
+                        </div>
+                        <div class="week-label-wrap">
+                            <div class="week-label-days" id="weekLabelDays"></div>
+                            <button type="button" class="week-label" id="weekLabel" data-i18n-title="week.backToCurrent" title="Zur aktuellen Woche"></button>
+                        </div>
+                        <div class="week-hero-stats" id="weekHeroStats"></div>
+                    </div>
+
+                    <div id="mainBudgetProgress" class="main-budget-progress" aria-label="Budgets dieser Woche"></div>
+                    <div class="quickadd">
+                        <div class="category-search-label">Ausgabe hinzufügen</div><div class="quickadd-tiles" id="quickAddTiles"></div>
+                        <button type="button" id="quickAddMoreBtn" class="quickadd-more">Alle Kategorien durchsuchen</button>
+                    </div>
+
+                    <details class="week-basis">
+                        <summary data-i18n="week.basisTitle">So wird das Wochenbudget berechnet</summary>
+                        <div id="weekBasis"></div>
+                    </details>
+                </div>
+
+                <div class="app-footer-links" id="appFooterLinksWeek"></div>
+            </div>
+
+            <div id="tab-overview" class="tab-pane">
+                <div class="stats-bar" id="statsBar"></div>
+                <div class="overview-filters" id="overviewFilters">
+                    <div id="yearButtons" aria-label="Jahr"></div>
+                    <div class="filter-controls">
+                        <label>Zeitraum<select id="weekFilterSelect" aria-label="Kalenderwoche"></select></label>
+                        <label>Ansicht<select id="granularitySelect"><option value="week">Woche</option><option value="month" selected>Monat</option><option value="year">Jahr</option></select></label>
+                        <label>Konto<select id="accountSelect"><option value="">Alle Konten</option></select></label>
+                        <button id="resetDrillBtn" type="button">Drilldown zurücksetzen</button>
+                    </div>
+                    <div id="overviewFilterNote" class="filter-note" aria-live="polite"></div>
+                </div>
+                <div id="financeOverviewRow" class="budget-totals-row"></div>
+                <div id="paypalNotice" class="filter-note" hidden></div>
+                <div id="weekSavingsCalendar"></div>
+                <section class="timeline-section" id="budgetTrend" tabindex="-1">
+                    <div class="timeline-heading"><h2>Budgetausgaben</h2><button type="button" data-reset-chart="budget" hidden>Alle Budgets</button></div>
+                    <p class="timeline-caption" id="budgetCaption">Balkensegment wählen, um die Transaktionskategorien eines Budgets zu sehen.</p>
+                    <div class="timeline-canvas"><canvas id="budgetChart" aria-label="Budgetausgaben im Zeitverlauf" role="img"></canvas></div>
+                    <div class="chart-drill-options" id="budgetDrillOptions" aria-label="Budget auswählen"></div>
+                </section>
+                <section class="timeline-section" id="fixedTrend" tabindex="-1">
+                    <div class="timeline-heading"><h2>Wiederkehrende Ausgaben</h2><button type="button" data-reset-chart="fixed" hidden>Alle Fixkosten</button></div>
+                    <p class="timeline-caption" id="fixedCaption">Tatsächliche Abbuchungen pro Zeitraum. Kategorie wählen, um die Zahlungsempfänger zu sehen.</p>
+                    <div class="timeline-canvas"><canvas id="fixedChart" aria-label="Wiederkehrende Ausgaben im Zeitverlauf" role="img"></canvas></div>
+                    <div class="chart-drill-options" id="fixedDrillOptions" aria-label="Fixkostenkategorie auswählen"></div>
+                </section>
+                <section class="timeline-section" id="incomeTrend" tabindex="-1">
+                    <div class="timeline-heading"><h2>Finanzielle Entwicklung</h2></div>
+                    <p class="timeline-caption">Einnahmen und Ausgaben des gewählten Kontos. Other income zählt nicht zum Wochenbudget. Netto zeigt die Veränderung, keinen Kontostand.</p>
+                    <div class="timeline-canvas"><canvas id="incomeChart" aria-label="Einnahmen und Ausgaben im Zeitverlauf" role="img"></canvas></div>
+                    <div id="cashflowNet" class="cashflow-net"></div>
+                </section>
+
+                <div class="app-footer-links" id="appFooterLinksOverview"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Entry: category-first, then a custom keypad for the amount -->
+    <div id="keypadModal" class="modal">
+        <div class="keypad-sheet">
+            <div class="keypad-header">
+                <span id="keypadCategoryLabel" class="keypad-category"></span>
+                <span class="close" id="closeKeypad">&times;</span>
+            </div>
+            <div class="keypad-display" id="keypadDisplay">0,00 €</div>
+
+            <div class="keypad-extra">
+                <input type="text" id="keypadNote" class="keypad-note" data-i18n-placeholder="quickEntry.notePlaceholder" placeholder="Notiz (optional)">
+                <button type="button" id="keypadDateChip" class="keypad-date-chip"></button>
+                <input type="date" id="keypadDateInput" class="keypad-date-input" hidden>
+            </div>
+            <div class="keypad-grid">
+                <button type="button" class="keypad-key" data-digit="1">1</button>
+                <button type="button" class="keypad-key" data-digit="2">2</button>
+                <button type="button" class="keypad-key" data-digit="3">3</button>
+                <button type="button" class="keypad-key" data-digit="4">4</button>
+                <button type="button" class="keypad-key" data-digit="5">5</button>
+                <button type="button" class="keypad-key" data-digit="6">6</button>
+                <button type="button" class="keypad-key" data-digit="7">7</button>
+                <button type="button" class="keypad-key" data-digit="8">8</button>
+                <button type="button" class="keypad-key" data-digit="9">9</button>
+                <button type="button" class="keypad-key keypad-backspace" id="keypadBackspace" data-i18n-aria-label="quickEntry.backspace" aria-label="Löschen">⌫</button>
+                <button type="button" class="keypad-key" data-digit="0">0</button>
+                <button type="button" class="keypad-key keypad-confirm" id="keypadConfirm" disabled>✓</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Full category search, also available from the app shortcut -->
+    <div id="categoryGridModal" class="modal">
+        <div class="modal-content category-grid-content">
+            <div class="modal-header">
+                <h2 data-i18n="quickEntry.moreGridTitle">Kategorie wählen</h2>
+                <span class="close" id="closeCategoryGrid">&times;</span>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="categoryGridSearch" data-i18n-placeholder="quickEntry.searchCategories" placeholder="🔍 Kategorie suchen...">
+                <div class="category-grid" id="categoryGrid"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="rulesModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 data-i18n="modal.settingsTitle">SETTINGS</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="settings-tabs">
+                    <button class="settings-tab-btn active" data-settings-tab="rules" data-i18n="settingsTabs.rules">⚙️ Allgemein</button>
+                    <button class="settings-tab-btn" data-settings-tab="budgets" data-i18n="settingsTabs.budgets">💰 Budgets</button>
+                    <button class="settings-tab-btn" data-settings-tab="fixexpense" data-i18n="settingsTabs.fixexpense">🔁 Fix Expense</button>
+                    <button class="settings-tab-btn" data-settings-tab="income" data-i18n="settingsTabs.income">💵 Income</button>
+                    <button class="settings-tab-btn" data-settings-tab="importexport" data-i18n="settingsTabs.importexport">📤 Export / Import</button>
+                </div>
+
+                <div id="settingsTab-rules" class="settings-tab-pane">
+                    <h3 data-i18n="general.transfersTitle">Interne Transfers erkennen</h3>
+                    <p data-i18n="general.transfersIntro">
+                        Manche Ausgaben tauchen zweimal auf, weil zwei Konten dieselbe Bewegung zeigen (z. B. ein
+                        PayPal-Kauf und danach der Bank-Einzug, mit dem PayPal genau diesen Betrag einzieht). Erkannt
+                        wird ein Paar, wenn zwei Buchungen exakt entgegengesetzte Beträge haben und innerhalb der
+                        folgenden Anzahl Tage liegen - beide gelten dann als interne Umbuchung und zählen nicht
+                        doppelt in den Summen.
+                    </p>
+                    <div class="csv-field">
+                        <label data-i18n="general.transferMaxDaysLabel">Max. Tage zwischen den beiden Buchungen</label>
+                        <input type="number" id="transferMaxDays" min="0" max="60" step="1">
+                    </div>
+                    <details class="week-basis" id="transferPreviewDetails">
+                        <summary id="transferPreviewSummary"></summary>
+                        <div id="transferPreviewList"></div>
+                    </details>
+
+                    <h3 data-i18n="languages.title">App-Sprache</h3>
+                    <p data-i18n="languages.intro">Wähle die Sprache der Benutzeroberfläche. Deine Regeln/Kategorien-Bezeichnungen ändern sich dadurch nicht.</p>
+                    <label style="display:block; margin-bottom:10px;"><input type="radio" name="appLanguage" value="de"> <span data-i18n="languages.de">Deutsch</span></label>
+                    <label style="display:block;"><input type="radio" name="appLanguage" value="en"> <span data-i18n="languages.en">Englisch</span></label>
+
+                    <h3 data-i18n="settingsTabs.bank">🏦 Bank</h3>
+                    <p data-i18n="bank.intro">Verbinde dein Bankkonto über GoCardless. Dafür brauchst du einen eigenen kleinen Proxy-Server (siehe gocardless-proxy/README.md im Repo) - trag hier dessen URL und App-Key ein.</p>
+                    <div class="csv-field">
+                        <label data-i18n="bank.proxyUrlLabel">Proxy-URL</label>
+                        <input type="text" id="gcProxyUrl" placeholder="https://moneymoney-gocardless-proxy.dein-subdomain.workers.dev">
+                    </div>
+                    <div class="csv-field">
+                        <label data-i18n="bank.appKeyLabel">App-Key</label>
+                        <input type="text" id="gcAppKey" placeholder="">
+                    </div>
+                    <div>
+                        <button id="gcSaveConfigBtn" class="primary" data-i18n="bank.saveConfig">Speichern</button>
+                        <span id="gcConfigSavedNote" style="display:none; color:#2ecc71; margin-left:10px;" data-i18n="bank.configSaved">Gespeichert.</span>
+                    </div>
+
+                    <h3 data-i18n="bank.connectedTitle">Verbundene Konten</h3>
+                    <div id="gcConnectedList"></div>
+                    <button id="gcSyncNowBtn" data-i18n="bank.syncNow" hidden>🔄 Jetzt synchronisieren</button>
+
+                    <h3 data-i18n="bank.addBankTitle">Bank hinzufügen</h3>
+                    <div class="csv-field">
+                        <label data-i18n="bank.countryLabel">Land</label>
+                        <select id="gcCountry">
+                            <option value="de">Deutschland</option>
+                            <option value="at">Österreich</option>
+                            <option value="ch">Schweiz</option>
+                            <option value="fr">Frankreich</option>
+                            <option value="nl">Niederlande</option>
+                            <option value="be">Belgien</option>
+                            <option value="es">Spanien</option>
+                            <option value="it">Italien</option>
+                            <option value="ie">Irland</option>
+                            <option value="pt">Portugal</option>
+                            <option value="pl">Polen</option>
+                            <option value="gb">Großbritannien</option>
+                        </select>
+                    </div>
+                    <button id="gcLoadInstitutionsBtn" data-i18n="bank.loadBanks">Banken laden</button>
+                    <input type="text" id="gcInstitutionSearch" data-i18n-placeholder="bank.searchBanks" placeholder="🔍 Bank suchen..." hidden style="width:100%; box-sizing:border-box; margin-top:10px;">
+                    <div id="gcInstitutionsList"></div>
+                    <p id="gcStatus" class="gc-status"></p>
+                </div>
+
+                <div id="settingsTab-budgets" class="settings-tab-pane" hidden>
+                    <p data-i18n="budgets.intro">Setze ein wöchentliches Limit für Kategorien, die du im Blick behalten willst. Nur Kategorien mit Limit erscheinen als Sub-Budget auf der Wochenübersicht.</p>
+                    <div id="budgetRecommendation"></div><div id="mainCategoryEditor"></div><button type="button" id="addMainCategory">+ Budget</button><div id="categoryMappingEditor"></div>
+                </div>
+
+                <div id="settingsTab-fixexpense" class="settings-tab-pane" hidden>
+                    <p data-i18n="fixExpense.intro">Fixkosten (Miete, Verträge, Abos, ...): eine Kategorie pro Zeile mit einem einfachen Suchmuster statt komplexer Regeln. Aufklappen zeigt das Muster und eine Vorschau der letzten 3 Monate.</p>
+                    <div id="fixExpenseList"></div>
+                    <button type="button" id="addFixExpenseBtn" data-i18n="fixExpense.addRow">+ Fixkosten-Kategorie</button>
+                </div>
+
+                <div id="settingsTab-income" class="settings-tab-pane" hidden>
+                    <p data-i18n="incomeRules.intro">Einnahmen (Gehalt, Erstattungen, ...): eine Kategorie pro Zeile mit einem einfachen Suchmuster statt komplexer Regeln. Aufklappen zeigt das Muster und eine Vorschau der letzten 3 Monate.</p>
+                    <div id="incomeRulesList"></div>
+                    <button type="button" id="addIncomeRuleBtn" data-i18n="incomeRules.addRow">+ Einnahmen-Kategorie</button>
+                </div>
+
+                <div id="settingsTab-importexport" class="settings-tab-pane" hidden>
+                    <p data-i18n="csv.intro">Lade hier deine CSV-Datei und stelle bei Bedarf das Format ein, falls dein Export nicht dem MoneyMoney-Standard entspricht.</p>
+                    <div class="csv-field">
+                        <label data-i18n="csv.pickFile">Datei auswählen</label>
+                        <input type="file" id="csvFile" accept=".csv">
+                    </div>
+                    <div class="csv-field">
+                        <label><input type="checkbox" id="csvIgnoreCategories" checked> <span data-i18n="csv.ignoreCategories">Kategorien aus CSV-Importen ignorieren</span></label>
+                        <small data-i18n="csv.ignoreCategoriesHint">Gilt auch für vorhandene CSV-Buchungen und wird automatisch gespeichert. Kategorien und Budgets stammen aus deinem SETTING-JSON.</small>
+                    </div>
+                    <div class="csv-grid">
+                        <div class="csv-field"><label for="csvColAccount">Spalte für eigenes Konto</label><input id="csvColAccount" placeholder="Kontoname / Account"><small>Kontoname des exportierten Kontos, nicht das Empfängerkonto.</small></div>
+                        <div class="csv-field"><label for="csvAccountName">Konto für diese Datei (falls keine Kontospalte)</label><input id="csvAccountName" placeholder="z. B. DKB Giro oder PayPal"><small>Bei getrennten Exporten vor dem Import setzen. Bei gemischten Exporten ist eine Kontospalte erforderlich.</small></div>
+                        <div class="csv-field">
+                            <label data-i18n="csv.delimiterLabel">Trennzeichen (Spalten):</label>
+                            <select id="csvDelimiter">
+                                <option value=";">; (Semikolon)</option>
+                                <option value=",">, (Komma)</option>
+                                <option value="tab">Tab</option>
+                                <option value="|">| (Pipe)</option>
+                            </select>
+                        </div>
+                        <div class="csv-field">
+                            <label data-i18n="csv.lineBreakLabel">Zeilenumbruch:</label>
+                            <select id="csvLineBreak">
+                                <option value="auto" data-i18n="csv.lineBreakAuto">Automatisch erkennen</option>
+                                <option value="lf">\n (Unix/Mac)</option>
+                                <option value="crlf">\r\n (Windows)</option>
+                            </select>
+                        </div>
+                        <div class="csv-field">
+                            <label data-i18n="csv.encodingLabel">Zeichenkodierung:</label>
+                            <select id="csvEncoding">
+                                <option value="utf-8">UTF-8</option>
+                                <option value="iso-8859-1">ISO-8859-1 (Latin-1)</option>
+                                <option value="windows-1252">Windows-1252</option>
+                            </select>
+                        </div>
+                        <div class="csv-field">
+                            <label data-i18n="csv.decimalSeparatorLabel">Dezimaltrennzeichen:</label>
+                            <select id="csvDecimalSeparator">
+                                <option value=",">, (Komma)</option>
+                                <option value=".">. (Punkt)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="csv-field">
+                        <label><input type="checkbox" id="csvHasHeader" checked> <span data-i18n="csv.hasHeaderLabel">Erste Zeile enthält Spaltennamen</span></label>
+                    </div>
+                    <h3 data-i18n="csv.columnMappingTitle">Spaltenzuordnung</h3>
+                    <p style="color:#555; font-size:0.9em;" data-i18n="csv.columnMappingHint">Spaltenname (aus Kopfzeile) oder Spaltenindex (0, 1, 2, ...) angeben.</p>
+                    <div class="csv-grid">
+                        <div class="csv-field"><label data-i18n="csv.colDate">Datum</label><input type="text" id="csvColDate"></div>
+                        <div class="csv-field"><label data-i18n="csv.colName">Name</label><input type="text" id="csvColName"></div>
+                        <div class="csv-field"><label data-i18n="csv.colDescription">Verwendungszweck / Beschreibung</label><input type="text" id="csvColVerwendungszweck"></div>
+                        <div class="csv-field"><label data-i18n="csv.colAmount">Betrag</label><input type="text" id="csvColBetrag"></div>
+                        <div class="csv-field"><label data-i18n="csv.colCategory">Kategorie (optional)</label><input type="text" id="csvColKategorie"></div>
+                    </div>
+                    <div style="margin-top:15px; padding-bottom: 20px; border-bottom: 1px solid #ddd;">
+                        <button id="csvSaveConfigBtn" class="primary" data-i18n="csv.saveConfig">CSV-Einstellungen speichern</button>
+                        <button id="csvResetDefaultsBtn" data-i18n="csv.resetDefaults">↺ Standardwerte laden</button>
+                        <span id="csvSavedNote" style="display:none; color:#2ecc71; margin-left:10px;" data-i18n="csv.savedNote">Einstellungen gespeichert. Beim nächsten Laden einer Datei werden sie verwendet.</span>
+                    </div>
+
+                    <div style="padding-bottom: 20px; border-bottom: 1px solid #ddd;">
+                        <button id="loadDefaultRulesBtn" data-i18n="importexport.loadDefault">↺ Standardregeln laden</button>
+                        <button id="exportRulesBtn" data-i18n="importexport.export">📤 SETTING exportieren</button>
+                        <button id="importRulesBtn" data-i18n="importexport.import">📥 SETTING importieren</button>
+                        <p><a href="./examples/five-budgets.setting.json" download>Beispiel: 5 Budgets + Sonstiges</a></p>
+                        <p>Transaktionskategorie wählen → Betrag eingeben → ✓. Die Zuordnung zum Hauptbudget erfolgt automatisch. Export / Import enthält auch Budgetnamen, Reihenfolge, Kategoriezuordnungen und Wochenlimits.</p>
+                        <input type="file" id="importRulesFile" accept=".json" style="display: none;">
+                        <p id="settingsImportStatus" role="status" aria-live="polite"></p>
+                    <details id="importPasteDetails">
+                            <summary data-i18n="importexport.pasteToggle">📋 Oder SETTING-JSON einfügen</summary>
+                            <textarea id="importPasteText" class="import-paste-text" data-i18n-placeholder="importexport.pastePlaceholder" placeholder="JSON hier einfügen ..."></textarea>
+                            <button type="button" id="importPasteBtn" class="primary" data-i18n="importexport.pasteImport">📥 Eingefügtes SETTING importieren</button>
+                        </details>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <p style="margin: 0 0 10px 0; color: #555;" data-i18n="importexport.unclassifiedIntro">
+                            Unklassifizierte Ausgaben (aktuell gewählter Jahresfilter) als kompakte,
+                            nach Summe sortierte Händlerliste + aktuellem Regelwerk + fertigem Prompt
+                            exportieren — die Datei kann direkt einem LLM gegeben werden, das ein
+                            erweitertes SETTING zurückgibt (oben importierbar).
+                        </p>
+                        <button id="exportUnclassifiedBtn" data-i18n="importexport.exportUnclassified">🔍 Unklassifizierte Posten für LLM exportieren</button>
+                    </div>
+                    <div style="margin-top: 20px;">
+                        <p style="margin: 0 0 10px 0; color: #555;" data-i18n="importexport.llmPromptIntro">
+                            Alternativ: Rohe CSV-Datei direkt an ein LLM anhängen. Dieser Beispiel-Prompt
+                            bittet es, ein importierbares SETTING-JSON zurückzugeben.
+                        </p>
+                        <textarea id="llmPromptExample" readonly data-i18n="importexport.llmPromptExample" class="llm-prompt-example"></textarea>
+                        <button type="button" id="copyLlmPromptBtn" data-i18n="importexport.copyPrompt">📋 Prompt kopieren</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="saveRulesBtn" class="primary" data-i18n="modal.save">Speichern</button>
+                <button id="cancelRulesBtn" data-i18n="modal.cancel">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chart Enlarge Modal -->
+    <dialog id="settingsReviewDialog" class="review-dialog" aria-labelledby="settingsReviewTitle">
+        <h2 id="settingsReviewTitle">SETTING-Änderungen prüfen</h2>
+        <p>Markierte Änderungen werden übernommen. Eigene Anpassungen bleiben standardmäßig erhalten und haben Vorrang vor LLM-Regeln.</p>
+        <div id="settingsReviewChanges"></div>
+        <p id="settingsReviewError" role="alert"></p>
+        <div class="dialog-actions"><button type="button" id="cancelSettingsReview">Abbrechen</button><button type="button" id="applySettingsReview">Auswahl importieren</button></div>
+    </dialog>
+    <dialog id="categoryActionsDialog" class="review-dialog" aria-labelledby="categoryActionsTitle">
+        <h2 id="categoryActionsTitle">Kategorie bearbeiten</h2>
+        <label>Neuer Name<input id="categoryNewName" type="text" maxlength="100"></label>
+        <button id="renameCategoryBtn" type="button">Umbenennen</button>
+        <label>Buchungen beim Entfernen zuordnen zu<select id="categoryReplacement"></select></label>
+        <p>Vorhandene Buchungen und Regeln werden in die gewählte Kategorie verschoben.</p>
+        <div class="dialog-actions"><button id="closeCategoryActions" type="button">Schließen</button><button id="removeCategoryBtn" type="button">Kategorie entfernen</button></div>
+        <p id="categoryActionError" role="alert"></p>
+    </dialog>
+
+    <script type="module">
+        import { parse_csv, data as module_data, build_group_summary, build_unclassified_report, enrich_row, tx_id } from './src/data.js';
+        import { filter_overview_rows, build_timeline, render_timeline } from './src/overview.js';
+        import { settings_changes, apply_settings_changes, manual_rule_ids } from './src/settings.js';
+        import { open_category_popover, close_popover } from './src/table.js';
+        import { load_default_rule_set, get_stored_rule_set, save_rule_set, classify_all, apply_manual_overrides, rule_matches } from './src/rules.js';
+        import { get_language, set_language, apply_static_i18n, t, locale } from './src/i18n.js';
+        import { get_csv_config, save_csv_config, default_csv_config } from './src/csv_config.js';
+        import { load_footer } from './src/footer.js';
+        import { csv_records, reconcile_transactions, transaction_source_label } from './src/transactions.js';
+        import { category_catalog, sort_categories } from './src/categories.js';
+        import { upsert_imported_entries, load_imported_entries } from './src/db.js';
+        import { apply_amount_overrides } from './src/data.js';
+        import { load_amount_overrides, save_amount_override, load_all_overrides, save_overrides, add_manual_entry, load_manual_entries, delete_manual_entry } from './src/db.js';
+        import {
+            build_budget_basis, build_week_report, build_sub_budget_report, build_main_budget_report, category_color,
+            week_start, add_days, iso_week_number, top_categories
+        } from './src/week.js';
+        import { get_sub_budgets, save_sub_budgets, budget_category, validate_budget_settings, ensure_budget_coverage } from './src/budgets.js';
+        import { push_digit, pop_digit, buffer_to_cents } from './src/keypad.js';
+        import { transaction_to_row, transaction_key } from './src/gocardless.js';
+        import { find_internal_transfer_pairs, apply_internal_transfer_pairs, get_transfer_max_days, save_transfer_max_days, reconcile_paypal, account_key } from './src/transfers.js';
+
+        let currentYear = '';
+        let weekFilterMonday = null; // Monday of the week the Übersicht tab is narrowed to, or null for none
+        let granularity = 'month', selectedAccount = '', monthFilter = null;
+        const chartDrill = { budget: null, fixed: null };
+        let settingsBaseline = null;
+        let ruleSet = null;
+        let defaultRuleSet = null;
+        let leakCategoryFilter = null;
+        let weekMonday = week_start(new Date());
+        let overridesById = {};
+        let amountOverrides = {};
+        let subBudgetCaps = {};
+        // Which budget groups have their assigned-categories list expanded in
+        // Settings > Budgets - purely a UI state, not persisted.
+        let expandedBudgetGroups = new Set();
+        const UNASSIGNED_BUDGET_ID = '';
+        let keypadCategory = null;
+        let keypadBuffer = '';
+        let keypadDate = new Date();
+
+        // Sensible starting weekly caps (cents) for the bundled default main
+        // categories - used when resetting to defaults, since default_rules.json
+        // intentionally ships with no caps set (every budget starts uncapped).
+        const DEFAULT_BUDGET_CAPS = { lebensmittel: 8000, freizeit: 6000, kids: 4000, tech: 3000, mobilitaet: 4000 };
+
+        // Re-runs rule classification then re-applies manual per-transaction
+        // category overrides on top - must be called after every ruleSet or
+        // overridesById change so charts/table stay in sync. The internal-
+        // transfer heuristic runs in between: it may reclassify a rule-matched
+        // row as an excluded transfer, but an explicit manual override always
+        // wins over it.
+        function reclassify() {
+            const ignoreCategories = get_csv_config().ignoreCategories !== false;
+            module_data.forEach(row => { row._ignoreCsvCategories = row.source === 'csv' && ignoreCategories; });
+            apply_amount_overrides(module_data, amountOverrides);
+            classify_all(module_data, ruleSet);
+            apply_internal_transfer_pairs(module_data, find_internal_transfer_pairs(module_data, get_transfer_max_days()));
+            apply_manual_overrides(module_data, overridesById, ruleSet);
+            reconcile_paypal(module_data, Math.max(7, get_transfer_max_days()));
+            module_data.forEach(row => {
+                if (!row._cls.excluded && row.betrag_cents < 0 && row._cls.category === 'Unklassifiziert') row._cls.category = 'Sonstige Ausgaben';
+            });
+            ensure_budget_coverage(ruleSet, module_data);
+        }
+
+        // Rebuild from the two durable sources, matching date + signed cents.
+        async function merge_manual_entries() {
+            const [imports, manual] = await Promise.all([load_imported_entries(), load_manual_entries()]);
+            const rows = reconcile_transactions(imports, manual, amountOverrides);
+            module_data.splice(0, module_data.length);
+            rows.forEach(row => module_data.push(row));
+        }
+
+        let favoriteCategories;
+        try { favoriteCategories = JSON.parse(localStorage.getItem('favoriteCategories') || '[]'); }
+        catch { favoriteCategories = []; }
+        if (!Array.isArray(favoriteCategories)) favoriteCategories = [];
+        function collect_category_options(expenseOnly = false) {
+            return sort_categories(category_catalog(ruleSet, expenseOnly), favoriteCategories);
+        }
+
+        function favorite_button(category) {
+            const button = document.createElement('button');
+            button.type = 'button'; button.className = 'category-favorite';
+            const active = favoriteCategories.includes(category);
+            button.innerHTML = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="fill:' + (active ? 'currentColor' : 'none') + '"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"/></svg>';
+            button.setAttribute('aria-pressed', String(active));
+            button.setAttribute('aria-label', `${category}: ${active ? 'Favorit entfernen' : 'Als Favorit markieren'}`);
+            button.title = button.getAttribute('aria-label');
+            button.addEventListener('click', event => {
+                event.preventDefault(); event.stopPropagation();
+                favoriteCategories = active ? favoriteCategories.filter(c => c !== category) : [...favoriteCategories, category];
+                localStorage.setItem('favoriteCategories', JSON.stringify(favoriteCategories));
+                render_quick_add_tiles();
+                render_category_grid(document.getElementById('categoryGridSearch').value);
+                render_sub_budget_settings();
+            });
+            return button;
+        }
+
+        // Persists a manual category assignment (single row or bulk
+        // selection) to IndexedDB, then reclassifies and re-renders.
+        async function assign_category(ids, category) {
+            if (!category) return;
+            await save_overrides(ids.map(id => [id, category]));
+            ids.forEach(id => { overridesById[id] = category; });
+            reclassify();
+            render_all();
+            render_week();
+        }
+
+        // ===== MAIN TAB NAVIGATION (Woche / Übersicht) + swipe pager =====
+        // Both tab-panes sit side by side inside #pagerTrack (width 200%,
+        // each pane 50%); switching tabs (by tap or drag) just moves a
+        // translateX on the track instead of toggling [hidden] - that's
+        // what makes a real, finger-following swipe possible with only 2
+        // panels. Charts are still only (re)rendered once the Übersicht
+        // side is actually reached, same as the old click-triggered resize.
+        const pagerEl = document.getElementById('pager');
+        const trackEl = document.getElementById('pagerTrack');
+        const mainTabBtns = document.querySelectorAll('.main-tab-btn');
+        let activeTabIndex = 0; // 0 = week, 1 = overview
+
+        // `render` is false only for the initial setup call below, made
+        // before any data has loaded - rendering then would show the empty
+        // state for a moment even when cached data is about to load,
+        // flashing on every reload. The real window.load handler renders
+        // once data is actually ready.
+        function set_active_tab(index, animate, render = true) {
+            activeTabIndex = index;
+            trackEl.classList.toggle('dragging', !animate);
+            trackEl.style.transform = `translateX(-${index * 50}%)`;
+            mainTabBtns.forEach(b => b.classList.toggle('active', parseInt(b.dataset.tabIndex, 10) === index));
+            if (!render) return;
+            if (index === 1) render_all();
+            if (index === 0) render_week();
+        }
+
+        mainTabBtns.forEach((btn, i) => {
+            btn.dataset.tabIndex = i;
+            btn.addEventListener('click', () => set_active_tab(i, true));
+        });
+        set_active_tab(0, false, false);
+
+        // Pointer Events unify touch/mouse/pen, so this drives both a real
+        // phone swipe and a desktop click-drag with the same code.
+        let dragState = null;
+        trackEl.addEventListener('pointerdown', (e) => {
+            dragState = { startX: e.clientX, startY: e.clientY, dx: 0, axis: null, width: pagerEl.clientWidth, pointerId: e.pointerId };
+        });
+        trackEl.addEventListener('pointermove', (e) => {
+            if (!dragState || dragState.pointerId !== e.pointerId) return;
+            const dx = e.clientX - dragState.startX;
+            const dy = e.clientY - dragState.startY;
+            if (dragState.axis === null) {
+                if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+                dragState.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+                if (dragState.axis === 'x') trackEl.setPointerCapture(e.pointerId);
+            }
+            if (dragState.axis !== 'x') return; // let vertical scroll happen normally
+            e.preventDefault();
+            // Resistance past the first/last panel - there's nothing to swipe to.
+            const adjusted = ((activeTabIndex === 0 && dx > 0) || (activeTabIndex === 1 && dx < 0)) ? dx * 0.3 : dx;
+            dragState.dx = adjusted;
+            trackEl.classList.add('dragging');
+            trackEl.style.transform = `translateX(calc(${-activeTabIndex * 50}% + ${adjusted}px))`;
+        });
+        function end_drag(e) {
+            if (!dragState) return;
+            if (dragState.axis === 'x') {
+                const threshold = dragState.width * 0.2;
+                let next = activeTabIndex;
+                if (dragState.dx < -threshold) next = 1;
+                else if (dragState.dx > threshold) next = 0;
+                set_active_tab(next, true);
+            }
+            dragState = null;
+        }
+        trackEl.addEventListener('pointerup', end_drag);
+        trackEl.addEventListener('pointercancel', end_drag);
+
+        // User-facing date display - follows the UI language's locale.
+        function fmt_date(d) {
+            return d.toLocaleDateString(locale(), { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+
+        // The fixed "DD.MM.YYYY" storage format data.js#parse_date()/tx_id()
+        // expect - always this format regardless of UI language, unlike
+        // fmt_date() above. Used only when building a manual-entry record.
+        function datum_string(d) {
+            return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+        }
+
+        document.getElementById('weekPrevBtn').addEventListener('click', () => {
+            weekMonday = add_days(weekMonday, -7);
+            render_week();
+        });
+        document.getElementById('weekNextBtn').addEventListener('click', () => {
+            weekMonday = add_days(weekMonday, 7);
+            render_week();
+        });
+        document.getElementById('weekLabel').addEventListener('click', () => {
+            weekMonday = week_start(new Date());
+            render_week();
+        });
+
+        // ===== Shared transaction row: used by both the "Alle Buchungen"
+        // breakdown and a sub-budget's expanded transaction list. The name
+        // (left) opens the same category-reassignment popover used
+        // elsewhere in the app; the amount (right, manual entries only)
+        // becomes an editable field in place. =====
+
+        function render_tx_row(r) {
+            const txId = encodeURIComponent(tx_id(r));
+            const amountText = fmt_eur(-r.betrag_cents);
+            const amountCell = `<button type="button" class="tx-amount-btn" data-tx-id="${txId}" title="Betrag ändern">${amountText}</button>`;
+            const deleteCell = r._manualId
+                ? `<button type="button" class="quickentry-delete" data-manual-id="${r._manualId}" data-tx-id="${txId}">×</button>`
+                : '';
+            return `<tr>
+                <td>${fmt_date(r.date)}<small class="transaction-source">${transaction_source_label(r)}</small></td>
+                <td class="tx-description"><button type="button" class="tx-name-btn" data-tx-id="${txId}">${escape_budget(r.name)}<span class="tx-category-label" style="border-left:4px solid ${category_color(r._cls.category)}">${escape_budget(r._cls.category)}</span></button></td>
+                <td class="num">${amountCell}</td>
+                <td class="delete-col">${deleteCell}</td>
+            </tr>`;
+        }
+
+        function wire_tx_rows(container) {
+            container.querySelectorAll('.tx-name-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    open_category_popover(btn, collect_category_options(), (category) => {
+                        assign_category([decodeURIComponent(btn.dataset.txId)], category);
+                    });
+                });
+            });
+            container.querySelectorAll('.tx-amount-btn').forEach(btn => {
+                btn.addEventListener('click', () => start_edit_amount(btn));
+            });
+            container.querySelectorAll('.quickentry-delete').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    if (!confirm(t('week.confirmDeleteEntry'))) return;
+                    const manualId = btn.dataset.manualId;
+                    const txId = decodeURIComponent(btn.dataset.txId);
+                    await delete_manual_entry(manualId, txId);
+                    delete overridesById[txId];
+                    delete amountOverrides[txId];
+                    const idx = module_data.findIndex(r => r._manualId === manualId);
+                    if (idx !== -1) module_data.splice(idx, 1);
+                    reclassify();
+                    render_all();
+                    render_week();
+                });
+            });
+        }
+
+        // Amount corrections are local overrides; the original booking ID stays stable.
+        function start_edit_amount(btn) {
+            const id = decodeURIComponent(btn.dataset.txId);
+            const row = module_data.find(r => tx_id(r) === id);
+            if (!row) return;
+            const input = document.createElement('input');
+            input.type = 'number'; input.step = '0.01'; input.inputMode = 'decimal';
+            input.setAttribute('aria-label', 'Betrag in Euro (Ausgabe positiv, Erstattung negativ)');
+            input.className = 'tx-amount-input';
+            input.value = (-row.betrag_cents / 100).toFixed(2);
+            btn.replaceWith(input); input.focus(); input.select();
+            let canceled = false;
+            input.addEventListener('keydown', e => {
+                if (document.querySelector('dialog[open]')) return;
+            if (e.key === 'Escape') { canceled = true; input.blur(); }
+                if (e.key === 'Enter') input.blur();
+            });
+            input.addEventListener('blur', async () => {
+                const cents = -Math.round(Number(input.value) * 100);
+                if (!canceled && input.value.trim() && Number.isSafeInteger(cents)) {
+                    try {
+                        await save_amount_override(id, cents);
+                        amountOverrides[id] = cents;
+                        reclassify(); render_all();
+                    } catch (error) { alert(error.message); }
+                }
+                render_week();
+            }, { once: true });
+        }
+
+        // Every Monday belonging to the same month as `monday`, from that
+        // month's first Monday up to (and including) `monday` itself - "the
+        // weeks so far this month", used for the month-to-date leftover stat.
+        function weeks_in_month_up_to(monday) {
+            const year = monday.getFullYear(), month = monday.getMonth();
+            const weeks = [];
+            let cursor = week_start(new Date(year, month, 1));
+            while (cursor.getTime() <= monday.getTime()) {
+                if (cursor.getFullYear() === year && cursor.getMonth() === month) weeks.push(new Date(cursor));
+                cursor = add_days(cursor, 7);
+            }
+            return weeks;
+        }
+
+        // Wochenansicht: prominent big number, curated sub-budgets, one-tap
+        // quick-add tiles, and (collapsed) the full per-category breakdown.
+        function render_week() {
+            const hasData = module_data.length > 0;
+            document.getElementById('weekEmptyState').hidden = hasData;
+            document.getElementById('weekContent').hidden = false;
+            render_quick_add_tiles();
+            render_main_budget_progress();
+            document.querySelector('#weekContent .week-hero').hidden = !hasData;
+            document.querySelector('#weekContent .week-basis').hidden = !hasData;
+            if (!hasData) return;
+
+            document.getElementById('weekLabel').textContent = t('week.label', {
+                week: iso_week_number(weekMonday)
+            });
+            document.getElementById('weekLabel').classList.toggle('current-week', weekMonday.getTime() === week_start(new Date()).getTime());
+
+            const today = new Date();
+            const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            document.getElementById('weekLabelDays').innerHTML = Array.from({ length: 7 }, (_, i) => {
+                const day = add_days(weekMonday, i);
+                const state = day.getTime() < todayMidnight.getTime() ? 'elapsed' : day.getTime() === todayMidnight.getTime() ? 'today' : 'remaining';
+                return `<span class="${state}"></span>`;
+            }).join('');
+
+            const basis = build_budget_basis(module_data);
+            const report = build_week_report(module_data, weekMonday);
+            const leftCents = basis.weeklyCents - report.spentCents;
+            const over = leftCents < 0;
+
+            const amountEl = document.getElementById('weekLeftAmount');
+            amountEl.textContent = fmt_eur_int(leftCents);
+            amountEl.style.color = over ? 'var(--danger)' : 'var(--success)';
+
+            const usedPct = basis.weeklyCents > 0 ? Math.min(100, Math.max(0, report.spentCents / basis.weeklyCents * 100)) : (report.spentCents > 0 ? 100 : 0);
+            const heroProgressEl = document.getElementById('weekHeroProgress');
+            const heroFillEl = document.getElementById('weekHeroFill');
+            heroFillEl.style.width = usedPct + '%';
+            heroFillEl.style.background = over ? 'rgba(231,76,60,0.18)' : 'var(--accent-soft)';
+            heroProgressEl.setAttribute('aria-valuenow', Math.round(usedPct));
+
+            const lastWeekReport = build_week_report(module_data, add_days(weekMonday, -7));
+            const lastWeekLeftoverCents = basis.weeklyCents - lastWeekReport.spentCents;
+            const monthLeftoverCents = weeks_in_month_up_to(weekMonday).reduce((sum, m) =>
+                sum + (basis.weeklyCents - build_week_report(module_data, m).spentCents), 0);
+            document.getElementById('weekHeroStats').innerHTML = `
+                <span>${t('week.leftoverLastWeek')} <b class="${lastWeekLeftoverCents < 0 ? 'budget-over' : ''}">${fmt_eur_int(lastWeekLeftoverCents)}</b></span>
+                <span>${t('week.leftoverThisMonth')} <b class="${monthLeftoverCents < 0 ? 'budget-over' : ''}">${fmt_eur_int(monthLeftoverCents)}</b></span>
+            `;
+
+            const salaryLine = basis.salaryCents > 0
+                ? `<tr><td>${t('week.salary')}</td><td class="num">${fmt_eur(basis.salaryCents)}</td></tr>`
+                : `<tr><td colspan="2" style="color:var(--danger);">${t('week.noSalary')}</td></tr>`;
+            const fixedRules = (ruleSet.rules || []).filter(r => r.group === 'fixed');
+            document.getElementById('weekBasis').innerHTML = `
+                <table>
+                    ${salaryLine}
+                    <tr><td>− ${t('week.fixed')}</td><td class="num">${fmt_eur(basis.fixedCents)}</td></tr>
+                    <tr><td>= ${t('week.free')}</td><td class="num">${fmt_eur(basis.freeCents)}</td></tr>
+                    <tr><td><b>${t('week.weekly')}</b></td><td class="num"><b>${fmt_eur(basis.weeklyCents)}</b></td></tr>
+                </table>
+                <h4>${t('week.contractsTitle')}</h4>
+                ${fixedRules.length ? fixedRules.map(rule => {
+                    const matches = rule_recent_matches(rule, r => r.betrag_cents < 0);
+                    const totalCents = matches.reduce((sum, r) => sum - r.betrag_cents, 0);
+                    return `
+                        <details class="main-budget">
+                            <summary>
+                                <span class="main-budget-row">
+                                    <span class="main-budget-arrow" aria-hidden="true"></span>
+                                    <strong>${escape_budget(rule.category || rule.label || '')}</strong>
+                                    <span class="main-budget-value">${fmt_eur(totalCents)}</span>
+                                </span>
+                            </summary>
+                            ${matches.length ? `<table class="transaction-rows"><colgroup><col style="width:23%"><col><col style="width:28%"><col style="width:20px"></colgroup>${group_rows_by_month(matches.slice().sort((a, b) => b.date - a.date), render_tx_row)}</table>` : `<p>${t('fixExpense.noMatches')}</p>`}
+                        </details>
+                    `;
+                }).join('') : `<p>${t('fixExpense.noRows')}</p>`}
+            `;
+            wire_tx_rows(document.getElementById('weekBasis'));
+        }
+
+        // ===== QUICK ADD: category tile -> straight into the keypad =====
+
+
+        const escape_budget = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        function main_category_label(id) {
+            return ((ruleSet.mainCategories || []).find(m => m.id === id) || {}).label || id;
+        }
+        let editingCategory = null;
+        function wire_category_actions(card, category) {
+            const open = () => {
+                editingCategory = category;
+                document.getElementById('categoryActionsTitle').textContent = category;
+                document.getElementById('categoryNewName').value = category;
+                document.getElementById('categoryActionError').textContent = '';
+                const replacement = document.getElementById('categoryReplacement');
+                replacement.replaceChildren(...collect_category_options(true).filter(c => c !== category).map(c => new Option(c,c)));
+                if (category !== 'Sonstige Ausgaben') replacement.value = 'Sonstige Ausgaben';
+                document.getElementById('removeCategoryBtn').disabled = category === 'Sonstige Ausgaben';
+                document.getElementById('renameCategoryBtn').disabled = category === 'Sonstige Ausgaben';
+                document.getElementById('categoryActionsDialog').showModal();
+            };
+            card.oncontextmenu = event => { event.preventDefault(); open(); };
+            const button = document.createElement('button'); button.className = 'category-menu'; button.type = 'button';
+            button.setAttribute('aria-label', category + ': Kategorie bearbeiten');
+            button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>';
+            button.onclick = open; card.append(button);
+        }
+        async function change_category(remove) {
+            const old = editingCategory;
+            const next = (remove ? document.getElementById('categoryReplacement').value : document.getElementById('categoryNewName').value).trim();
+            if (!next || next === old) return;
+            if (!remove && collect_category_options().includes(next)) { document.getElementById('categoryActionError').textContent = 'Dieser Kategoriename existiert bereits.'; return; }
+            const affected = module_data.filter(r => r._cls?.category === old).map(tx_id);
+            const nextBudget = category_to_main(remove ? next : old);
+            const nextGroup = ruleSet.rules.find(r => r.category === next)?.group;
+            ruleSet.rules.forEach(r => {
+                if ((r.category || r.label) !== old) return;
+                r.category = next; r.label = next;
+                if (remove) { r.group = nextGroup || 'discretionary'; r.budgetCategory = nextBudget; }
+            });
+            ruleSet.categoryMappings ||= {};
+            delete ruleSet.categoryMappings[old];
+            if (nextBudget) ruleSet.categoryMappings[next] = nextBudget;
+            (ruleSet.mainCategories || []).forEach(m => { if ((m.entryCategory || m.label) === old) m.entryCategory = next; });
+            favoriteCategories = [...new Set(favoriteCategories.map(c => c === old ? next : c))];
+            localStorage.setItem('favoriteCategories', JSON.stringify(favoriteCategories));
+            const overrideIds = new Set([...affected, ...Object.keys(overridesById).filter(id => overridesById[id] === old)]);
+            await save_overrides([...overrideIds].map(id => [id,next]));
+            overrideIds.forEach(id => { overridesById[id] = next; });
+            persist_budgets(); render_sub_budget_settings();
+            render_category_grid(document.getElementById('categoryGridSearch').value);
+            document.getElementById('categoryActionsDialog').close();
+        }
+        document.getElementById('renameCategoryBtn').onclick = () => change_category(false).catch(e => { document.getElementById('categoryActionError').textContent = e.message; });
+        document.getElementById('removeCategoryBtn').onclick = () => change_category(true).catch(e => { document.getElementById('categoryActionError').textContent = e.message; });
+        document.getElementById('closeCategoryActions').onclick = () => document.getElementById('categoryActionsDialog').close();
+
+        function render_quick_add_tiles() {
+            const container = document.getElementById('quickAddTiles');
+            container.replaceChildren();
+            collect_category_options(true).forEach(category => {
+                const card = document.createElement('div'); card.className = 'category-card';
+                const button = document.createElement('button');
+                button.type = 'button'; button.className = 'quickadd-tile';
+                button.style.borderLeft = `5px solid ${category_color(category)}`;
+                button.textContent = category;
+                button.addEventListener('click', () => open_keypad(category));
+                wire_category_actions(card, category);
+                card.append(button, favorite_button(category));
+                container.append(card);
+            });
+            if (!container.childElementCount) container.textContent = t('table.noCategoryMatch');
+        }
+
+        function render_main_budget_progress() {
+            const container = document.getElementById('mainBudgetProgress');
+            const opened = new Set([...container.querySelectorAll('details[open]')].map(el => el.dataset.budget));
+            const budgets = build_main_budget_report(module_data, weekMonday, ruleSet.mainCategories || [], subBudgetCaps, category_to_main);
+            container.innerHTML = budgets.map(m => {
+                const positive = m.categories.reduce((sum, c) => sum + Math.max(0, c.cents), 0);
+                const width = m.capCents ? m.pct : (positive ? 100 : 0);
+                const over = m.capCents && m.remainingCents < 0;
+                return `<details class="main-budget" data-budget="${escape_budget(m.id)}" ${opened.has(m.id) ? 'open' : ''}>
+                    <summary>
+                        <span class="main-budget-row">
+                            <span class="main-budget-arrow" aria-hidden="true"></span>
+                            <strong>${escape_budget(m.label)}</strong>
+                            <span class="main-budget-value${over ? ' budget-over' : ''}">${fmt_eur(m.spentCents)}${m.capCents ? ' / ' + fmt_eur(m.capCents) : ''}</span>
+                        </span>
+                        <span class="main-budget-track" role="meter" aria-label="${escape_budget(m.label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${m.pct}" aria-valuetext="${escape_budget(fmt_eur(m.spentCents))}">
+                            <span class="main-budget-fill" style="width:${width}%">${m.categories.map(c => `<span style="width:${positive ? Math.max(0,c.cents) / positive * 100 : 0}%;background:${category_color(c.category)}"></span>`).join('')}</span>
+                        </span>
+                    </summary>
+                    <div class="budget-legend">${m.categories.map(c => `<span><i style="background:${category_color(c.category)}"></i>${escape_budget(c.category)} · ${fmt_eur(c.cents)}</span>`).join('')}</div>
+                    ${m.rows.length ? `<table class="transaction-rows"><colgroup><col style="width:23%"><col><col style="width:28%"><col style="width:20px"></colgroup>${m.rows.map(render_tx_row).join('')}</table>` : `<p>${t('week.noSpend')}</p>`}
+                </details>`;
+            }).join('');
+            wire_tx_rows(container);
+        }
+
+        // Same rolling window (last 6 months, capped by available data) used
+        // by both the savings calendar and the week filter dropdown, so a
+        // clicked calendar cell always has a matching, selectable option.
+        function recent_week_mondays() {
+            if (!module_data.length) return [];
+            const today = new Date(Math.min(+new Date(), Math.max(...module_data.map(r => +r.date))));
+            const first = new Date(Math.min(...module_data.map(r => +r.date)));
+            let cursor = week_start(currentYear ? new Date(Number(currentYear), 0, 1) : new Date(Math.max(+first, +new Date(today.getFullYear(), today.getMonth() - 5, 1))));
+            const end = week_start(currentYear ? new Date(Math.min(+today, +new Date(Number(currentYear), 11, 31))) : today);
+            const mondays = [];
+            while (cursor <= end) { mondays.push(new Date(cursor)); cursor = add_days(cursor, 7); }
+            return mondays;
+        }
+
+        // Übersicht tab: month-by-week calendar of how much of the (constant)
+        // weekly budget was saved or overspent, so trends across months are
+        // visible at a glance next to the finance overview row. Clicking a
+        // week cell filters the whole tab down to that single week.
+        function render_week_savings_calendar() {
+            const container = document.getElementById('weekSavingsCalendar');
+            if (!module_data.length) { container.innerHTML = ''; return; }
+
+            const basis = build_budget_basis(module_data);
+            const weeklyCents = basis.weeklyCents;
+            const currentMonday = week_start(new Date());
+            const weeks = recent_week_mondays().map(monday => ({
+                monday, savingsCents: weeklyCents - build_week_report(filter_overview_rows(module_data, { account: selectedAccount }), monday).spentCents
+            }));
+            if (!weeks.length) { container.innerHTML = `<p>${t('week.noSpend')}</p>`; return; }
+
+            const monthsMap = new Map();
+            weeks.forEach(w => {
+                const key = `${w.monday.getFullYear()}-${String(w.monday.getMonth()).padStart(2, '0')}`;
+                if (!monthsMap.has(key)) monthsMap.set(key, []);
+                monthsMap.get(key).push(w);
+            });
+            const monthKeys = [...monthsMap.keys()].sort().reverse(); // most recent month first
+
+            const fmt_savings = cents => (cents >= 0 ? '+' : '') + fmt_eur_int(cents);
+            const cell_style = cents => {
+                if (!weeklyCents) return '';
+                const ratio = Math.min(1, Math.abs(cents) / weeklyCents);
+                const alpha = (0.15 + ratio * 0.55).toFixed(2);
+                return `background:rgba(${cents < 0 ? '231,76,60' : '46,204,113'},${alpha})`;
+            };
+            const month_label = key => {
+                const [y, m] = key.split('-').map(Number);
+                return new Date(y, m, 1).toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
+            };
+
+            container.innerHTML = `
+                <h3 class="week-cal-title">${t('week.calendarTitle')}</h3>
+                <table class="week-savings-cal"><tbody>
+                    ${monthKeys.map(key => {
+                        const list = monthsMap.get(key).slice().sort((a, b) => a.monday - b.monday);
+                        const totalCents = list.reduce((sum, w) => sum + w.savingsCents, 0);
+                        const cells = list.map(w => `
+                            <td role="button" tabindex="0" class="week-cal-cell${w.monday.getTime() === currentMonday.getTime() ? ' current-week' : ''}${weekFilterMonday && w.monday.getTime() === weekFilterMonday.getTime() ? ' selected' : ''}" data-monday="${w.monday.getTime()}" style="${cell_style(w.savingsCents)}">
+                                <div class="week-cal-week">KW ${iso_week_number(w.monday)}</div>
+                                <div class="week-cal-value">${fmt_savings(w.savingsCents)}</div>
+                            </td>`).join('');
+                        return `<tr>
+                            <th class="week-cal-month">${escape_budget(month_label(key))}</th>
+                            <td class="week-cal-total" role="button" tabindex="0" data-month="${key}" style="${cell_style(totalCents)}">
+                                <div class="week-cal-week">${t('week.calendarTotal')}</div>
+                                <div class="week-cal-value">${fmt_savings(totalCents)}</div>
+                            </td>
+                            ${cells}
+                        </tr>`;
+                    }).join('')}
+                </tbody></table>
+            `;
+
+            container.querySelectorAll('.week-cal-total').forEach(cell => {
+                cell.onclick = () => { monthFilter = cell.dataset.month; weekFilterMonday = null; render_all(); jump_to_chart('budgetTrend'); };
+            });
+            container.querySelectorAll('[role="button"]').forEach(cell => cell.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cell.click(); } });
+            container.querySelectorAll('.week-cal-cell').forEach(cell => {
+                cell.addEventListener('click', () => {
+                    const monday = new Date(parseInt(cell.dataset.monday, 10));
+                    set_week_filter(weekFilterMonday && weekFilterMonday.getTime() === monday.getTime() ? null : monday);
+                    jump_to_chart('budgetTrend');
+                });
+            });
+        }
+
+        // Searchable full-screen category picker, also used by the app shortcut.
+        function render_category_grid(query) {
+            const q = (query || '').toLowerCase().trim();
+            const options = collect_category_options(true).filter(c => c.toLowerCase().includes(q));
+            const grid = document.getElementById('categoryGrid');
+            grid.replaceChildren();
+            options.forEach(category => {
+                const card = document.createElement('div'); card.className = 'category-card';
+                const button = document.createElement('button');
+                button.type = 'button'; button.className = 'category-grid-tile';
+                button.textContent = category;
+                button.onclick = () => { close_category_grid(); open_keypad(category); };
+                wire_category_actions(card, category);
+                card.append(button, favorite_button(category)); grid.append(card);
+            });
+            if (!options.length) grid.textContent = t('table.noCategoryMatch');
+        }
+
+        function open_category_grid() {
+            document.getElementById('categoryGridSearch').value = '';
+            render_category_grid('');
+            document.getElementById('categoryGridModal').style.display = 'block';
+        }
+
+        function close_category_grid() {
+            document.getElementById('categoryGridModal').style.display = 'none';
+        }
+
+        document.getElementById('quickAddMoreBtn').addEventListener('click', open_category_grid);
+        document.getElementById('closeCategoryGrid').addEventListener('click', close_category_grid);
+        document.getElementById('categoryGridSearch').addEventListener('input', (e) => render_category_grid(e.target.value));
+        window.addEventListener('click', (e) => {
+            if (e.target === document.getElementById('categoryGridModal')) close_category_grid();
+        });
+
+        // ===== CUSTOM KEYPAD: big-button amount entry for the chosen category =====
+
+        function update_keypad_date_chip() {
+            const chip = document.getElementById('keypadDateChip');
+            chip.textContent = fmt_date(keypadDate) === fmt_date(new Date()) ? t('quickEntry.today') : fmt_date(keypadDate);
+        }
+
+        function update_keypad_display() {
+            document.getElementById('keypadDisplay').textContent = fmt_eur(buffer_to_cents(keypadBuffer));
+            document.getElementById('keypadConfirm').disabled = buffer_to_cents(keypadBuffer) <= 0;
+        }
+
+        function open_keypad(category) {
+            keypadCategory = category;
+            keypadBuffer = '';
+            keypadDate = new Date();
+            document.getElementById('keypadCategoryLabel').textContent = category;
+            document.getElementById('keypadNote').value = '';
+            document.getElementById('keypadDateInput').hidden = true;
+            update_keypad_date_chip();
+            update_keypad_display();
+            document.getElementById('keypadModal').style.display = 'block';
+        }
+
+        function close_keypad() {
+            document.getElementById('keypadModal').style.display = 'none';
+        }
+
+        // Builds a manual-entry record (shaped like a synthetic CSV row),
+        // persists it, and registers its category via the same override
+        // mechanism a manual recategorization of an imported row uses - see
+        // merge_manual_entries() for why that's necessary.
+        async function submit_keypad() {
+            const amountCents = buffer_to_cents(keypadBuffer);
+            if (amountCents <= 0 || !keypadCategory) return;
+            const note = document.getElementById('keypadNote').value.trim();
+            const record = {
+                id: crypto.randomUUID(),
+                source: 'manual',
+                Datum: datum_string(keypadDate),
+                Name: note || keypadCategory,
+                Verwendungszweck: '',
+                Kategorie: '',
+                Betrag: (-amountCents / 100).toFixed(2)
+            };
+            record._txId = 'manual:' + record.id;
+            await add_manual_entry(record);
+            const row = enrich_row({ ...record });
+            row._manualId = record.id;
+            const id = tx_id(row);
+            await save_overrides([[id, keypadCategory]]);
+            overridesById[id] = keypadCategory;
+            await merge_manual_entries();
+            reclassify();
+            render_all();
+            render_week();
+            close_keypad();
+        }
+
+        document.querySelectorAll('.keypad-key[data-digit]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                keypadBuffer = push_digit(keypadBuffer, btn.dataset.digit);
+                update_keypad_display();
+            });
+        });
+        document.getElementById('keypadBackspace').addEventListener('click', () => {
+            keypadBuffer = pop_digit(keypadBuffer);
+            update_keypad_display();
+        });
+        document.getElementById('keypadConfirm').addEventListener('click', submit_keypad);
+        document.getElementById('closeKeypad').addEventListener('click', close_keypad);
+        window.addEventListener('click', (e) => {
+            if (e.target === document.getElementById('keypadModal')) close_keypad();
+        });
+        document.getElementById('keypadDateChip').addEventListener('click', () => {
+            const input = document.getElementById('keypadDateInput');
+            input.value = `${keypadDate.getFullYear()}-${String(keypadDate.getMonth() + 1).padStart(2, '0')}-${String(keypadDate.getDate()).padStart(2, '0')}`;
+            input.hidden = false;
+            if (input.showPicker) input.showPicker(); else input.focus();
+        });
+        document.getElementById('keypadDateInput').addEventListener('change', (e) => {
+            const [y, m, d] = e.target.value.split('-').map(Number);
+            keypadDate = new Date(y, m - 1, d);
+            update_keypad_date_chip();
+            e.target.hidden = true;
+        });
+
+        // ===== SETTINGS > BUDGETS: weekly caps on the small set of MAIN
+        // budget categories (ruleSet.mainCategories), not on every one of
+        // the (many) fine-grained transaction categories. =====
+
+        // Maps a transaction category to its main budget category id via
+        // the classifying rule's budgetCategory field. Categories with no
+        // rule (bank-fallback, or a rule that never got one assigned) fall
+        // back to "sonstiges" - deliberately, not to a guessed lifestyle
+        // bucket: PayPal/Amazon/generic-online-shop style categories can be
+        // literally anything, so guessing would just be wrong on average.
+        function category_to_main(category) {
+            return budget_category(ruleSet, category);
+        }
+
+        function persist_budgets() {
+            ensure_budget_coverage(ruleSet, module_data);
+            ruleSet._manualRuleIds = manual_rule_ids(ruleSet, settingsBaseline || defaultRuleSet);
+            save_rule_set(ruleSet);
+            reclassify();
+            render_week();
+            render_all();
+        }
+        document.getElementById('addMainCategory').addEventListener('click', () => {
+            ruleSet.mainCategories.push({id: 'budget_' + Date.now(), label: 'Neues Budget'});
+            persist_budgets();
+            render_sub_budget_settings();
+        });
+
+        // Real financial overview shown at the top of the Übersicht tab:
+        // income/month, regular recurring (fixed) expenses/month, what's left
+        // over for budgeting per month, and the same left-over per week - all
+        // straight from build_budget_basis(), the same numbers behind "So wird
+        // das Wochenbudget berechnet" on the Woche tab.
+        function render_finance_overview() {
+            const container = document.getElementById('financeOverviewRow');
+            if (!container) return;
+            if (!module_data.length) { container.innerHTML = ''; return; }
+            const basis = build_budget_basis(module_data);
+            container.innerHTML = `
+                <button type="button" class="budget-totals-cell" data-chart-target="incomeTrend"><span>${t('budgets.incomeMonthly')}</span><strong>${fmt_eur(basis.salaryCents)}</strong></button>
+                <button type="button" class="budget-totals-cell" data-chart-target="fixedTrend"><span>${t('overview.fixedMonthly')}</span><strong>${fmt_eur(basis.fixedCents)}</strong></button>
+                <button type="button" class="budget-totals-cell" data-chart-target="budgetTrend"><span>${t('overview.freeMonthly')}</span><strong>${fmt_eur(basis.freeCents)}</strong></button>
+                <button type="button" class="budget-totals-cell" data-chart-target="budgetTrend"><span>${t('overview.freeWeekly')}</span><strong>${fmt_eur(basis.weeklyCents)}</strong></button>
+            `;
+            container.querySelectorAll('[data-chart-target]').forEach(btn => btn.onclick = () => jump_to_chart(btn.dataset.chartTarget));
+        }
+
+        // Last-3-months preview rows for one already-classified transaction
+        // category - shared by the Budgets category chips and reused as the
+        // model for the Fix Expense / Income rule previews below.
+        function preview_rows_for_category(category) {
+            const now = module_data.length ? build_budget_basis(module_data).refDate : new Date();
+            const windowStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+            return module_data.filter(r => r.date >= windowStart && r.date <= now && r._cls && r._cls.category === category);
+        }
+
+        function format_month_year(date) {
+            return date.toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
+        }
+
+        // Groups a date-desc-sorted row list into "<tr>" month-header
+        // separators + rendered rows, so several occurrences of the same
+        // payee (a recurring monthly charge, say) read as distinct billing
+        // periods instead of a confusing flat repeat of near-identical rows.
+        function group_rows_by_month(sortedRows, renderRow, columns = 4) {
+            let lastMonthKey = null;
+            return sortedRows.map(r => {
+                const monthKey = `${r.date.getFullYear()}-${r.date.getMonth()}`;
+                const header = monthKey !== lastMonthKey ? `<tr class="tx-month-header"><td colspan="${columns}">${format_month_year(r.date)}</td></tr>` : '';
+                lastMonthKey = monthKey;
+                return header + renderRow(r);
+            }).join('');
+        }
+
+        // Read-only preview row: date/name/amount, but the name still opens
+        // the shared category popover so a wrongly-matched one-off (e.g. a
+        // reimbursement caught by a salary rule) can be reassigned away
+        // without leaving this list.
+        function render_transaction_preview_table(rows, amountValue = (r => -r.betrag_cents)) {
+            if (!rows.length) return `<p>${t('fixExpense.noMatches')}</p>`;
+            const sorted = rows.slice().sort((a, b) => b.date - a.date);
+            const rowsHtml = group_rows_by_month(sorted, r => `
+                <tr>
+                    <td>${fmt_date(r.date)}<small class="transaction-source">${transaction_source_label(r)}</small></td>
+                    <td><button type="button" class="tx-preview-name-btn" data-tx-id="${encodeURIComponent(tx_id(r))}">${escape_budget(r.name)}</button></td>
+                    <td class="num">${fmt_eur(amountValue(r))}</td>
+                </tr>
+            `, 3);
+            return `<table class="transaction-preview">${rowsHtml}</table>`;
+        }
+
+        function wire_transaction_preview(container, onReassigned) {
+            container.querySelectorAll('.tx-preview-name-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    open_category_popover(btn, collect_category_options(), async (category) => {
+                        await assign_category([decodeURIComponent(btn.dataset.txId)], category);
+                        if (onReassigned) onReassigned();
+                    });
+                });
+            });
+        }
+
+        // One merged row per budget: name, weekly cap, reorder/remove - plus
+        // a collapsible, drag & drop-enabled list of the transaction
+        // categories currently assigned to it. A permanent, uneditable
+        // "Unassigned" group (id "") catches everything with no mapping;
+        // dragging a category there (or its − button) explicitly clears the
+        // mapping instead of letting it fall back to a rule's default budget.
+        // Each category chip is itself a second expand/collapse level,
+        // previewing that category's last 3 months of transactions.
+        let expandedCatChips = new Set();
+        function render_main_category_editor() {
+            const editor = document.getElementById('mainCategoryEditor');
+            const mains = ruleSet.mainCategories || [];
+            const allCategories = collect_category_options();
+            const groups = [
+                ...mains.map(m => ({ id: m.id, label: m.label, unassigned: false })),
+                { id: UNASSIGNED_BUDGET_ID, label: t('budgets.unassigned'), unassigned: true }
+            ];
+
+            editor.innerHTML = groups.map((g, i) => {
+                const categories = allCategories.filter(c => (category_to_main(c) || '') === g.id);
+                const expanded = expandedBudgetGroups.has(g.id);
+                const capCents = g.unassigned ? 0 : (subBudgetCaps[g.id] || 0);
+                return `
+                    <div class="main-budget-editor-row main-budget-group-row" data-budget="${escape_budget(g.id)}">
+                        <button type="button" class="group-toggle-btn" data-budget="${escape_budget(g.id)}" title="${t('budgets.toggleCategories')}">${expanded ? '▼' : '▶'}</button>
+                        <input value="${escape_budget(g.label)}" data-budget="${escape_budget(g.id)}" aria-label="Budgetname" ${g.unassigned ? 'disabled' : ''}>
+                        <input type="number" class="budgetcap-number" min="0" step="5" placeholder="€" value="${capCents > 0 ? capCents / 100 : ''}" data-budget="${escape_budget(g.id)}" aria-label="Wochenlimit in Euro" title="${t('budgets.noCap')}" ${g.unassigned ? 'disabled' : ''}>
+                        <button type="button" class="move-up-btn" data-idx="${i}" title="Nach oben" ${g.unassigned || i === 0 ? 'disabled' : ''}>↑</button>
+                        <button type="button" class="remove-btn" data-budget="${escape_budget(g.id)}" title="Budget entfernen" ${g.unassigned ? 'disabled' : ''}>×</button>
+                    </div>
+                    <div class="main-budget-group-categories" data-budget="${escape_budget(g.id)}" ${expanded ? '' : 'hidden'}>
+                        ${categories.map(c => {
+                            const chipJson = escape_budget(JSON.stringify(c));
+                            const chipExpanded = expandedCatChips.has(c);
+                            const rows = chipExpanded ? preview_rows_for_category(c) : [];
+                            return `
+                                <div class="cat-chip-row" draggable="true" data-category='${chipJson}'>
+                                    <button type="button" class="cat-chip-toggle" data-category='${chipJson}' title="${t('budgets.toggleTransactions')}">${chipExpanded ? '▼' : '▶'}</button>
+                                    <span>${escape_budget(c)}</span>
+                                    <button type="button" class="cat-remove-btn" data-category='${chipJson}' title="${t('budgets.removeCategory')}">−</button>
+                                </div>
+                                ${chipExpanded ? `<div class="cat-chip-preview">
+                                    <p class="cat-chip-preview-count">${t('fixExpense.previewToggle', { count: rows.length })}</p>
+                                    ${render_transaction_preview_table(rows)}
+                                </div>` : ''}
+                            `;
+                        }).join('') || `<p class="cat-chip-empty">${t('budgets.noCategoriesInGroup')}</p>`}
+                        ${!g.unassigned ? `<button type="button" class="cat-add-btn" data-budget="${escape_budget(g.id)}">+ ${t('budgets.addCategory')}</button>` : ''}
+                    </div>
+                `;
+            }).join('');
+
+            editor.querySelectorAll('.cat-chip-row').forEach(row => row.prepend(favorite_button(JSON.parse(row.dataset.category))));
+            wire_main_category_editor();
+            render_category_mapping_editor(mains);
+        }
+
+        function wire_main_category_editor() {
+            const editor = document.getElementById('mainCategoryEditor');
+
+            editor.querySelectorAll('.cat-chip-toggle').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const category = JSON.parse(btn.dataset.category);
+                    if (expandedCatChips.has(category)) expandedCatChips.delete(category); else expandedCatChips.add(category);
+                    render_main_category_editor();
+                });
+            });
+
+            wire_transaction_preview(editor, () => render_main_category_editor());
+
+            editor.querySelectorAll('.group-toggle-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = btn.dataset.budget;
+                    if (expandedBudgetGroups.has(id)) expandedBudgetGroups.delete(id); else expandedBudgetGroups.add(id);
+                    render_main_category_editor();
+                });
+            });
+
+            editor.querySelectorAll('.main-budget-group-row > input[aria-label="Budgetname"]').forEach(input => {
+                input.onchange = () => {
+                    const m = (ruleSet.mainCategories || []).find(x => x.id === input.dataset.budget);
+                    if (!m) return;
+                    if (!input.value.trim()) { input.value = m.label; return; }
+                    m.entryCategory ||= m.label;
+                    m.label = input.value.trim();
+                    persist_budgets(); render_sub_budget_settings();
+                };
+            });
+
+            editor.querySelectorAll('.budgetcap-number').forEach(input => {
+                input.addEventListener('input', () => {
+                    const id = input.dataset.budget;
+                    const capCents = Math.max(0, Math.round((parseFloat(input.value) || 0) * 100));
+                    if (!Number.isSafeInteger(capCents)) return;
+                    if (capCents > 0) subBudgetCaps[id] = capCents; else delete subBudgetCaps[id];
+                    save_sub_budgets(subBudgetCaps);
+                    ruleSet.subBudgetCaps = { ...subBudgetCaps };
+                    save_rule_set(ruleSet);
+                    render_quick_add_tiles();
+                    render_main_budget_progress();
+                });
+            });
+
+            editor.querySelectorAll('.move-up-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const i = parseInt(btn.dataset.idx, 10);
+                    const list = ruleSet.mainCategories;
+                    [list[i - 1], list[i]] = [list[i], list[i - 1]];
+                    persist_budgets(); render_sub_budget_settings();
+                });
+            });
+
+            editor.querySelectorAll('.remove-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = btn.dataset.budget;
+                    const i = (ruleSet.mainCategories || []).findIndex(m => m.id === id);
+                    if (i === -1) return;
+                    ruleSet.mainCategories.splice(i, 1);
+                    delete subBudgetCaps[id]; save_sub_budgets(subBudgetCaps);
+                    Object.keys(ruleSet.categoryMappings || {}).forEach(c => { if (ruleSet.categoryMappings[c] === id) ruleSet.categoryMappings[c] = UNASSIGNED_BUDGET_ID; });
+                    ruleSet.rules.forEach(r => { if (r.budgetCategory === id) delete r.budgetCategory; });
+                    persist_budgets(); render_sub_budget_settings();
+                });
+            });
+
+            const unassign = (category) => {
+                ruleSet.categoryMappings ||= {};
+                ruleSet.categoryMappings[category] = UNASSIGNED_BUDGET_ID;
+                persist_budgets(); render_sub_budget_settings();
+            };
+            editor.querySelectorAll('.cat-remove-btn').forEach(btn => {
+                btn.addEventListener('click', () => unassign(JSON.parse(btn.dataset.category)));
+            });
+
+            editor.querySelectorAll('.cat-add-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const targetId = btn.dataset.budget;
+                    const options = collect_category_options().filter(c => (category_to_main(c) || '') !== targetId);
+                    open_category_popover(btn, options, (category) => {
+                        ruleSet.categoryMappings ||= {};
+                        ruleSet.categoryMappings[category] = targetId;
+                        persist_budgets(); render_sub_budget_settings();
+                    });
+                });
+            });
+
+            editor.querySelectorAll('.cat-chip-row').forEach(chip => {
+                chip.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', chip.dataset.category);
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+            });
+            editor.querySelectorAll('.main-budget-group-row, .main-budget-group-categories').forEach(dropzone => {
+                dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+                dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+                dropzone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    dropzone.classList.remove('drag-over');
+                    const raw = e.dataTransfer.getData('text/plain');
+                    if (!raw) return;
+                    const category = JSON.parse(raw);
+                    const targetId = dropzone.dataset.budget;
+                    ruleSet.categoryMappings ||= {};
+                    ruleSet.categoryMappings[category] = targetId;
+                    expandedBudgetGroups.add(targetId);
+                    persist_budgets(); render_sub_budget_settings();
+                });
+            });
+        }
+
+        // Second, simpler way to (re)assign a category: one dropdown per
+        // known transaction category, kept alongside the drag & drop editor.
+        function render_category_mapping_editor(mains) {
+            const mapping = document.getElementById('categoryMappingEditor');
+            const wasOpen = mapping.querySelector('details')?.open || false;
+            mapping.replaceChildren();
+            const details = document.createElement('details'); details.open = wasOpen;
+            const summary = document.createElement('summary'); summary.textContent = t('budgets.mappingTitle'); details.append(summary);
+            collect_category_options().forEach(category => {
+                const row = document.createElement('div'); row.className = 'main-budget-editor-row';
+                const name = document.createElement('span'); name.textContent = category;
+                const select = document.createElement('select'); select.add(new Option(t('budgets.unassigned'), ''));
+                mains.forEach(m => select.add(new Option(m.label, m.id)));
+                select.value = category_to_main(category) || '';
+                select.onchange = () => { ruleSet.categoryMappings ||= {}; ruleSet.categoryMappings[category] = select.value; persist_budgets(); render_main_category_editor(); };
+                row.append(favorite_button(category), name, select); details.append(row);
+            });
+            mapping.append(details);
+        }
+
+        function render_sub_budget_settings() {
+            const suggestion = ruleSet.budgetRecommendation;
+            const panel = document.getElementById('budgetRecommendation');
+            const total = Object.values(subBudgetCaps).reduce((sum,v) => sum + v,0);
+            const basis = build_budget_basis(module_data);
+            panel.textContent = `Budgetlimits gesamt: ${fmt_eur(total)} / Woche. Berechnet verfügbar: ${fmt_eur(basis.weeklyCents)}.` + (suggestion ? ` LLM-Vorschlag: ${fmt_eur(suggestion.weeklyLimitCents)} / Woche. ${suggestion.rationale || ''}` : '') + (total > Math.max(0,basis.weeklyCents) && module_data.length ? ' Die Limits übersteigen das verfügbare Wochenbudget.' : '');
+            render_main_category_editor();
+        }
+
+        // Settings > Allgemein: preview of the pairs the internal-transfer
+        // heuristic currently detects, so changing the day window shows its
+        // effect immediately.
+        function render_transfer_preview() {
+            const maxDays = get_transfer_max_days();
+            const pairs = find_internal_transfer_pairs(module_data, maxDays);
+            document.getElementById('transferPreviewSummary').textContent = t('general.transferPreviewToggle', { count: pairs.length });
+            document.getElementById('transferPreviewList').innerHTML = pairs.length ? `
+                <table class="transfer-preview-table">
+                    <thead><tr>
+                        <th>${t('general.transferColA')}</th>
+                        <th>${t('general.transferColB')}</th>
+                        <th>${t('general.transferColGap')}</th>
+                    </tr></thead>
+                    <tbody>
+                        ${pairs.map(p => `
+                            <tr>
+                                <td>${fmt_date(p.a.date)} · ${escape_budget(p.a.name)} · ${fmt_eur(p.a.betrag_cents)}</td>
+                                <td>${fmt_date(p.b.date)} · ${escape_budget(p.b.name)} · ${fmt_eur(p.b.betrag_cents)}</td>
+                                <td class="num">${Math.round(p.days)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            ` : `<p>${t('general.transferNoPairs')}</p>`;
+        }
+        document.getElementById('transferMaxDays').addEventListener('change', (e) => {
+            const days = Math.max(0, parseInt(e.target.value, 10) || 0);
+            save_transfer_max_days(days);
+            e.target.value = days;
+            if (module_data.length) { reclassify(); render_all(); render_week(); }
+            render_transfer_preview();
+        });
+
+        // "Fix Expense" / "Income" tabs: simplified stand-ins for the classic
+        // Regeln editor, each scoped to one group ('fixed' / 'income'). One
+        // row per category with a single combined regex (tested against
+        // name/purpose/bank category via the same rule_matches() the
+        // classifier uses) instead of 3 separate pattern fields + AND/OR -
+        // plus a live "per month" preview computed from the last 3 months.
+        const RULE_GROUP_EDITORS = {
+            fixed: {
+                containerId: 'fixExpenseList', addBtnId: 'addFixExpenseBtn', expanded: new Set(),
+                idPrefix: 'fixed_', newLabelKey: 'fixExpense.newCategoryLabel',
+                amountFilter: r => r.betrag_cents < 0, amountValue: r => -r.betrag_cents,
+                showUnassigned: true
+            },
+            income: {
+                containerId: 'incomeRulesList', addBtnId: 'addIncomeRuleBtn', expanded: new Set(),
+                idPrefix: 'income_', newLabelKey: 'incomeRules.newCategoryLabel',
+                amountFilter: r => r.betrag_cents > 0, amountValue: r => r.betrag_cents,
+                showUnassigned: false
+            }
+        };
+
+        // Last-3-months transactions matching a rule's pattern - shared by
+        // the Fix Expense/Income editors and the week-basis contracts list.
+        function rule_recent_matches(rule, amountFilter) {
+            const now = module_data.length ? build_budget_basis(module_data).refDate : new Date();
+            const windowStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+            return module_data.filter(r => r.date >= windowStart && r.date <= now && amountFilter(r) && rule_matches(r, rule));
+        }
+
+        function render_rule_group_list(kind) {
+            const cfg = RULE_GROUP_EDITORS[kind];
+            const container = document.getElementById(cfg.containerId);
+            const openPreviews = new Set([...container.querySelectorAll('details[open]')].map(el => el.dataset.rule));
+            const rules = (ruleSet.rules || []).filter(r => r.group === kind);
+
+            const matches_for = rule => rule_recent_matches(rule, cfg.amountFilter);
+
+            const rowsHtml = rules.map(rule => {
+                const matches = matches_for(rule);
+                const totalCents = matches.reduce((sum, r) => sum + cfg.amountValue(r), 0);
+                const expanded = cfg.expanded.has(rule.id);
+                const pattern = rule.namePattern || rule.verwendungPattern || rule.kategoriePattern || '';
+
+                return `
+                    <div class="main-budget-editor-row fixexpense-row" data-rule="${escape_budget(rule.id)}" data-kind="${kind}">
+                        <button type="button" class="group-toggle-btn" data-rule="${escape_budget(rule.id)}" title="${t('budgets.toggleCategories')}">${expanded ? '▼' : '▶'}</button>
+                        <input value="${escape_budget(rule.category || rule.label || '')}" data-rule="${escape_budget(rule.id)}" data-field="category" aria-label="Kategorie">
+                        <span class="fixexpense-monthly">${fmt_eur(totalCents)}</span>
+                        <button type="button" class="remove-btn" data-rule="${escape_budget(rule.id)}" title="${t('fixExpense.removeRow')}">×</button>
+                    </div>
+                    <div class="main-budget-group-categories fixexpense-body" ${expanded ? '' : 'hidden'}>
+                        <label class="fixexpense-pattern-label">${t('fixExpense.patternLabel')}</label>
+                        <input type="text" class="fixexpense-pattern" value="${escape_budget(pattern)}" data-rule="${escape_budget(rule.id)}" placeholder="${t('fixExpense.patternPlaceholder')}">
+                        <details class="fixexpense-preview" data-rule="${escape_budget(rule.id)}" ${openPreviews.has(rule.id) ? 'open' : ''}>
+                            <summary>${t('fixExpense.previewToggle', { count: matches.length })}</summary>
+                            ${render_transaction_preview_table(matches, cfg.amountValue)}
+                        </details>
+                    </div>
+                `;
+            }).join('');
+
+            const unassignedHtml = cfg.showUnassigned ? (() => {
+                const usedCategories = new Set(rules.map(r => r.category || r.label));
+                const unassigned = collect_category_options().filter(c => !usedCategories.has(c));
+                return `
+                    <div class="main-budget-editor-row fixexpense-row">
+                        <button type="button" class="group-toggle-btn" disabled aria-hidden="true"></button>
+                        <input value="${escape_budget(t('budgets.unassigned'))}" disabled aria-label="Budgetname">
+                        <span class="fixexpense-monthly"></span>
+                        <button type="button" class="remove-btn" disabled aria-hidden="true"></button>
+                    </div>
+                    <div class="main-budget-group-categories fixexpense-body">
+                        ${unassigned.length ? unassigned.map(c => `<div class="cat-chip-row cat-chip-readonly"><span>${escape_budget(c)}</span></div>`).join('') : `<p class="cat-chip-empty">${t('fixExpense.allAssigned')}</p>`}
+                    </div>
+                `;
+            })() : '';
+
+            container.innerHTML = rowsHtml + unassignedHtml || `<p style="color:#999;">${t('fixExpense.noRows')}</p>`;
+            wire_rule_group_list(kind);
+        }
+
+        function wire_rule_group_list(kind) {
+            const cfg = RULE_GROUP_EDITORS[kind];
+            const container = document.getElementById(cfg.containerId);
+
+            wire_transaction_preview(container, () => render_rule_group_list(kind));
+
+            container.querySelectorAll('.fixexpense-row .group-toggle-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = btn.dataset.rule;
+                    if (cfg.expanded.has(id)) cfg.expanded.delete(id); else cfg.expanded.add(id);
+                    render_rule_group_list(kind);
+                });
+            });
+
+            container.querySelectorAll('.fixexpense-row input[data-field="category"]:not([disabled])').forEach(input => {
+                input.onchange = () => {
+                    const rule = (ruleSet.rules || []).find(r => r.id === input.dataset.rule);
+                    if (!rule) return;
+                    if (!input.value.trim()) { input.value = rule.category || rule.label || ''; return; }
+                    rule.category = input.value.trim();
+                    rule.label ||= rule.category;
+                    persist_budgets(); render_rule_group_list(kind);
+                };
+            });
+
+            container.querySelectorAll('.fixexpense-pattern').forEach(input => {
+                input.onchange = () => {
+                    const rule = (ruleSet.rules || []).find(r => r.id === input.dataset.rule);
+                    if (!rule) return;
+                    const pattern = input.value.trim();
+                    try { if (pattern) new RegExp(pattern, 'i'); } catch (e) { alert(t('fixExpense.invalidPattern')); return; }
+                    rule.namePattern = pattern;
+                    rule.verwendungPattern = pattern;
+                    rule.kategoriePattern = pattern;
+                    rule.matchType = 'or';
+                    persist_budgets(); render_rule_group_list(kind);
+                };
+            });
+
+            container.querySelectorAll('.fixexpense-row .remove-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = btn.dataset.rule;
+                    const i = (ruleSet.rules || []).findIndex(r => r.id === id);
+                    if (i === -1) return;
+                    ruleSet.rules.splice(i, 1);
+                    persist_budgets(); render_rule_group_list(kind);
+                });
+            });
+        }
+
+        function add_rule_group_row(kind) {
+            const cfg = RULE_GROUP_EDITORS[kind];
+            const maxPriority = (ruleSet.rules || []).reduce((m, r) => Math.max(m, r.priority || 0), 0);
+            const id = cfg.idPrefix + Date.now();
+            ruleSet.rules ||= [];
+            ruleSet.rules.push({
+                id, label: t(cfg.newLabelKey), category: t(cfg.newLabelKey),
+                group: kind, namePattern: '', verwendungPattern: '', kategoriePattern: '', matchType: 'or',
+                priority: maxPriority + 10
+            });
+            cfg.expanded.add(id);
+            persist_budgets();
+            render_rule_group_list(kind);
+        }
+        function render_fix_expense_list() { render_rule_group_list('fixed'); }
+        document.getElementById('addFixExpenseBtn').addEventListener('click', () => add_rule_group_row('fixed'));
+        document.getElementById('addIncomeRuleBtn').addEventListener('click', () => add_rule_group_row('income'));
+
+        function fmt_eur(cents) {
+            return (cents / 100).toLocaleString(locale(), { style: 'currency', currency: 'EUR' });
+        }
+
+        // Rounded whole-number display with the currency symbol, used for the week hero amount.
+        function fmt_eur_int(cents) {
+            return Math.round(cents / 100).toLocaleString(locale(), { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+        }
+
+        function jump_to_chart(id) {
+            const target = document.getElementById(id);
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            target.focus({ preventScroll: true });
+        }
+        function overview_rows() {
+            let from = weekFilterMonday, to = from ? add_days(from, 7) : null;
+            if (monthFilter) { const [y,m] = monthFilter.split('-').map(Number); from = new Date(y,m,1); to = new Date(y,m+1,1); }
+            return filter_overview_rows(module_data, { year: currentYear, from, to, account: selectedAccount });
+        }
+        function render_all() {
+            if (!ruleSet) return;
+            populate_week_filter();
+            const accountSelect = document.getElementById('accountSelect');
+            const accounts = [...new Set(module_data.map(account_key))].sort();
+            accountSelect.replaceChildren(new Option('Alle Konten', ''), ...accounts.map(a => new Option(a,a)));
+            if (!accounts.includes(selectedAccount)) selectedAccount = '';
+            accountSelect.value = selectedAccount;
+            const rows = overview_rows();
+            const summary = build_group_summary(rows);
+            const rate = summary.totalIncome ? (summary.net / summary.totalIncome * 100).toFixed(1) + '%' : '–';
+            document.getElementById('statsBar').innerHTML = [['Ausgaben',summary.totalExpenses],['Einnahmen',summary.totalIncome],['Netto',summary.net]].map(([label,cents]) => `<span>${label}<b>${fmt_eur(cents)}</b></span>`).join('') + `<span>Sparquote<b>${rate}</b></span>`;
+            render_finance_overview();
+            render_week_savings_calendar();
+            document.querySelectorAll('#yearButtons button').forEach(b => b.classList.toggle('active', b.dataset.year === String(currentYear)));
+            document.getElementById('overviewFilterNote').textContent = `${currentYear || 'Alle Jahre'} · ${selectedAccount || 'Alle Konten'}${monthFilter ? ' · ' + new Date(Number(monthFilter.split('-')[0]), Number(monthFilter.split('-')[1]), 1).toLocaleDateString(locale(), { month:'long', year:'numeric' }) : ''}${weekFilterMonday ? ' · KW ' + iso_week_number(weekFilterMonday) : ''} · ${rows.length} Buchungen`;
+            const unmatched = module_data.filter(r => r._paypalUnmatched).length;
+            const notice = document.getElementById('paypalNotice');
+            const missingAccount = module_data.some(r => account_key(r) === 'Konto unbekannt');
+            notice.hidden = !unmatched && !missingAccount;
+            notice.textContent = (missingAccount ? 'Kontoinformation fehlt. Unter CSV-Import die Spalte für das eigene Konto wählen oder getrennte Dateien mit einem Kontonamen importieren. Konto/Bank können Empfängerdaten sein. ' : '') + `${unmatched} PayPal-Bankbuchung(en) ohne eindeutigen Gegenposten. Bitte vollständige PayPal-Historie importieren und in den Budgetdetails prüfen; diese Beträge bleiben sichtbar.`;
+            for (const kind of ['budget','fixed','income']) {
+                const model = build_timeline(rows, ruleSet, kind, granularity, chartDrill[kind]);
+                const onSelect = kind === 'income' ? null : key => { if (!chartDrill[kind]) { chartDrill[kind] = key; render_all(); } };
+                render_timeline(document.getElementById(kind+'Chart'), model, onSelect);
+                if (kind !== 'income') {
+                    const options = document.getElementById(kind+'DrillOptions'); options.replaceChildren();
+                    if (!chartDrill[kind]) model.series.forEach(series => {
+                        const button = document.createElement('button'); button.textContent = series.label; button.onclick = () => onSelect(series.key); options.append(button);
+                    });
+                    if (!model.series.length) options.textContent = 'Keine Buchungen für diesen Zeitraum.';
+                    const reset = document.querySelector(`[data-reset-chart="${kind}"]`); reset.hidden = !chartDrill[kind];
+                    document.getElementById(kind+'Caption').textContent = chartDrill[kind]
+                        ? (kind === 'budget' ? main_category_label(chartDrill[kind]) + ' · Transaktionskategorien' : chartDrill[kind] + ' · Zahlungsempfänger')
+                        : (kind === 'budget' ? 'Alle nicht wiederkehrenden Ausgaben. Budget wählen, um Kategorien zu sehen.' : 'Tatsächliche Abbuchungen. Kategorie wählen, um Zahlungsempfänger zu sehen.');
+                } else {
+                    document.getElementById('cashflowNet').innerHTML = model.labels.map((label,i) => `<span>${escape_budget(label)}<b>${fmt_eur(model.series.reduce((sum,series) => sum + series.values[i],0))}</b></span>`).join('');
+                }
+            }
+        }
+
+        // Wire up UI
+        function jsonToCsv(jsonData) {
+            const headers = Object.keys(jsonData[0]);
+            const csvRows = [headers.join(';')];
+            jsonData.forEach(row => {
+                const values = headers.map(h => row[h] || '');
+                csvRows.push(values.join(';'));
+            });
+            return csvRows.join('\n');
+        }
+
+        function loadCsvFile(file, config) {
+            if (!file) return;
+            const cfg = config || get_csv_config();
+            save_csv_config(cfg);
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const csv = e.target.result;
+                try {
+                    parse_csv(csv, cfg);
+                    await upsert_imported_entries(csv_records(module_data));
+                } catch (error) {
+                    alert('CSV-Import fehlgeschlagen: ' + error.message);
+                }
+                await merge_manual_entries();
+                reclassify();
+                populate_year_buttons();
+                leakCategoryFilter = null;
+                render_all();
+                render_week();
+            };
+            reader.onerror = () => alert('CSV-Datei konnte nicht gelesen werden.');
+            reader.readAsText(file, encoding_label(cfg.encoding));
+        }
+
+        function encoding_label(encoding) {
+            const map = { 'utf-8': 'UTF-8', 'iso-8859-1': 'ISO-8859-1', 'windows-1252': 'windows-1252' };
+            return map[encoding] || 'UTF-8';
+        }
+
+        document.getElementById('csvFile').addEventListener('change', (e) => {
+            loadCsvFile(e.target.files[0], read_csv_config_from_form());
+        });
+
+        async function load_sample_data() {
+            try {
+                const response = await fetch('./sample_data.json');
+                const jsonData = await response.json();
+                const csvData = jsonToCsv(jsonData);
+                parse_csv(csvData);
+                await upsert_imported_entries(csv_records(module_data));
+                await merge_manual_entries();
+                reclassify();
+                populate_year_buttons();
+                leakCategoryFilter = null;
+                render_all();
+                render_week();
+            } catch (error) {
+                console.error('Error loading sample data:', error);
+                alert(t('alerts.loadSampleFailed'));
+            }
+        }
+        document.getElementById('emptyLoadSampleBtn').addEventListener('click', load_sample_data);
+
+        // The empty-state's other CTA: open Settings straight on the CSV-import section.
+        document.getElementById('emptyOpenSettingsBtn').addEventListener('click', () => {
+            configBtn.click();
+            document.querySelector('.settings-tab-btn[data-settings-tab="importexport"]').click();
+        });
+
+        document.getElementById('resetDrillBtn').addEventListener('click', () => {
+            chartDrill.budget = chartDrill.fixed = null; weekFilterMonday = null; monthFilter = null; render_all();
+        });
+        document.getElementById('granularitySelect').onchange = e => { granularity = e.target.value; render_all(); };
+        document.getElementById('accountSelect').onchange = e => { selectedAccount = e.target.value; render_all(); };
+        document.querySelectorAll('[data-reset-chart]').forEach(btn => btn.onclick = () => { chartDrill[btn.dataset.resetChart] = null; render_all(); });
+
+        function populate_year_buttons() {
+            const years = [...new Set(module_data.map(d => d.date.getFullYear()))].sort();
+            const container = document.getElementById('yearButtons');
+            container.innerHTML = '';
+            const allBtn = document.createElement('button');
+            allBtn.textContent = t('filters.allYears'); allBtn.dataset.year = '';
+            allBtn.addEventListener('click', () => filter_by_year(''));
+            container.appendChild(allBtn);
+            years.forEach(y => {
+                const btn = document.createElement('button');
+                btn.textContent = y; btn.dataset.year = String(y);
+                btn.addEventListener('click', () => filter_by_year(y));
+                container.appendChild(btn);
+            });
+        }
+
+        // Rebuilds the week dropdown's options from the same rolling window
+        // the savings calendar shows (optionally narrowed to the selected
+        // year), and drops the week filter if it no longer fits that year.
+        function populate_week_filter() {
+            const select = document.getElementById('weekFilterSelect');
+            const mondays = recent_week_mondays().filter(m => !currentYear || m.getFullYear() == currentYear);
+            select.innerHTML = `<option value="">${t('filters.allWeeks')}</option>` + mondays.map(monday => {
+                const ms = monday.getTime();
+                return `<option value="${ms}">KW ${iso_week_number(monday)} (${fmt_date(monday)}\u2013${fmt_date(add_days(monday, 6))})</option>`;
+            }).join('');
+            if (weekFilterMonday && !mondays.some(m => m.getTime() === weekFilterMonday.getTime())) weekFilterMonday = null;
+            select.value = weekFilterMonday ? String(weekFilterMonday.getTime()) : '';
+        }
+
+        function set_week_filter(monday) {
+            weekFilterMonday = monday; monthFilter = null;
+            render_all();
+        }
+
+        document.getElementById('weekFilterSelect').addEventListener('change', (e) => {
+            set_week_filter(e.target.value ? new Date(parseInt(e.target.value, 10)) : null);
+        });
+
+        function filter_by_year(year) {
+            currentYear = year; weekFilterMonday = null; monthFilter = null;
+            localStorage.setItem('selectedYear', year); render_all();
+        }
+
+        // ===== CLASSIFICATION RULES ("SETTING") LOGIC =====
+
+        // Modal Management
+        const modal = document.getElementById('rulesModal');
+        const closeBtn = modal.querySelector('.close');
+        const configBtn = document.getElementById('configRulesBtn');
+        const saveBtn = document.getElementById('saveRulesBtn');
+        const cancelBtn = document.getElementById('cancelRulesBtn');
+        const loadDefaultRulesBtn = document.getElementById('loadDefaultRulesBtn');
+
+        configBtn.addEventListener('click', () => {
+            render_transfer_preview();
+            render_connected_accounts();
+            modal.style.display = 'block';
+        });
+
+        // Settings modal sub-tabs (Allgemein / Budgets / Fix Expense / Income / Export-Import / CSV-Import)
+        document.querySelectorAll('.settings-tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.settings-tab-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const target = btn.dataset.settingsTab;
+                document.getElementById('settingsTab-rules').hidden = target !== 'rules';
+                document.getElementById('settingsTab-budgets').hidden = target !== 'budgets';
+                document.getElementById('settingsTab-fixexpense').hidden = target !== 'fixexpense';
+                document.getElementById('settingsTab-income').hidden = target !== 'income';
+                document.getElementById('settingsTab-importexport').hidden = target !== 'importexport';
+                if (target === 'rules') { render_transfer_preview(); render_connected_accounts(); }
+                if (target === 'budgets') render_sub_budget_settings();
+                if (target === 'fixexpense') render_fix_expense_list();
+                if (target === 'income') render_rule_group_list('income');
+            });
+        });
+
+        document.getElementById('ruleSearchInput')?.addEventListener('input', (e) => {
+            const q = e.target.value.toLowerCase().trim();
+            document.querySelectorAll('#rulesList .rule-item').forEach(item => {
+                item.style.display = item.dataset.search.includes(q) ? '' : 'none';
+            });
+        });
+
+        closeBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+        cancelBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+
+        window.addEventListener('click', (e) => {
+            if (e.target === modal) modal.style.display = 'none';
+        });
+
+        loadDefaultRulesBtn.addEventListener('click', async () => {
+            if (!confirm(t('importexport.confirmReplace'))) return;
+            const def = await load_default_rule_set();
+            ruleSet = JSON.parse(JSON.stringify(def));
+            render_sub_budget_settings();
+            render_fix_expense_list();
+            render_rule_group_list('income');
+            render_transfer_preview();
+        });
+
+        saveBtn.addEventListener('click', () => {
+            ruleSet._manualRuleIds = manual_rule_ids(ruleSet, settingsBaseline);
+            save_rule_set(ruleSet);
+            render_quick_add_tiles();
+            modal.style.display = 'none';
+            if (module_data.length > 0) {
+                reclassify();
+                render_all();
+                render_week();
+            }
+        });
+
+        // Import/Export ("SETTING" file, see README for schema + LLM prompt template)
+        document.getElementById('exportRulesBtn').addEventListener('click', () => {
+            const dataStr = JSON.stringify({ ...ruleSet, subBudgetCaps }, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'moneymoney_classification_settings.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('importRulesBtn').addEventListener('click', () => {
+            document.getElementById('importRulesFile').click();
+        });
+
+        // Fixes the most common invalid-JSON mistake in LLM-generated SETTINGs:
+        // a regex like "\d" or "\s" needs a doubled backslash in JSON, but
+        // models often forget that. Only ever tried as a fallback after a
+        // normal JSON.parse already failed, so valid JSON is never touched.
+        function repair_json_escapes(text) {
+            return text.replace(/\\(?!["\\/bfnrtu])/g, '\\\\');
+        }
+
+        function review_settings_import(current, changes) {
+            const dialog = document.getElementById('settingsReviewDialog');
+            const container = document.getElementById('settingsReviewChanges'); container.replaceChildren();
+            document.getElementById('settingsReviewError').textContent = '';
+            changes.forEach((change,index) => {
+                const row = document.createElement('div'); row.className = 'setting-change';
+                const label = document.createElement('label');
+                const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.value = index; checkbox.checked = !change.protected;
+                const title = document.createElement('span'); title.textContent = `${change.field} · ${change.order ? 'Reihenfolge' : change.key || ''} ${change.protected ? '— eigene Anpassung bleibt erhalten' : ''}`;
+                label.append(checkbox,title);
+                const details = document.createElement('details');
+                const summary = document.createElement('summary'); summary.textContent = 'Bisher → Vorschlag';
+                const pre = document.createElement('pre'); pre.textContent = `${JSON.stringify(change.before ?? '(nicht vorhanden)',null,2)}
+→
+${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
+                details.append(summary,pre); row.append(label,details); container.append(row);
+            });
+            if (!changes.length) container.textContent = 'Keine Änderungen.';
+            dialog.showModal();
+            return new Promise(resolve => {
+                let result = null;
+                dialog.onclose = () => resolve(result);
+                document.getElementById('cancelSettingsReview').onclick = () => dialog.close();
+                document.getElementById('applySettingsReview').onclick = () => {
+                    try {
+                        const selected = new Set([...container.querySelectorAll('input:checked')].map(input => Number(input.value)));
+                        const candidate = apply_settings_changes(current,changes,selected);
+                        ensure_budget_coverage(candidate);
+                        validate_budget_settings(candidate, { checkSuggestionCaps: false });
+                        result = candidate; dialog.close();
+                    } catch (error) { document.getElementById('settingsReviewError').textContent = error.message; }
+                };
+            });
+        }
+
+        // Validate the full settings document before replacing the active set.
+        async function apply_imported_setting(jsonText) {
+            document.getElementById('settingsImportStatus').textContent = '';
+            let imported;
+            try {
+                imported = JSON.parse(jsonText);
+            } catch (parseErr) {
+                try {
+                    imported = JSON.parse(repair_json_escapes(jsonText));
+                } catch {
+                    throw parseErr; // surface the original error/position, it's more useful
+                }
+            }
+            if (!imported.rules || !Array.isArray(imported.rules)) {
+                throw new Error(t('importexport.invalidFile'));
+            }
+            validate_budget_settings(imported);
+            Object.keys(imported).filter(k => k.startsWith('_')).forEach(k => delete imported[k]);
+            ensure_budget_coverage(imported);
+            imported.subBudgetCaps ||= {};
+            const current = { ...ruleSet, subBudgetCaps };
+            const baseline = { ...settingsBaseline, subBudgetCaps: settingsBaseline?.subBudgetCaps || {} };
+            const changes = settings_changes(current, imported, baseline);
+            const pristine = !localStorage.getItem('settingsImportBaseline') && !settings_changes(baseline, current, baseline).length;
+            let next;
+            if (pristine) next = imported;
+            else next = await review_settings_import(current, changes);
+            if (!next) return null;
+            for (const category of new Set(Object.values(overridesById))) {
+                if (!category_catalog(ruleSet).includes(category) || category_catalog(next).includes(category)) continue;
+                const id = budget_category(ruleSet, category);
+                const main = ruleSet.mainCategories.find(m => m.id === id);
+                if (main && !next.mainCategories.some(m => m.id === id)) next.mainCategories.push(structuredClone(main));
+                next.categoryMappings[category] = id || 'sonstiges';
+            }
+            ensure_budget_coverage(next);
+            validate_budget_settings(next, { checkSuggestionCaps: false });
+            settingsBaseline = structuredClone(imported);
+            next._manualRuleIds = manual_rule_ids(next, settingsBaseline);
+            ruleSet = next;
+            subBudgetCaps = next.subBudgetCaps || {};
+            localStorage.setItem('settingsImportBaseline', JSON.stringify(settingsBaseline));
+            save_sub_budgets(subBudgetCaps);
+            save_rule_set(ruleSet);
+            reclassify();
+            if (module_data.length) render_all();
+            render_week();
+            render_sub_budget_settings();
+            render_fix_expense_list();
+            render_rule_group_list('income');
+            render_transfer_preview();
+            return 0;
+        }
+
+        document.getElementById('importRulesFile').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async (ev) => {
+                try {
+                    const dropped = await apply_imported_setting(ev.target.result);
+                    if (dropped === null) return;
+                    document.getElementById('settingsImportStatus').textContent = t('importexport.importSuccess');
+                } catch (err) {
+                    document.getElementById('settingsImportStatus').textContent = t('importexport.importFailed', { error: err.message });
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = '';
+        });
+
+        document.getElementById('importPasteBtn').addEventListener('click', async () => {
+            const textEl = document.getElementById('importPasteText');
+            if (!textEl.value.trim()) return;
+            try {
+                const dropped = await apply_imported_setting(textEl.value);
+                if (dropped === null) return;
+                textEl.value = '';
+                document.getElementById('importPasteDetails').open = false;
+                document.getElementById('settingsImportStatus').textContent = t('importexport.importSuccess');
+            } catch (err) {
+                document.getElementById('settingsImportStatus').textContent = t('importexport.importFailed', { error: err.message });
+            }
+        });
+
+        document.getElementById('exportUnclassifiedBtn').addEventListener('click', () => {
+            if (module_data.length === 0) { alert(t('alerts.needCsvFirst')); return; }
+            const fd = currentYear ? module_data.filter(d => d.date.getFullYear() == currentYear) : [...module_data];
+            const unclassified = build_unclassified_report(fd);
+            const totalEUR = unclassified.reduce((a, e) => a + e.totalEUR, 0);
+
+            const payload = {
+                instructions: t('importexport.llmPromptExample'),
+                periodFilter: currentYear || 'alle Jahre',
+                totalUnclassifiedEUR: Math.round(totalEUR * 100) / 100,
+                currentRuleSet: { ...ruleSet, subBudgetCaps },
+                historicalCategories: collect_category_options().map(category => ({ category, budgetCategory: category_to_main(category) })),
+                unclassifiedMerchants: unclassified
+            };
+
+            const dataStr = JSON.stringify(payload, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'moneymoney_unclassified_validation.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('copyLlmPromptBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('copyLlmPromptBtn');
+            try {
+                await navigator.clipboard.writeText(document.getElementById('llmPromptExample').value);
+                const original = btn.textContent;
+                btn.textContent = t('importexport.promptCopied');
+                setTimeout(() => { btn.textContent = original; }, 2000);
+            } catch (e) {
+                document.getElementById('llmPromptExample').select();
+            }
+        });
+
+        // ===== CSV IMPORT CONFIG (delimiter, line break, encoding, column mapping) =====
+
+        function delimiter_from_token(token) { return token === 'tab' ? '\t' : token; }
+        function delimiter_to_token(delim) { return delim === '\t' ? 'tab' : delim; }
+        function linebreak_from_token(token) { return token === 'lf' ? '\n' : token === 'crlf' ? '\r\n' : 'auto'; }
+        function linebreak_to_token(lb) { return lb === '\n' ? 'lf' : lb === '\r\n' ? 'crlf' : 'auto'; }
+
+        function read_csv_config_from_form() {
+            return {
+                delimiter: delimiter_from_token(document.getElementById('csvDelimiter').value),
+                lineBreak: linebreak_from_token(document.getElementById('csvLineBreak').value),
+                encoding: document.getElementById('csvEncoding').value,
+                decimalSeparator: document.getElementById('csvDecimalSeparator').value,
+                hasHeader: document.getElementById('csvHasHeader').checked,
+                ignoreCategories: document.getElementById('csvIgnoreCategories').checked,
+                accountName: document.getElementById('csvAccountName').value.trim(),
+                columns: {
+                    date: document.getElementById('csvColDate').value,
+                    name: document.getElementById('csvColName').value,
+                    verwendungszweck: document.getElementById('csvColVerwendungszweck').value,
+                    betrag: document.getElementById('csvColBetrag').value,
+                    kategorie: document.getElementById('csvColKategorie').value,
+                    account: document.getElementById('csvColAccount').value
+                }
+            };
+        }
+
+        function populate_csv_form(config) {
+            document.getElementById('csvDelimiter').value = delimiter_to_token(config.delimiter);
+            document.getElementById('csvLineBreak').value = linebreak_to_token(config.lineBreak);
+            document.getElementById('csvEncoding').value = config.encoding;
+            document.getElementById('csvDecimalSeparator').value = config.decimalSeparator;
+            document.getElementById('csvHasHeader').checked = config.hasHeader;
+            document.getElementById('csvIgnoreCategories').checked = config.ignoreCategories !== false;
+            document.getElementById('csvColDate').value = config.columns.date;
+            document.getElementById('csvColName').value = config.columns.name;
+            document.getElementById('csvColVerwendungszweck').value = config.columns.verwendungszweck;
+            document.getElementById('csvColBetrag').value = config.columns.betrag;
+            document.getElementById('csvColKategorie').value = config.columns.kategorie;
+            document.getElementById('csvColAccount').value = config.columns.account || 'Kontoname';
+            document.getElementById('csvAccountName').value = config.accountName || '';
+        }
+
+        document.getElementById('csvIgnoreCategories').addEventListener('change', () => {
+            save_csv_config({ ...get_csv_config(), ignoreCategories: document.getElementById('csvIgnoreCategories').checked });
+            reclassify(); render_all(); render_week();
+        });
+
+        document.getElementById('csvSaveConfigBtn').addEventListener('click', () => {
+            save_csv_config(read_csv_config_from_form());
+            const note = document.getElementById('csvSavedNote');
+            note.style.display = 'inline';
+            setTimeout(() => { note.style.display = 'none'; }, 3000);
+        });
+
+        document.getElementById('csvResetDefaultsBtn').addEventListener('click', async () => {
+            if (!confirm(t('csv.confirmResetDefaults'))) return;
+
+            const config = default_csv_config();
+            populate_csv_form(config);
+            save_csv_config(config);
+
+            reclassify(); render_all(); render_week();
+        });
+
+        // ===== SETTINGS > BANK: GoCardless connection via gocardless-proxy/ =====
+        // See gocardless-proxy/README.md - a small Cloudflare Worker holds the
+        // real GoCardless secret; this app only ever talks to that Worker,
+        // never to GoCardless directly.
+
+        function gc_config() {
+            return { url: (localStorage.getItem('gcProxyUrl') || '').replace(/\/$/, ''), key: localStorage.getItem('gcAppKey') || '' };
+        }
+
+        function populate_bank_form() {
+            document.getElementById('gcProxyUrl').value = localStorage.getItem('gcProxyUrl') || '';
+            document.getElementById('gcAppKey').value = localStorage.getItem('gcAppKey') || '';
+        }
+
+        document.getElementById('gcSaveConfigBtn').addEventListener('click', () => {
+            localStorage.setItem('gcProxyUrl', document.getElementById('gcProxyUrl').value.trim());
+            localStorage.setItem('gcAppKey', document.getElementById('gcAppKey').value.trim());
+            const note = document.getElementById('gcConfigSavedNote');
+            note.style.display = 'inline';
+            setTimeout(() => { note.style.display = 'none'; }, 3000);
+        });
+
+        async function gc_api(path, options = {}) {
+            const { url, key } = gc_config();
+            if (!url) throw new Error(t('bank.noProxyConfigured'));
+            const res = await fetch(url + path, {
+                ...options,
+                headers: { 'Content-Type': 'application/json', 'X-App-Key': key, ...(options.headers || {}) }
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok) throw new Error((data && (data.message || data.error)) || `HTTP ${res.status}`);
+            return data;
+        }
+
+        function get_connected_accounts() {
+            try { return JSON.parse(localStorage.getItem('gcConnectedAccounts') || '[]'); } catch (e) { return []; }
+        }
+        function save_connected_accounts(list) {
+            localStorage.setItem('gcConnectedAccounts', JSON.stringify(list));
+        }
+
+        function render_connected_accounts() {
+            const list = get_connected_accounts();
+            const el = document.getElementById('gcConnectedList');
+            el.innerHTML = list.length
+                ? list.map(a => `<div class="gc-connected-row"><span>${a.institutionName}</span><span class="gc-connected-date">${t('bank.connectedSince', { date: fmt_date(new Date(a.connectedAt)) })}</span></div>`).join('')
+                : `<p style="color:#999;">${t('bank.noneConnected')}</p>`;
+            document.getElementById('gcSyncNowBtn').hidden = list.length === 0;
+        }
+
+        let gcInstitutions = [];
+        function render_institutions(query) {
+            const q = (query || '').toLowerCase().trim();
+            const filtered = gcInstitutions.filter(i => i.name.toLowerCase().includes(q));
+            document.getElementById('gcInstitutionsList').innerHTML = filtered.map(i => `
+                <div class="gc-institution-row">
+                    <span>${i.name}</span>
+                    <button type="button" class="gc-connect-btn" data-id="${i.id}">${t('bank.connect')}</button>
+                </div>
+            `).join('') || `<p style="color:#999;">${t('table.noCategoryMatch')}</p>`;
+            document.querySelectorAll('.gc-connect-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const institution = filtered.find(i => i.id === btn.dataset.id);
+                    start_gc_connect(btn.dataset.id, institution ? institution.name : btn.dataset.id);
+                });
+            });
+        }
+
+        document.getElementById('gcLoadInstitutionsBtn').addEventListener('click', async () => {
+            const statusEl = document.getElementById('gcStatus');
+            statusEl.textContent = t('bank.loadingBanks');
+            try {
+                gcInstitutions = await gc_api(`/institutions?country=${document.getElementById('gcCountry').value}`);
+                render_institutions('');
+                document.getElementById('gcInstitutionSearch').hidden = false;
+                statusEl.textContent = '';
+            } catch (err) {
+                statusEl.textContent = t('bank.error', { message: err.message });
+            }
+        });
+        document.getElementById('gcInstitutionSearch').addEventListener('input', (e) => render_institutions(e.target.value));
+
+        async function start_gc_connect(institutionId, institutionName) {
+            const statusEl = document.getElementById('gcStatus');
+            statusEl.textContent = t('bank.connecting');
+            try {
+                const redirect = location.origin + location.pathname + '?gc=1';
+                const data = await gc_api('/requisitions', {
+                    method: 'POST',
+                    body: JSON.stringify({ institution_id: institutionId, redirect, country: document.getElementById('gcCountry').value })
+                });
+                localStorage.setItem('gcPendingRequisition', JSON.stringify({ id: data.id, institutionName }));
+                window.location.href = data.link;
+            } catch (err) {
+                statusEl.textContent = t('bank.error', { message: err.message });
+            }
+        }
+
+        // Shared by the first-time connect flow and the manual "Jetzt
+        // synchronisieren" button. Each fetched transaction is stored via
+        // the same manualEntries store (src/db.js) quick-entries use, keyed
+        // by a deterministic id (src/gocardless.js#transaction_key) so a
+        // re-sync over an overlapping date range overwrites rather than
+        // duplicates. Unlike a quick-entry, no category override is
+        // registered - the classification rules apply to bank-synced rows
+        // exactly like they do to CSV rows.
+        async function sync_gc_accounts(accountIds) {
+            const statusEl = document.getElementById('gcStatus');
+            let importedCount = 0;
+            for (const accountId of accountIds) {
+                statusEl.textContent = t('bank.syncing');
+                const data = await gc_api(`/accounts/${accountId}/transactions`);
+                const txs = [...((data.transactions && data.transactions.booked) || []), ...((data.transactions && data.transactions.pending) || [])];
+                for (const tx of txs) {
+                    const id = transaction_key(tx, accountId);
+                    const record = { id, ...transaction_to_row(tx), _account: 'Bank · ' + accountId, source: 'gocardless' };
+                    await add_manual_entry(record);
+                    importedCount++;
+                }
+            }
+            await merge_manual_entries();
+            reclassify();
+            render_all();
+            render_week();
+            render_connected_accounts();
+            statusEl.textContent = t('bank.syncDone', { count: importedCount });
+        }
+
+        document.getElementById('gcSyncNowBtn').addEventListener('click', () => {
+            sync_gc_accounts(get_connected_accounts().map(a => a.accountId)).catch(err => {
+                document.getElementById('gcStatus').textContent = t('bank.error', { message: err.message });
+            });
+        });
+
+        // Handles coming back from the bank's consent page (?gc=1). Runs
+        // once on page load; see the bottom of the load handler.
+        async function handle_gc_return() {
+            const params = new URLSearchParams(location.search);
+            if (params.get('gc') !== '1') return;
+            history.replaceState(null, '', location.pathname);
+
+            const pendingRaw = localStorage.getItem('gcPendingRequisition');
+            if (!pendingRaw) return;
+            localStorage.removeItem('gcPendingRequisition');
+            const pending = JSON.parse(pendingRaw);
+
+            configBtn.click();
+            document.querySelector('.settings-tab-btn[data-settings-tab="rules"]').click();
+            const statusEl = document.getElementById('gcStatus');
+            statusEl.textContent = t('bank.confirmingConsent');
+            try {
+                const req = await gc_api(`/requisitions/${pending.id}`);
+                if (req.status !== 'LN' || !req.accounts || !req.accounts.length) {
+                    statusEl.textContent = t('bank.consentIncomplete', { status: req.status });
+                    return;
+                }
+                const accounts = get_connected_accounts();
+                req.accounts.forEach(accountId => {
+                    if (!accounts.some(a => a.accountId === accountId)) {
+                        accounts.push({ requisitionId: pending.id, accountId, institutionName: pending.institutionName, connectedAt: Date.now() });
+                    }
+                });
+                save_connected_accounts(accounts);
+                await sync_gc_accounts(req.accounts);
+            } catch (err) {
+                statusEl.textContent = t('bank.error', { message: err.message });
+            }
+        }
+
+        // ===== LANGUAGE SWITCHING =====
+
+        function refresh_footer() {
+            load_footer('appFooterLinksWeek', t('footer.poweredBy'));
+            load_footer('appFooterLinksOverview', t('footer.poweredBy'));
+        }
+
+        document.querySelectorAll('input[name="appLanguage"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                set_language(e.target.value);
+                apply_static_i18n();
+                refresh_footer();
+                if (modal.style.display === 'block') render_transfer_preview();
+                render_week();
+                if (module_data.length > 0) {
+                    render_all();
+                }
+            });
+        });
+
+        // ===== KEYBOARD SHORTCUTS (desktop use) =====
+        // Escape always dismisses whatever's open (checked before anything
+        // else, since that should work even while typing in a field inside
+        // that overlay - e.g. the keypad's note field or a search box).
+        // While the keypad is open, physical digits/Backspace/Enter mirror
+        // its on-screen buttons - typing an amount is the one operation
+        // that's clearly faster with a real keyboard. Everywhere else,
+        // shortcuts are ignored while focus is in a text field, so normal
+        // typing (rule editor, CSV settings, category search, ...) is never
+        // hijacked.
+        document.addEventListener('keydown', (e) => {
+            const tag = (e.target.tagName || '').toLowerCase();
+            const isEditable = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable;
+            const categoryPopover = document.querySelector('.category-popover');
+
+            if (document.querySelector('dialog[open]')) return;
+            if (e.key === 'Escape') {
+                if (categoryPopover && !categoryPopover.hidden) { close_popover(); e.preventDefault(); return; }
+                if (document.getElementById('categoryGridModal').style.display === 'block') { close_category_grid(); e.preventDefault(); return; }
+                if (document.getElementById('keypadModal').style.display === 'block') { close_keypad(); e.preventDefault(); return; }
+                if (modal.style.display === 'block') { modal.style.display = 'none'; e.preventDefault(); return; }
+                return;
+            }
+
+            if (document.getElementById('keypadModal').style.display === 'block') {
+                if (isEditable) return; // typing in the note/date field
+                if (/^[0-9]$/.test(e.key)) { keypadBuffer = push_digit(keypadBuffer, e.key); update_keypad_display(); e.preventDefault(); }
+                else if (e.key === 'Backspace') { keypadBuffer = pop_digit(keypadBuffer); update_keypad_display(); e.preventDefault(); }
+                else if (e.key === 'Enter') { submit_keypad(); e.preventDefault(); }
+                // Comma/period (incl. a numpad decimal key) carry no separate value here -
+                // the buffer already shifts digits into the cents position as you type - so
+                // just swallow them instead of letting the global "," settings shortcut fire.
+                else if (e.key === ',' || e.key === '.') { e.preventDefault(); }
+                return;
+            }
+
+            if (isEditable) return;
+
+            if (e.key === ',') { configBtn.click(); e.preventDefault(); }
+            else if (e.key === 'ArrowRight') { set_active_tab(Math.min(1, activeTabIndex + 1), true); e.preventDefault(); }
+            else if (e.key === 'ArrowLeft') { set_active_tab(Math.max(0, activeTabIndex - 1), true); e.preventDefault(); }
+        });
+
+        // Restore from localStorage
+        window.addEventListener('load', async () => {
+            apply_static_i18n();
+            const langRadio = document.querySelector(`input[name="appLanguage"][value="${get_language()}"]`);
+            if (langRadio) langRadio.checked = true;
+            refresh_footer();
+
+            const csvConfig = get_csv_config();
+            populate_csv_form(csvConfig);
+            populate_bank_form();
+            render_connected_accounts();
+            document.getElementById('transferMaxDays').value = get_transfer_max_days();
+
+            defaultRuleSet = await load_default_rule_set();
+            const stored = get_stored_rule_set();
+            ruleSet = stored || JSON.parse(JSON.stringify(defaultRuleSet));
+            try { settingsBaseline = JSON.parse(localStorage.getItem('settingsImportBaseline') || 'null'); } catch {}
+            settingsBaseline ||= structuredClone(defaultRuleSet);
+            ensure_budget_coverage(settingsBaseline);
+            ensure_budget_coverage(ruleSet);
+            ruleSet._manualRuleIds = manual_rule_ids(ruleSet, settingsBaseline);
+            amountOverrides = await load_amount_overrides();
+            overridesById = await load_all_overrides();
+            subBudgetCaps = get_sub_budgets();
+
+            // Merge quick-entries and reclassify unconditionally - even with
+            // no CSV ever imported, module_data may already hold manually
+            // logged spends from a prior session.
+            const storedCsv = localStorage.getItem('csvData');
+            if (storedCsv) {
+                const storedCsvConfigRaw = localStorage.getItem('csvDataConfig');
+                const storedCsvConfig = storedCsvConfigRaw ? JSON.parse(storedCsvConfigRaw) : undefined;
+                parse_csv(storedCsv, storedCsvConfig);
+                await upsert_imported_entries(csv_records(module_data));
+                localStorage.removeItem('csvData');
+                localStorage.removeItem('csvDataConfig');
+            }
+            await merge_manual_entries();
+            reclassify();
+            populate_year_buttons();
+            if (module_data.length) {
+                const selectedYear = localStorage.getItem('selectedYear');
+                currentYear = selectedYear || '';
+            }
+            if (module_data.length > 0) render_all();
+            render_week();
+
+            // ?action=addExpense (see manifest.webmanifest shortcuts) jumps
+            // straight into the category picker, e.g. from a long-press
+            // home-screen icon - picking one goes straight into the keypad.
+            if (new URLSearchParams(location.search).get('action') === 'addExpense') {
+                open_category_grid();
+            }
+
+            handle_gc_return();
+        });
+    </script>
+</body>
+</html>

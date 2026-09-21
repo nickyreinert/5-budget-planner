@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Storage integration tests</title>
+<body><h1>Storage integration tests</h1><pre id="result">Running…</pre>
+<script type="module">
+import { load_manual_entries, load_all_overrides, upsert_imported_entries, load_imported_entries, add_manual_entry, delete_manual_entry, save_overrides, save_amount_override, load_amount_overrides } from '../src/db.js';
+import { csv_records, reconcile_transactions } from '../src/transactions.js';
+import { enrich_row } from '../src/data.js';
+// Real IndexedDB, isolated from the app's database and removed after the test.
+const nativeDB = globalThis.indexedDB;
+const name = 'moneyMoneyAnalyzer-test-' + crypto.randomUUID();
+Object.defineProperty(globalThis, 'indexedDB', { value: { open: (_, version) => nativeDB.open(name, version) } });
+const check = (condition, message) => { if (!condition) throw new Error(message); };
+const raw = { Datum: '20.09.2026', Name: 'Fixture shop', Verwendungszweck: '', Kategorie: '', Betrag: '-12.34' };
+try {
+  await new Promise((resolve, reject) => {
+    const req = nativeDB.open(name, 2);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore('categoryOverrides').put('Food', 'legacy');
+      req.result.createObjectStore('manualEntries', { keyPath: 'id' }).put({ ...raw, id: 'legacy-manual' });
+    };
+    req.onsuccess = () => { req.result.close(); resolve(); };
+    req.onerror = () => reject(req.error);
+  });
+  check((await load_manual_entries()).length === 1, 'v2 manual records must survive v3 upgrade');
+  check((await load_all_overrides()).legacy === 'Food', 'v2 overrides must survive');
+  const records = csv_records([enrich_row({ ...raw }), enrich_row({ ...raw, Datum: '19.09.2026' })]);
+  await upsert_imported_entries(records);
+  await upsert_imported_entries([records[0]]);
+  check((await load_imported_entries()).length === 2, 'overlapping import must upsert and retain older history');
+  await upsert_imported_entries([{ ...records[0], Kategorie: 'Updated' }]);
+  check((await load_imported_entries()).find(r => r.id === records[0].id).Kategorie === 'Updated', 'upsert must update');
+  const merged = reconcile_transactions(await load_imported_entries(), await load_manual_entries());
+  check(merged.length === 2 && merged.some(r => r._matchedManualId === 'legacy-manual'), 'manual/import booking counts once');
+  await add_manual_entry({ ...raw, id: 'new-manual', _txId: 'manual:new', source: 'manual' });
+  await save_overrides([['manual:new', 'Food']]);
+  await delete_manual_entry('new-manual', 'manual:new');
+  check((await load_manual_entries()).length === 1, 'delete removes only the requested manual record');
+  check(!(await load_all_overrides())['manual:new'], 'delete removes its override');
+  check((await load_imported_entries()).length === 2, 'manual deletion preserves imported records');
+  await save_overrides([[records[0].id,'Groceries']]);
+  await save_amount_override(records[0].id,-2500);
+  const withAccount = csv_records([enrich_row({...raw,Account:'DKB Giro'})])[0];
+  await upsert_imported_entries([withAccount]);
+  check((await load_imported_entries()).length === 2, 'source-account reimport upgrades legacy record instead of duplicating');
+  check((await load_all_overrides())[withAccount.id] === 'Groceries', 'category override follows upgraded identity');
+  check((await load_amount_overrides())[withAccount.id] === -2500, 'amount override follows upgraded identity');
+  await upsert_imported_entries([withAccount]);
+  check((await load_imported_entries()).length === 2, 'account-aware reimport stays idempotent');
+  document.getElementById('result').textContent = 'PASS: account identity migration with category and amount overrides;  v2 migration, separate stores, repeated upserts, history retention, reconciliation, override and deletion persistence.';
+} catch (error) {
+  document.getElementById('result').textContent = 'FAIL: ' + error.message;
+} finally {
+  nativeDB.deleteDatabase(name);
+}
+</script></body></html>

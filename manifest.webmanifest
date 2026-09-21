@@ -1,0 +1,33 @@
+{
+  "name": "MoneyMoney Analyzer",
+  "short_name": "MM Analyzer",
+  "description": "Analysiert und kategorisiert Kontoauszüge (MoneyMoney/CSV), zeigt Ausgaben, Budgets und Trends.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f9f9f9",
+  "theme_color": "#0066cc",
+  "lang": "de",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Ausgabe erfassen",
+      "short_name": "Ausgabe",
+      "url": "./index.html?action=addExpense",
+      "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
+  ]
+}
