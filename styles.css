@@ -215,10 +215,12 @@ input, select { font-family: inherit; margin: 0; padding: 8px 10px; border: 1px 
 /* ===== Modals (shared) ===== */
 .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.45); }
 .modal-content { background-color: var(--surface); margin: 5% auto; padding: 0; border: none; width: 90%; max-width: 700px; border-radius: var(--radius-md); box-shadow: var(--shadow-md); }
+.modal-content:has(.settings-tabs) { display: flex; flex-direction: column; max-height: 90dvh; }
 .modal-header { padding: 16px 20px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; border-radius: var(--radius-md) var(--radius-md) 0 0; }
 .modal-header h2 { margin: 0; font-size: 1.2em; }
-.modal-body { padding: 20px; max-height: 65vh; overflow-y: auto; }
+.modal-body { padding: 0 20px 20px; max-height: 65vh; overflow-y: auto; }
 .modal-footer { padding: 14px 20px; background: var(--surface); border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; border-radius: 0 0 var(--radius-md) var(--radius-md); }
+.modal-content:has(.settings-tabs) .modal-body { flex: 1; min-height: 0; max-height: none; }
 .close { color: var(--text-muted); font-size: 26px; font-weight: bold; cursor: pointer; line-height: 1; }
 .close:hover { color: var(--text); }
 
@@ -228,20 +230,41 @@ input, select { font-family: inherit; margin: 0; padding: 8px 10px; border: 1px 
 #modalChartContainer { width: 100%; height: 100%; }
 
 /* ===== Settings sub-tabs ===== */
-.settings-tabs { display: flex; gap: 4px; margin-bottom: 15px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.settings-tabs { display: flex; gap: 4px; margin: 0 -20px 20px; padding: 12px 20px 0; border-bottom: 1px solid var(--border); overflow-x: auto; position: sticky; top: 0; z-index: 20; background: var(--surface); box-shadow: 0 1px 0 var(--border); }
 .settings-tab-btn { background: none; border: none; padding: 10px 14px; cursor: pointer; font-size: 0.92em; border-bottom: 3px solid transparent; white-space: nowrap; color: var(--text-muted); }
 .settings-tab-btn.active { border-bottom-color: var(--accent); font-weight: 700; color: var(--accent); }
 .settings-tab-pane[hidden] { display: none; }
+.settings-tab-pane { display: grid; gap: 16px; }
+.settings-section { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 18px; background: var(--surface-muted); }
+.settings-section:nth-child(even) { background: var(--accent-soft); }
+.settings-section h3:first-child, .settings-section > p:first-child { margin-top: 0; }
+.settings-section h3 { margin: 0 0 8px; font-size: 1em; }
+.settings-section p { margin: 0 0 14px; line-height: 1.5; }
+.settings-section small { color: var(--text-muted); display: block; margin-top: 4px; line-height: 1.35; }
+.language-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.language-options label { display: flex; align-items: center; gap: 7px; padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
+.language-options input { margin: 0; }
+.csv-field { margin-bottom: 14px; }
+.csv-field label { display: block; font-size: 0.9em; font-weight: 600; margin-bottom: 5px; }
+.csv-field input, .csv-field select, .csv-field textarea { width: 100%; }
+.settings-action-row { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
+.gocardless-section { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 14px; }
+.gocardless-section > h3, .gocardless-section > p, .gocardless-section > .settings-action-row, .gocardless-section > #gcConnectedList, .gocardless-section > #gcSyncNowBtn, .gocardless-section > #gcStatus { grid-column: 1 / -1; }
+.gocardless-section > .csv-field { margin: 0 0 14px; }
 
 /* Settings > Budgets: totals row + merged budget-group editor rows */
 .budget-totals-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
-.budget-totals-cell { flex: 1 1 130px; background: var(--surface-muted); border-radius: var(--radius-sm); padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; }
+.budget-totals-cell { flex: 1 1 130px; background: var(--surface-muted); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; }
 .budget-totals-cell span { font-size: 0.78em; color: var(--text-muted); }
 .budget-totals-cell strong { font-size: 1.2em; }
+.budget-settings-preview { margin: 0 0 16px; }
+.budget-settings-preview .budget-totals-cell { background: var(--surface); }
+.budget-suggestion, .budget-warning { margin: -6px 0 14px; font-size: .9em; }
+.budget-warning { color: var(--danger); font-weight: 600; }
 .budgetcap-number { width: 80px; }
 .main-budget-editor-row .budgetcap-number { flex: 0 0 84px; min-width: 0; }
 .group-toggle-btn { flex: 0 0 auto !important; width: 36px; min-width: 36px !important; padding: 0; }
-.main-budget-group-categories { margin: -4px 0 10px 44px; padding: 10px; background: var(--surface-muted); border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: 6px; }
+.main-budget-group-categories { margin: -2px 0 14px 44px; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: 8px; }
 .main-budget-group-categories[hidden] { display: none; }
 .main-budget-group-row.drag-over, .main-budget-group-categories.drag-over { outline: 2px dashed var(--accent); outline-offset: 2px; }
 .cat-chip-row { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 6px 6px 10px; cursor: grab; }
@@ -270,7 +293,11 @@ input, select { font-family: inherit; margin: 0; padding: 8px 10px; border: 1px 
 
 /* Settings > Fix Expense: same merged-row look as Budgets, plus a per-row
    "regex + last 3 months" preview instead of a categories chip list. */
-.fixexpense-monthly { flex: 0 0 auto !important; font-weight: 600; font-size: 0.9em; color: var(--text-muted); white-space: nowrap; }
+.recurring-overview { margin: 0 0 14px; }
+.recurring-overview .budget-totals-row { margin: 0; }
+.recurring-overview .budget-totals-cell { background: var(--surface); }
+.recurring-overview small { font-weight: 400; }
+.fixexpense-monthly { flex: 0 0 auto !important; font-weight: 600; font-size: 0.82em; color: var(--text-muted); white-space: nowrap; }
 .fixexpense-body { gap: 8px; }
 .fixexpense-pattern-label { font-size: 0.8em; font-weight: 600; color: var(--text-muted); }
 .fixexpense-pattern { width: 100%; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -279,6 +306,22 @@ input, select { font-family: inherit; margin: 0; padding: 8px 10px; border: 1px 
 .fixexpense-preview table { width: 100%; border-collapse: collapse; font-size: 0.85em; margin-top: 6px; }
 .fixexpense-preview td { padding: 5px 4px; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
 .fixexpense-preview td.num { width: 25%; text-align: right; white-space: nowrap; }
+.rule-matchers { display: grid; gap: 8px; }
+.rule-matcher-row { display: grid; grid-template-columns: minmax(115px, .9fr) minmax(105px, .8fr) minmax(120px, 1.4fr) auto 36px; gap: 7px; align-items: center; }
+.rule-matcher-row input, .rule-matcher-row select { width: 100%; min-width: 0; }
+.matcher-exclude { display: flex; align-items: center; gap: 4px; font-size: 0.82em; color: var(--text-muted); white-space: nowrap; }
+.matcher-exclude input { width: auto; margin: 0; }
+.remove-matcher-btn { min-width: 36px !important; min-height: 36px !important; padding: 0; color: var(--danger); }
+.rule-matcher-actions { display: flex; justify-content: space-between; gap: 8px; padding-top: 2px; }
+.rule-matcher-actions button { min-height: 36px; padding: 6px 10px; font-size: .85em; }
+.browse-rule-btn { margin-left: auto; }
+.rule-transaction-browser { width: min(1000px, calc(100vw - 32px)); max-height: min(82vh, 760px); }
+.rule-transaction-browser > p { color: var(--text-muted); margin-top: 0; }
+.rule-transaction-browser .dialog-actions:first-child { justify-content: space-between; align-items: center; }
+.rule-transaction-browser h2 { margin: 0; }
+.browser-preview-filters { display: grid; grid-template-columns: 1fr 180px; gap: 8px; margin: 14px 0 8px; }
+.transaction-browser-table { max-height: 310px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.transaction-browser-table th { white-space: nowrap; }
 
 /* Groups several occurrences of the same recurring charge/income by month,
    so they read as distinct billing periods instead of a confusing repeat. */
@@ -398,6 +441,21 @@ th.select-col:hover { background: var(--surface-muted); }
 /* Transaction-category entry and expandable main-budget summaries. */
 .quickadd-tiles { grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); max-height: 280px; overflow-y: auto; padding: 2px; }
 .quickadd-tile { aspect-ratio: auto; min-height: 54px; font-size: 0.9rem; }
+
+@media (max-width: 600px) {
+    .modal-content { width: 96%; margin: 2vh auto; }
+    .modal-body { max-height: 72vh; padding: 0 12px 14px; }
+    .settings-tabs { margin-left: -12px; margin-right: -12px; padding-left: 12px; padding-right: 12px; }
+    .settings-section { padding: 14px; }
+    .gocardless-section { display: block; }
+    .gocardless-section > .csv-field { margin-bottom: 14px; }
+    .rule-matcher-row { grid-template-columns: 1fr 1fr 36px; }
+    .rule-matcher-row [data-matcher-value] { grid-column: 1 / 3; }
+    .matcher-exclude { grid-column: 1 / 3; grid-row: 3; }
+    .remove-matcher-btn { grid-column: 3; grid-row: 1 / 4; }
+    .browser-preview-filters { grid-template-columns: 1fr; }
+    .language-options { grid-template-columns: 1fr; }
+}
 .category-search-label { display: block; font-weight: 600; margin-bottom: 10px; }
 .main-budget-progress { margin: 12px 0; }
 .main-budget { margin: 6px 0; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); }

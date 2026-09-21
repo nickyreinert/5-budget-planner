@@ -175,14 +175,20 @@
             <div class="modal-body">
                 <div class="settings-tabs">
                     <button class="settings-tab-btn active" data-settings-tab="rules" data-i18n="settingsTabs.rules">⚙️ Allgemein</button>
+                    <button class="settings-tab-btn" data-settings-tab="income" data-i18n="settingsTabs.income">💵 Income</button>
                     <button class="settings-tab-btn" data-settings-tab="budgets" data-i18n="settingsTabs.budgets">💰 Budgets</button>
                     <button class="settings-tab-btn" data-settings-tab="fixexpense" data-i18n="settingsTabs.fixexpense">🔁 Fix Expense</button>
-                    <button class="settings-tab-btn" data-settings-tab="income" data-i18n="settingsTabs.income">💵 Income</button>
                     <button class="settings-tab-btn" data-settings-tab="importexport" data-i18n="settingsTabs.importexport">📤 Export / Import</button>
                     <button class="settings-tab-btn" data-settings-tab="sync" data-i18n="settingsTabs.sync">🔄 Sync</button>
                 </div>
 
                 <div id="settingsTab-rules" class="settings-tab-pane">
+                    <section class="settings-section language-section">
+                    <h3 data-i18n="languages.title">App-Sprache</h3>
+                    <p data-i18n="languages.intro">Wähle die Sprache der Benutzeroberfläche. Deine Regeln/Kategorien-Bezeichnungen ändern sich dadurch nicht.</p>
+                    <div class="language-options"><label><input type="radio" name="appLanguage" value="de"> <span aria-hidden="true">🇩🇪</span> <span data-i18n="languages.de">Deutsch</span></label><label><input type="radio" name="appLanguage" value="en"> <span aria-hidden="true">🇬🇧</span> <span data-i18n="languages.en">Englisch</span></label></div>
+                    </section>
+                    <section class="settings-section">
                     <h3 data-i18n="general.transfersTitle">Interne Transfers erkennen</h3>
                     <p data-i18n="general.transfersIntro">
                         Manche Ausgaben tauchen zweimal auf, weil zwei Konten dieselbe Bewegung zeigen (z. B. ein
@@ -199,12 +205,8 @@
                         <summary id="transferPreviewSummary"></summary>
                         <div id="transferPreviewList"></div>
                     </details>
-
-                    <h3 data-i18n="languages.title">App-Sprache</h3>
-                    <p data-i18n="languages.intro">Wähle die Sprache der Benutzeroberfläche. Deine Regeln/Kategorien-Bezeichnungen ändern sich dadurch nicht.</p>
-                    <label style="display:block; margin-bottom:10px;"><input type="radio" name="appLanguage" value="de"> <span data-i18n="languages.de">Deutsch</span></label>
-                    <label style="display:block;"><input type="radio" name="appLanguage" value="en"> <span data-i18n="languages.en">Englisch</span></label>
-
+                    </section>
+                    <section class="settings-section gocardless-section">
                     <h3 data-i18n="settingsTabs.bank">🏦 Bank</h3>
                     <p data-i18n="bank.intro">Verbinde dein Bankkonto über GoCardless. Dafür brauchst du einen eigenen kleinen Proxy-Server (siehe gocardless-proxy/README.md im Repo) - trag hier dessen URL und App-Key ein.</p>
                     <div class="csv-field">
@@ -215,7 +217,7 @@
                         <label data-i18n="bank.appKeyLabel">App-Key</label>
                         <input type="text" id="gcAppKey" placeholder="">
                     </div>
-                    <div>
+                    <div class="settings-action-row">
                         <button id="gcSaveConfigBtn" class="primary" data-i18n="bank.saveConfig">Speichern</button>
                         <span id="gcConfigSavedNote" style="display:none; color:#2ecc71; margin-left:10px;" data-i18n="bank.configSaved">Gespeichert.</span>
                     </div>
@@ -246,26 +248,36 @@
                     <input type="text" id="gcInstitutionSearch" data-i18n-placeholder="bank.searchBanks" placeholder="🔍 Bank suchen..." hidden style="width:100%; box-sizing:border-box; margin-top:10px;">
                     <div id="gcInstitutionsList"></div>
                     <p id="gcStatus" class="gc-status"></p>
+                    </section>
                 </div>
 
                 <div id="settingsTab-budgets" class="settings-tab-pane" hidden>
+                    <section class="settings-section">
                     <p data-i18n="budgets.intro">Setze ein wöchentliches Limit für Kategorien, die du im Blick behalten willst. Nur Kategorien mit Limit erscheinen als Sub-Budget auf der Wochenübersicht.</p>
                     <div id="budgetRecommendation"></div><div id="mainCategoryEditor"></div><button type="button" id="addMainCategory">+ Budget</button><div id="categoryMappingEditor"></div>
+                    </section>
                 </div>
 
                 <div id="settingsTab-fixexpense" class="settings-tab-pane" hidden>
+                    <section class="settings-section recurring-settings-section">
                     <p data-i18n="fixExpense.intro">Fixkosten (Miete, Verträge, Abos, ...): eine Kategorie pro Zeile mit einem einfachen Suchmuster statt komplexer Regeln. Aufklappen zeigt das Muster und eine Vorschau der letzten 3 Monate.</p>
+                    <div id="fixExpenseOverview" class="recurring-overview"></div>
                     <div id="fixExpenseList"></div>
                     <button type="button" id="addFixExpenseBtn" data-i18n="fixExpense.addRow">+ Fixkosten-Kategorie</button>
+                    </section>
                 </div>
 
                 <div id="settingsTab-income" class="settings-tab-pane" hidden>
+                    <section class="settings-section recurring-settings-section">
                     <p data-i18n="incomeRules.intro">Einnahmen (Gehalt, Erstattungen, ...): eine Kategorie pro Zeile mit einem einfachen Suchmuster statt komplexer Regeln. Aufklappen zeigt das Muster und eine Vorschau der letzten 3 Monate.</p>
+                    <div id="incomeOverview" class="recurring-overview"></div>
                     <div id="incomeRulesList"></div>
                     <button type="button" id="addIncomeRuleBtn" data-i18n="incomeRules.addRow">+ Einnahmen-Kategorie</button>
+                    </section>
                 </div>
 
                 <div id="settingsTab-importexport" class="settings-tab-pane" hidden>
+                    <section class="settings-section">
                     <p data-i18n="csv.intro">Lade hier deine CSV-Datei und stelle bei Bedarf das Format ein, falls dein Export nicht dem MoneyMoney-Standard entspricht.</p>
                     <div class="csv-field">
                         <label data-i18n="csv.pickFile">Datei auswählen</label>
@@ -329,7 +341,7 @@
                         <span id="csvSavedNote" style="display:none; color:#2ecc71; margin-left:10px;" data-i18n="csv.savedNote">Einstellungen gespeichert. Beim nächsten Laden einer Datei werden sie verwendet.</span>
                     </div>
 
-                    <div style="padding-bottom: 20px; border-bottom: 1px solid #ddd;">
+                    </section><section class="settings-section">
                         <button id="loadDefaultRulesBtn" data-i18n="importexport.loadDefault">↺ Standardregeln laden</button>
                         <button id="exportRulesBtn" data-i18n="importexport.export">📤 SETTING exportieren</button>
                         <button id="importRulesBtn" data-i18n="importexport.import">📥 SETTING importieren</button>
@@ -337,13 +349,12 @@
                         <p>Transaktionskategorie wählen → Betrag eingeben → ✓. Die Zuordnung zum Hauptbudget erfolgt automatisch. Export / Import enthält auch Budgetnamen, Reihenfolge, Kategoriezuordnungen und Wochenlimits.</p>
                         <input type="file" id="importRulesFile" accept=".json" style="display: none;">
                         <p id="settingsImportStatus" role="status" aria-live="polite"></p>
-                    <details id="importPasteDetails">
-                            <summary data-i18n="importexport.pasteToggle">📋 Oder SETTING-JSON einfügen</summary>
+                        <div id="importPasteDetails">
+                            <h3 data-i18n="importexport.pasteToggle">📋 Oder SETTING-JSON einfügen</h3>
                             <textarea id="importPasteText" class="import-paste-text" data-i18n-placeholder="importexport.pastePlaceholder" placeholder="JSON hier einfügen ..."></textarea>
                             <button type="button" id="importPasteBtn" class="primary" data-i18n="importexport.pasteImport">📥 Eingefügtes SETTING importieren</button>
-                        </details>
                     </div>
-                    <div style="margin-top: 15px;">
+                    </section><section class="settings-section">
                         <p style="margin: 0 0 10px 0; color: #555;" data-i18n="importexport.unclassifiedIntro">
                             Unklassifizierte Ausgaben (aktuell gewählter Jahresfilter) als kompakte,
                             nach Summe sortierte Händlerliste + aktuellem Regelwerk + fertigem Prompt
@@ -351,7 +362,6 @@
                             erweitertes SETTING zurückgibt (oben importierbar).
                         </p>
                         <button id="exportUnclassifiedBtn" data-i18n="importexport.exportUnclassified">🔍 Unklassifizierte Posten für LLM exportieren</button>
-                    </div>
                     <div style="margin-top: 20px;">
                         <p style="margin: 0 0 10px 0; color: #555;" data-i18n="importexport.llmPromptIntro">
                             Alternativ: Rohe CSV-Datei direkt an ein LLM anhängen. Dieser Beispiel-Prompt
@@ -360,9 +370,11 @@
                         <textarea id="llmPromptExample" readonly data-i18n="importexport.llmPromptExample" class="llm-prompt-example"></textarea>
                         <button type="button" id="copyLlmPromptBtn" data-i18n="importexport.copyPrompt">📋 Prompt kopieren</button>
                     </div>
+                    </section>
                 </div>
 
                 <div id="settingsTab-sync" class="settings-tab-pane" hidden>
+                    <section class="settings-section">
                     <p data-i18n="sync.intro">Sichere dein SETTING (und optional deine Transaktionsdaten) in einem eigenen, kostenlosen Firebase-Projekt und nutze es auf mehreren Geräten. Erstelle dazu ein Firebase-Projekt (Firestore + Google-Anmeldung aktivieren) und füge unten die Web-App-Konfiguration ein.</p>
                     <div class="csv-field">
                         <label data-i18n="sync.firebaseConfigLabel">Firebase-Konfiguration (JSON)</label>
@@ -387,6 +399,7 @@
                         <button id="syncDownloadBtn" data-i18n="sync.download">☁️ Herunterladen</button>
                     </div>
                     <p id="syncStatus" class="gc-status" role="status" aria-live="polite"></p>
+                    </section>
                 </div>
             </div>
             <div class="modal-footer">
@@ -395,6 +408,16 @@
             </div>
         </div>
     </div>
+
+    <dialog id="ruleTransactionBrowser" class="review-dialog rule-transaction-browser" aria-labelledby="ruleTransactionBrowserTitle">
+        <div class="dialog-actions"><h2 id="ruleTransactionBrowserTitle">Buchungen durchsuchen</h2><button type="button" id="closeRuleTransactionBrowser" aria-label="Schließen">×</button></div>
+        <p>Suchmuster anpassen, Vorschau prüfen und anschließend für diese Regel übernehmen.</p>
+        <div id="ruleTransactionBrowserMatchers" class="rule-matchers"></div>
+        <button type="button" id="ruleTransactionBrowserAddMatcher">+ Suchmuster</button>
+        <div class="browser-preview-filters"><input id="ruleTransactionBrowserTextFilter" type="search" placeholder="Buchungen filtern"><select id="ruleTransactionBrowserAmountFilter"><option value="">Alle Beträge</option><option value="gt:0">Größer als 0 €</option><option value="lt:100">Kleiner als 100 €</option></select></div>
+        <div class="transaction-browser-table"><table><thead><tr><th data-browser-sort="date">Datum</th><th data-browser-sort="name">Buchung</th><th data-browser-sort="category">Transaktionskategorie</th><th data-browser-sort="budget">Budget</th><th data-browser-sort="direction">Typ</th><th data-browser-sort="amount">Betrag</th></tr></thead><tbody id="ruleTransactionBrowserRows"></tbody></table></div>
+        <div class="dialog-actions"><button type="button" id="applyRuleTransactionBrowser" class="primary">Für Regel übernehmen</button></div>
+    </dialog>
 
     <!-- Chart Enlarge Modal -->
     <dialog id="settingsReviewDialog" class="review-dialog" aria-labelledby="settingsReviewTitle">
@@ -1491,7 +1514,15 @@
             const panel = document.getElementById('budgetRecommendation');
             const total = Object.values(subBudgetCaps).reduce((sum,v) => sum + v,0);
             const basis = build_budget_basis(module_data);
-            panel.textContent = `Budgetlimits gesamt: ${fmt_eur(total)} / Woche. Berechnet verfügbar: ${fmt_eur(basis.weeklyCents)}.` + (suggestion ? ` LLM-Vorschlag: ${fmt_eur(suggestion.weeklyLimitCents)} / Woche. ${suggestion.rationale || ''}` : '') + (total > Math.max(0,basis.weeklyCents) && module_data.length ? ' Die Limits übersteigen das verfügbare Wochenbudget.' : '');
+            const monthlyTotal = Math.round(total * 52 / 12);
+            panel.innerHTML = `<div class="budget-totals-row budget-settings-preview">
+                <div class="budget-totals-cell"><span>Budgetlimits pro Woche</span><strong>${fmt_eur(total)}</strong></div>
+                <div class="budget-totals-cell"><span>Budgetlimits pro Monat</span><strong>${fmt_eur(monthlyTotal)}</strong></div>
+                <div class="budget-totals-cell"><span>Verfügbar pro Woche</span><strong>${fmt_eur(basis.weeklyCents)}</strong></div>
+                <div class="budget-totals-cell"><span>Verfügbar pro Monat</span><strong>${fmt_eur(basis.freeCents)}</strong></div>
+            </div>
+            ${suggestion ? `<p class="budget-suggestion">LLM-Vorschlag: ${fmt_eur(suggestion.weeklyLimitCents)} / Woche. ${escape_budget(suggestion.rationale || '')}</p>` : ''}
+            ${total > Math.max(0,basis.weeklyCents) && module_data.length ? '<p class="budget-warning">Die Limits übersteigen das verfügbare Wochenbudget.</p>' : ''}`;
             render_main_category_editor();
         }
 
@@ -1558,6 +1589,136 @@
             return module_data.filter(r => r.date >= windowStart && r.date <= now && amountFilter(r) && rule_matches(r, rule));
         }
 
+        function monthly_median_cents(rows, amountValue) {
+            const perMonth = new Map();
+            rows.forEach(row => {
+                const month = `${row.date.getFullYear()}-${row.date.getMonth()}`;
+                perMonth.set(month, (perMonth.get(month) || 0) + amountValue(row));
+            });
+            const values = [...perMonth.values()].sort((a, b) => a - b);
+            return values.length ? values[Math.floor(values.length / 2)] : 0;
+        }
+
+        function rule_matchers(rule) {
+            if (Array.isArray(rule.matchers) && rule.matchers.length) return rule.matchers;
+            const legacyPattern = rule.namePattern || rule.verwendungPattern || rule.kategoriePattern || '';
+            return [{ field: 'any', operator: 'regex', value: legacyPattern, exclude: false }];
+        }
+
+        function matcher_editor_html(matchers) {
+            return matchers.map((matcher, index) => `
+                <div class="rule-matcher-row" data-matcher-index="${index}">
+                    <select data-matcher-field aria-label="Feld">
+                        <option value="any" ${matcher.field === 'any' ? 'selected' : ''}>Alle Textfelder</option>
+                        <option value="name" ${matcher.field === 'name' ? 'selected' : ''}>Name</option>
+                        <option value="purpose" ${matcher.field === 'purpose' ? 'selected' : ''}>Verwendungszweck</option>
+                        <option value="category" ${matcher.field === 'category' ? 'selected' : ''}>Bankkategorie</option>
+                        <option value="amount" ${matcher.field === 'amount' ? 'selected' : ''}>Betrag</option>
+                    </select>
+                    <select data-matcher-operator aria-label="Vergleich">
+                        <option value="contains" ${matcher.operator === 'contains' ? 'selected' : ''}>enthält</option>
+                        <option value="regex" ${matcher.operator === 'regex' ? 'selected' : ''}>Regex</option>
+                        <option value="gt" ${matcher.operator === 'gt' ? 'selected' : ''}>größer als</option>
+                        <option value="lt" ${matcher.operator === 'lt' ? 'selected' : ''}>kleiner als</option>
+                    </select>
+                    <input data-matcher-value type="${matcher.field === 'amount' ? 'number' : 'text'}" step="${matcher.field === 'amount' ? '0.01' : ''}" value="${escape_budget(String(matcher.value || ''))}" placeholder="${matcher.field === 'amount' ? 'Euro' : 'Suchmuster'}" aria-label="Suchwert">
+                    <label class="matcher-exclude"><input data-matcher-exclude type="checkbox" ${matcher.exclude ? 'checked' : ''}> ausschließen</label>
+                    <button type="button" class="remove-matcher-btn" title="Suchmuster entfernen" aria-label="Suchmuster entfernen">×</button>
+                </div>
+            `).join('');
+        }
+
+        function normalized_matchers(container) {
+            return [...container.querySelectorAll('.rule-matcher-row')].map(row => ({
+                field: row.querySelector('[data-matcher-field]').value,
+                operator: row.querySelector('[data-matcher-operator]').value,
+                value: row.querySelector('[data-matcher-value]').value.trim(),
+                exclude: row.querySelector('[data-matcher-exclude]').checked
+            })).filter(matcher => matcher.value);
+        }
+
+        let ruleBrowserState = null;
+        function open_rule_transaction_browser(kind, ruleId) {
+            const rule = (ruleSet.rules || []).find(item => item.id === ruleId);
+            if (!rule) return;
+            ruleBrowserState = { kind, ruleId, matchers: structuredClone(rule_matchers(rule)), sort: 'date', descending: true };
+            document.getElementById('ruleTransactionBrowserTextFilter').value = '';
+            document.getElementById('ruleTransactionBrowserAmountFilter').value = '';
+            render_rule_transaction_browser();
+            document.getElementById('ruleTransactionBrowser').showModal();
+        }
+
+        function render_rule_transaction_browser() {
+            if (!ruleBrowserState) return;
+            const browser = document.getElementById('ruleTransactionBrowser');
+            const cfg = RULE_GROUP_EDITORS[ruleBrowserState.kind];
+            const matcherContainer = document.getElementById('ruleTransactionBrowserMatchers');
+            matcherContainer.innerHTML = matcher_editor_html(ruleBrowserState.matchers);
+            const query = document.getElementById('ruleTransactionBrowserTextFilter').value.trim().toLocaleLowerCase();
+            const amountFilter = document.getElementById('ruleTransactionBrowserAmountFilter').value;
+            const previewRule = { matchers: ruleBrowserState.matchers.filter(matcher => matcher.value) };
+            let rows = module_data.filter(row => cfg.amountFilter(row) && rule_matches(row, previewRule));
+            if (query) rows = rows.filter(row => [row.name, row.verwendungszweck, row.Kategorie].join(' ').toLocaleLowerCase().includes(query));
+            if (amountFilter) {
+                const [operator, rawValue] = amountFilter.split(':');
+                const value = Number(rawValue) * 100;
+                rows = rows.filter(row => operator === 'gt' ? Math.abs(row.betrag_cents) > value : Math.abs(row.betrag_cents) < value);
+            }
+            const valueFor = (row, key) => {
+                if (key === 'date') return row.date.getTime();
+                if (key === 'amount') return row.betrag_cents;
+                if (key === 'category') return row._cls?.category || '';
+                if (key === 'budget') return (ruleSet.mainCategories || []).find(item => item.id === category_to_main(row._cls?.category))?.label || '–';
+                if (key === 'direction') return row.in_out === 'in' ? 'Einnahme' : 'Ausgabe';
+                return row.name || '';
+            };
+            rows.sort((a, b) => {
+                const left = valueFor(a, ruleBrowserState.sort), right = valueFor(b, ruleBrowserState.sort);
+                const compare = typeof left === 'number' ? left - right : String(left).localeCompare(String(right), locale());
+                return ruleBrowserState.descending ? -compare : compare;
+            });
+            document.getElementById('ruleTransactionBrowserRows').innerHTML = rows.map(row => `<tr><td>${fmt_date(row.date)}</td><td>${escape_budget(row.name)}</td><td>${escape_budget(row._cls?.category || 'Unkategorisiert')}</td><td>${escape_budget(valueFor(row, 'budget'))}</td><td>${valueFor(row, 'direction')}</td><td class="num">${fmt_eur(row.betrag_cents)}</td></tr>`).join('') || '<tr><td colspan="6">Keine passenden Buchungen.</td></tr>';
+
+            matcherContainer.querySelectorAll('.rule-matcher-row').forEach((element, index) => {
+                element.querySelectorAll('input, select').forEach(control => control.addEventListener('change', () => {
+                    const matcher = {
+                        field: element.querySelector('[data-matcher-field]').value,
+                        operator: element.querySelector('[data-matcher-operator]').value,
+                        value: element.querySelector('[data-matcher-value]').value.trim(),
+                        exclude: element.querySelector('[data-matcher-exclude]').checked
+                    };
+                    ruleBrowserState.matchers[index] = matcher;
+                    render_rule_transaction_browser();
+                }));
+                element.querySelector('.remove-matcher-btn').addEventListener('click', () => {
+                    if (ruleBrowserState.matchers.length < 2) return;
+                    ruleBrowserState.matchers.splice(index, 1); render_rule_transaction_browser();
+                });
+            });
+            browser.querySelectorAll('[data-browser-sort]').forEach(header => header.onclick = () => {
+                ruleBrowserState.descending = ruleBrowserState.sort === header.dataset.browserSort ? !ruleBrowserState.descending : false;
+                ruleBrowserState.sort = header.dataset.browserSort; render_rule_transaction_browser();
+            });
+        }
+
+        document.getElementById('ruleTransactionBrowserAddMatcher').addEventListener('click', () => {
+            ruleBrowserState.matchers.push({ field: 'any', operator: 'contains', value: '', exclude: false });
+            render_rule_transaction_browser();
+        });
+        document.getElementById('ruleTransactionBrowserTextFilter').addEventListener('input', render_rule_transaction_browser);
+        document.getElementById('ruleTransactionBrowserAmountFilter').addEventListener('change', render_rule_transaction_browser);
+        document.getElementById('closeRuleTransactionBrowser').addEventListener('click', () => document.getElementById('ruleTransactionBrowser').close());
+        document.getElementById('applyRuleTransactionBrowser').addEventListener('click', () => {
+            const rule = (ruleSet.rules || []).find(item => item.id === ruleBrowserState?.ruleId);
+            const matchers = ruleBrowserState?.matchers.filter(matcher => matcher.value) || [];
+            if (!rule || !matchers.length) return;
+            rule.matchers = matchers;
+            delete rule.namePattern; delete rule.verwendungPattern; delete rule.kategoriePattern; delete rule.matchType;
+            persist_budgets();
+            render_rule_group_list(ruleBrowserState.kind);
+            document.getElementById('ruleTransactionBrowser').close();
+        });
+
         function render_rule_group_list(kind) {
             const cfg = RULE_GROUP_EDITORS[kind];
             const container = document.getElementById(cfg.containerId);
@@ -1568,20 +1729,20 @@
 
             const rowsHtml = rules.map(rule => {
                 const matches = matches_for(rule);
-                const totalCents = matches.reduce((sum, r) => sum + cfg.amountValue(r), 0);
+                const totalCents = monthly_median_cents(matches, cfg.amountValue);
                 const expanded = cfg.expanded.has(rule.id);
-                const pattern = rule.namePattern || rule.verwendungPattern || rule.kategoriePattern || '';
+                const matchers = rule_matchers(rule);
 
                 return `
                     <div class="main-budget-editor-row fixexpense-row" data-rule="${escape_budget(rule.id)}" data-kind="${kind}">
                         <button type="button" class="group-toggle-btn" data-rule="${escape_budget(rule.id)}" title="${t('budgets.toggleCategories')}">${expanded ? '▼' : '▶'}</button>
                         <input value="${escape_budget(rule.category || rule.label || '')}" data-rule="${escape_budget(rule.id)}" data-field="category" aria-label="Kategorie">
-                        <span class="fixexpense-monthly">${fmt_eur(totalCents)}</span>
+                        <span class="fixexpense-monthly" title="Monatsmedian der letzten drei Monate">${fmt_eur(totalCents)} / Monat</span>
                         <button type="button" class="remove-btn" data-rule="${escape_budget(rule.id)}" title="${t('fixExpense.removeRow')}">×</button>
                     </div>
                     <div class="main-budget-group-categories fixexpense-body" ${expanded ? '' : 'hidden'}>
-                        <label class="fixexpense-pattern-label">${t('fixExpense.patternLabel')}</label>
-                        <input type="text" class="fixexpense-pattern" value="${escape_budget(pattern)}" data-rule="${escape_budget(rule.id)}" placeholder="${t('fixExpense.patternPlaceholder')}">
+                        <div class="rule-matchers" data-rule="${escape_budget(rule.id)}">${matcher_editor_html(matchers)}</div>
+                        <div class="rule-matcher-actions"><button type="button" class="add-matcher-btn" data-rule="${escape_budget(rule.id)}">+ Suchmuster</button><button type="button" class="browse-rule-btn" data-rule="${escape_budget(rule.id)}">Buchungen durchsuchen</button></div>
                         <details class="fixexpense-preview" data-rule="${escape_budget(rule.id)}" ${openPreviews.has(rule.id) ? 'open' : ''}>
                             <summary>${t('fixExpense.previewToggle', { count: matches.length })}</summary>
                             ${render_transaction_preview_table(matches, cfg.amountValue)}
@@ -1590,23 +1751,12 @@
                 `;
             }).join('');
 
-            const unassignedHtml = cfg.showUnassigned ? (() => {
-                const usedCategories = new Set(rules.map(r => r.category || r.label));
-                const unassigned = collect_category_options().filter(c => !usedCategories.has(c));
-                return `
-                    <div class="main-budget-editor-row fixexpense-row">
-                        <button type="button" class="group-toggle-btn" disabled aria-hidden="true"></button>
-                        <input value="${escape_budget(t('budgets.unassigned'))}" disabled aria-label="Budgetname">
-                        <span class="fixexpense-monthly"></span>
-                        <button type="button" class="remove-btn" disabled aria-hidden="true"></button>
-                    </div>
-                    <div class="main-budget-group-categories fixexpense-body">
-                        ${unassigned.length ? unassigned.map(c => `<div class="cat-chip-row cat-chip-readonly"><span>${escape_budget(c)}</span></div>`).join('') : `<p class="cat-chip-empty">${t('fixExpense.allAssigned')}</p>`}
-                    </div>
-                `;
-            })() : '';
-
-            container.innerHTML = rowsHtml + unassignedHtml || `<p style="color:#999;">${t('fixExpense.noRows')}</p>`;
+            container.innerHTML = rowsHtml || `<p style="color:#999;">${t('fixExpense.noRows')}</p>`;
+            const overview = document.getElementById(kind === 'income' ? 'incomeOverview' : 'fixExpenseOverview');
+            const allMatches = rules.flatMap(rule => matches_for(rule));
+            const uniqueMatches = [...new Map(allMatches.map(row => [tx_id(row), row])).values()];
+            const label = kind === 'income' ? 'Wiederkehrendes Einkommen pro Monat' : 'Wiederkehrende Ausgaben pro Monat';
+            overview.innerHTML = `<div class="budget-totals-row"><div class="budget-totals-cell"><span>${label}</span><strong>${fmt_eur(monthly_median_cents(uniqueMatches, cfg.amountValue))}</strong><small>Median der letzten drei Monate</small></div></div>`;
             wire_rule_group_list(kind);
         }
 
@@ -1635,19 +1785,31 @@
                 };
             });
 
-            container.querySelectorAll('.fixexpense-pattern').forEach(input => {
-                input.onchange = () => {
-                    const rule = (ruleSet.rules || []).find(r => r.id === input.dataset.rule);
+            function save_matchers(ruleId, matcherContainer) {
+                    const rule = (ruleSet.rules || []).find(r => r.id === ruleId);
                     if (!rule) return;
-                    const pattern = input.value.trim();
-                    try { if (pattern) new RegExp(pattern, 'i'); } catch (e) { alert(t('fixExpense.invalidPattern')); return; }
-                    rule.namePattern = pattern;
-                    rule.verwendungPattern = pattern;
-                    rule.kategoriePattern = pattern;
-                    rule.matchType = 'or';
+                    const matchers = normalized_matchers(matcherContainer);
+                    try { matchers.filter(m => m.operator === 'regex').forEach(m => new RegExp(m.value, 'i')); } catch (e) { alert(t('fixExpense.invalidPattern')); return; }
+                    if (!matchers.length) return;
+                    rule.matchers = matchers;
+                    delete rule.namePattern; delete rule.verwendungPattern; delete rule.kategoriePattern; delete rule.matchType;
                     persist_budgets(); render_rule_group_list(kind);
-                };
+            }
+            container.querySelectorAll('.rule-matchers').forEach(matcherContainer => {
+                matcherContainer.querySelectorAll('input, select').forEach(input => input.addEventListener('change', () => save_matchers(matcherContainer.dataset.rule, matcherContainer)));
+                matcherContainer.querySelectorAll('.remove-matcher-btn').forEach(btn => btn.addEventListener('click', () => {
+                    if (matcherContainer.querySelectorAll('.rule-matcher-row').length < 2) return;
+                    btn.closest('.rule-matcher-row').remove(); save_matchers(matcherContainer.dataset.rule, matcherContainer);
+                }));
             });
+            container.querySelectorAll('.add-matcher-btn').forEach(btn => btn.addEventListener('click', () => {
+                const rule = (ruleSet.rules || []).find(r => r.id === btn.dataset.rule);
+                if (!rule) return;
+                rule.matchers = [...rule_matchers(rule), { field: 'any', operator: 'contains', value: '', exclude: false }];
+                delete rule.namePattern; delete rule.verwendungPattern; delete rule.kategoriePattern; delete rule.matchType;
+                persist_budgets(); render_rule_group_list(kind);
+            }));
+            container.querySelectorAll('.browse-rule-btn').forEach(btn => btn.addEventListener('click', () => open_rule_transaction_browser(kind, btn.dataset.rule)));
 
             container.querySelectorAll('.fixexpense-row .remove-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -1667,7 +1829,7 @@
             ruleSet.rules ||= [];
             ruleSet.rules.push({
                 id, label: t(cfg.newLabelKey), category: t(cfg.newLabelKey),
-                group: kind, namePattern: '', verwendungPattern: '', kategoriePattern: '', matchType: 'or',
+                group: kind, matchers: [{ field: 'any', operator: 'contains', value: '', exclude: false }],
                 priority: maxPriority + 10
             });
             cfg.expanded.add(id);

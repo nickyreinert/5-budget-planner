@@ -53,11 +53,35 @@ function safe_regex(pattern) {
   }
 }
 
+function matcher_text(tx, field) {
+  if (field === 'name') return tx.name || tx.Name || '';
+  if (field === 'purpose') return tx.verwendungszweck || tx.Verwendungszweck || '';
+  if (field === 'category') return tx._ignoreCsvCategories ? '' : tx.Kategorie || '';
+  return [tx.name || tx.Name || '', tx.verwendungszweck || tx.Verwendungszweck || '', tx._ignoreCsvCategories ? '' : tx.Kategorie || ''].join('\n');
+}
+
+function matcher_matches(tx, matcher) {
+  if (matcher.field === 'amount') {
+    const amount = Math.abs(tx.betrag_cents || 0) / 100;
+    const value = Number(matcher.value);
+    return matcher.operator === 'gt' ? amount > value : amount < value;
+  }
+  const text = matcher_text(tx, matcher.field);
+  if (matcher.operator === 'contains') return text.toLocaleLowerCase().includes(String(matcher.value || '').toLocaleLowerCase());
+  const regex = safe_regex(matcher.value);
+  return regex ? regex.test(text) : false;
+}
+
 // Returns true if `rule` matches transaction `tx`.
 // Each of namePattern / verwendungPattern / kategoriePattern is optional;
 // non-empty patterns present must satisfy matchType ('and' = all present
 // patterns must match, 'or' = any present pattern matches).
 export function rule_matches(tx, rule) {
+  if (Array.isArray(rule.matchers) && rule.matchers.length) {
+    const includes = rule.matchers.filter(m => !m.exclude);
+    if (!includes.length || !includes.every(m => matcher_matches(tx, m))) return false;
+    return !rule.matchers.filter(m => m.exclude).some(m => matcher_matches(tx, m));
+  }
   const checks = [];
   if (rule.namePattern && rule.namePattern.trim() !== '') {
     const re = safe_regex(rule.namePattern);

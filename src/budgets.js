@@ -59,6 +59,19 @@ export function validate_budget_settings(settings, { checkSuggestionCaps = true 
     if (r.priority !== undefined && !Number.isFinite(r.priority)) fail('Invalid rule priority');
     if (r.incomeType !== undefined && !['salary', 'other'].includes(r.incomeType)) fail('Invalid incomeType');
     if (r.recurring !== undefined && (!r.recurring || ![1,3,6,12].includes(r.recurring.intervalMonths))) fail('recurring.intervalMonths must be 1, 3, 6 or 12');
+    if (r.matchers !== undefined) {
+      if (!Array.isArray(r.matchers) || !r.matchers.length) fail('matchers must be a non-empty array');
+      for (const matcher of r.matchers) {
+        if (!matcher || !['any', 'name', 'purpose', 'category', 'amount'].includes(matcher.field)) fail('Invalid matcher field');
+        if (typeof matcher.exclude !== 'undefined' && typeof matcher.exclude !== 'boolean') fail('Invalid matcher exclusion');
+        if (matcher.field === 'amount') {
+          if (!['gt', 'lt'].includes(matcher.operator) || !Number.isFinite(Number(matcher.value))) fail('Invalid amount matcher');
+        } else {
+          if (!['contains', 'regex'].includes(matcher.operator) || typeof matcher.value !== 'string' || !matcher.value.trim()) fail('Invalid text matcher');
+          if (matcher.operator === 'regex') new RegExp(matcher.value, 'i');
+        }
+      }
+    }
   }
   if (settings.budgetRecommendation !== undefined) {
     const recommendation = settings.budgetRecommendation;
