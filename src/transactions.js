@@ -39,16 +39,21 @@ export function reconcile_transactions(imported, manual, amounts = {}) {
   // Older bank syncs live in the manual store but are an imported source.
   const csvBuckets = bucketsFor(rows);
   for (const row of candidates.filter(r => r.source === 'gocardless')) {
-    const match = csvBuckets.get(matchKey(row))?.shift();
-    if (match) match._sources = [match.source, row.source];
+    const candidatesForBank = csvBuckets.get(matchKey(row)) || [];
+    const sourceIsPayPal = /paypal/i.test(row._account || '');
+    const index = candidatesForBank.findIndex(candidate => /paypal/i.test(candidate._account || '') === sourceIsPayPal);
+    const match = index >= 0 ? candidatesForBank.splice(index, 1)[0] : null;
+    if (match) { match._sources = [match.source, row.source]; match._matchedBankTxId = tx_id(row); }
     else rows.push(row);
   }
-  const buckets = bucketsFor(rows);
+  const manualMatchRows = [...rows].sort((a,b) => Number(/paypal/i.test(a.name) && !/paypal/i.test(a._account || '')) - Number(/paypal/i.test(b.name) && !/paypal/i.test(b._account || '')));
+  const buckets = bucketsFor(manualMatchRows);
   for (const row of candidates.filter(r => r.source !== 'gocardless')) {
     const match = buckets.get(matchKey(row))?.shift();
     if (match) {
       match._matchedManualTxId = tx_id(row);
       match._matchedManualId = row.id;
+      match._matchedManualCategory = row.Kategorie || null;
       match._sources = [...(match._sources || [match.source]), row.source];
     } else rows.push(row);
   }

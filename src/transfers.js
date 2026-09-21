@@ -44,7 +44,7 @@ export function find_internal_transfer_pairs(rows, maxDays) {
     for (const otherIdx of byAbsAmount.get(Math.abs(r.betrag_cents)) || []) {
       if (otherIdx === idx || used.has(otherIdx)) continue;
       const other = candidates[otherIdx];
-      if (!account_key(r) || !account_key(other) || account_key(r) === account_key(other)) continue;
+      if (account_key(r) === 'Konto unbekannt' || account_key(other) === 'Konto unbekannt' || account_key(r) === account_key(other)) continue;
       if (other.betrag_cents !== -r.betrag_cents) continue;
       const gap = days_between(r.date, other.date);
       if (gap > maxDays) continue;
@@ -108,13 +108,19 @@ export function reconcile_paypal(rows, maxDays = 7) {
     if (!bundle) {
       // A settlement rule alone is not evidence that the matching PayPal
       // export exists. Never silently discard a bank-only purchase.
-      if (bank._cls?.group === 'internal_transfer') bank._cls = { category: 'Sonstige Ausgaben', group: 'unclassified', excluded: false, source: 'paypal-unmatched' };
+      if (bank._cls?.group === 'internal_transfer') bank._cls = { category: 'Unkategorisiert', group: 'unclassified', excluded: false, source: 'paypal-unmatched' };
       bank._paypalUnmatched = true;
       continue;
     }
+    const manualClassification = bank._cls?.source === 'manual' ? { ...bank._cls } : null;
     bank._cls = { ...bank._cls, excluded: true, group: 'internal_transfer', source: 'paypal-settlement' };
     bank._paypalLinked = true;
     for (const purchase of bundle) {
+      if (bundle.length === 1 && manualClassification && purchase._cls?.source !== 'manual') {
+        purchase._cls = { ...manualClassification, excluded: false };
+        purchase._matchedManualId = bank._matchedManualId;
+        purchase._matchedManualTxId = bank._matchedManualTxId;
+      }
       used.add(purchase); purchase._effectiveAccount = account_key(bank); purchase._paypalLinked = true;
     }
   }

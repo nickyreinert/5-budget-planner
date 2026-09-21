@@ -7,10 +7,10 @@ import { enrich_row, tx_id, apply_amount_overrides } from '../src/data.js';
 import { apply_manual_overrides, classify_all } from '../src/rules.js';
 const setting = () => JSON.parse(readFileSync(new URL('../examples/five-budgets.setting.json', import.meta.url)));
 
-test('example settings round-trip five budgets plus the explicit fallback, mappings and limits', () => {
+test('example settings round-trip five budgets with an unassigned fallback, mappings and limits', () => {
   const s = setting(); s.subBudgetCaps = { lebensmittel: 5000 };
   const imported = validate_budget_settings(JSON.parse(JSON.stringify(s)));
-  assert.equal(imported.mainCategories.length, 6);
+  assert.equal(imported.mainCategories.length, 5);
   assert.equal(budget_category(imported, 'Drogerie'), 'lebensmittel');
   assert.equal(imported.subBudgetCaps.lebensmittel, 5000);
 });
@@ -36,7 +36,7 @@ test('budget bars include uncapped and empty budgets, other income excluded and 
   const rows = [row('Lebensmittel', -2000), row('Drogerie', -1000), row('Drogerie', 500), row('Unknown', -700)];
   const report = build_main_budget_report(rows, new Date(2026,8,14), s.mainCategories, { lebensmittel: 5000 }, c => budget_category(s,c));
   assert.equal(report[0].spentCents, 3000); assert.equal(report[0].pct, 60); assert.equal(report[0].rows.length, 2);
-  assert.equal(report[1].spentCents, 0); assert.equal(report.length, 7);
+  assert.equal(report[1].spentCents, 0); assert.equal(report.length, 6);
   assert.equal(report.at(-1).spentCents, 700);
 });
 test('amount corrections retain identity, classification and reload behavior', () => {

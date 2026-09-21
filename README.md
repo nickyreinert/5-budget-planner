@@ -73,15 +73,14 @@ Accountless legacy records are upgraded on reimport, including category/amount
 overrides. Already stored records from older app versions may lack account
 information and need reimporting with the source-account mapping.
 
-Manual purchases reconcile one-to-one with imports by exact calendar date and
-signed cents. This existing heuristic can match unrelated same-day amounts;
+Manual purchases reconcile one-to-one with both CSV imports and booked DKB/GoCardless transactions by exact calendar date and signed cents. The manual category is retained; unmatched imports use classification rules, then Unkategorisiert / Nicht zugeordnet for expenses or Zusätzliche Einnahmen for incoming amounts. Repeated imports and bank syncs retain this reconciliation. This existing heuristic can match unrelated same-day amounts;
 source records remain stored. GoCardless records are also stored independently.
 See [gocardless-proxy/README.md](gocardless-proxy/README.md) for optional bank sync.
 
 ## Budget model
 
 Every non-recurring expense belongs to a transaction category and a main budget.
-Unknown purposes use **Sonstige Ausgaben → Sonstiges** until refined. Amazon,
+Unknown purposes use **Unkategorisiert → Nicht zugeordnet** until refined. Amazon,
 PayPal, Klarna and banks are merchants/payment routes, not semantic categories.
 Income, recurring contracts and internal transfers have their own treatment.
 
@@ -98,7 +97,7 @@ weekly allowance = (monthly salary − monthly recurring costs) × 12 / 52
 
 All non-recurring outgoing payments, including legacy reserve/savings categories,
 count toward budgets. They are not also deducted from the allowance as reserves.
-Other incoming payments (including refunds and sales) appear as **Other income**
+Other incoming payments (including refunds and sales) appear as **Zusätzliche Einnahmen**
 in cashflow; they do not increase salary or the weekly allowance and do not
 reduce recorded budget spend. Manually set budget limits are optional; their
 sum and the calculated allowance are displayed in Settings. A negative allowance
@@ -117,7 +116,7 @@ week/month/year granularity. Charts default to monthly stacked bars:
 
 - **Budgetausgaben**: budget → transaction categories.
 - **Wiederkehrende Ausgaben**: recurring category → payment recipients.
-- **Finanzielle Entwicklung**: salary, Other income, and expenses, with net
+- **Finanzielle Entwicklung**: salary, additional income, and expenses, with net
   cashflow per period. This is movement, not an absolute bank balance.
 
 Top cards scroll to the corresponding chart. Weekly savings cells filter the
@@ -147,8 +146,7 @@ See the in-app prompt for a complete example. Core fields:
   `weeklyLimitCents`, optional `rationale`.
 
 CSV categories are ignored by default; when enabled, fallback can only use
-categories in the active settings catalog. Missing expense mappings receive the
-Sonstiges fallback. Invalid regexes, duplicate IDs, invalid intervals, unknown
+categories in the active settings catalog. Missing expense mappings remain explicitly unassigned. Unkategorisiert is always available in quick entry, even before importing settings. Invalid regexes, duplicate IDs, invalid intervals, unknown
 budget references, and invalid limits are rejected before import.
 
 ## Validation

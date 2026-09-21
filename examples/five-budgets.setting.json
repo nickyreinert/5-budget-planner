@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "name": "Standardregeln (DE Banking / MoneyMoney)",
+  "name": "Meine fünf Alltagsbudgets",
   "groups": [
     {
       "id": "fixed",
@@ -408,8 +408,7 @@
       "verwendungPattern": "Gehalt|\\bLohn\\b|Salary",
       "kategoriePattern": "Gehalt",
       "matchType": "or",
-      "priority": 100,
-      "incomeType": "salary"
+      "priority": 100
     },
     {
       "id": "drugstore",
@@ -433,12 +432,12 @@
     "Ausflug mit Kind": "kids",
     "Tech gadgets": "tech",
     "Supermarkt & Drogerie": "lebensmittel",
-    "Gaming": "tech",
     "Auto: Werkstatt, Miete & Zubehör": "",
     "Flüge": "",
     "Wohnen: Einrichtung": "",
     "Spenden": "",
     "Urlaub & Reisen": "",
     "Unkategorisiert": ""
-  }
+  },
+  "subBudgetCaps": {}
 }

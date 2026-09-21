@@ -38,3 +38,10 @@ test('explicit internal transfers need distinct accounts and respect the date wi
   const pairs = find_internal_transfer_pairs([a,b],3); assert.equal(pairs.length,1);
   apply_internal_transfer_pairs([a,b],pairs); assert.equal(a._cls.source,'transfer-detection');
 });
+
+test('manual bank category survives merging its PayPal merchant purchase', () => {
+ const purchase=row('Shop','-20','PayPal'), bank=row('PayPal Europe','-20','DKB');
+ bank._cls={category:'Dining',group:'essential',source:'manual',excluded:false};bank._matchedManualId='manual-1';
+ reconcile_paypal([bank,purchase]);
+ assert.equal(purchase._cls.category,'Dining');assert.equal(purchase._matchedManualId,'manual-1');assert.equal(bank._cls.excluded,true);
+});

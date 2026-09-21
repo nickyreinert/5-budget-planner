@@ -7,7 +7,7 @@
 // was given the CSV export and the schema documented in README.md, then
 // imported via the "Regeln importieren" button.
 
-import { category_catalog } from './categories.js';
+import { category_catalog, UNCATEGORIZED, ADDITIONAL_INCOME } from './categories.js';
 import { tx_id } from './data.js';
 import { budget_category } from './budgets.js';
 
@@ -135,9 +135,10 @@ export function classify(tx, ruleSet) {
   }
   return {
     ruleId: null,
-    label: 'Unklassifiziert',
-    category: 'Unklassifiziert',
-    group: FALLBACK_GROUP,
+    label: tx.betrag_cents > 0 ? ADDITIONAL_INCOME : UNCATEGORIZED,
+    category: tx.betrag_cents > 0 ? ADDITIONAL_INCOME : UNCATEGORIZED,
+    group: tx.betrag_cents > 0 ? 'income' : FALLBACK_GROUP,
+    incomeType: tx.betrag_cents > 0 ? 'other' : undefined,
     excluded: false,
     source: 'none'
   };
@@ -166,14 +167,15 @@ export function apply_manual_overrides(rows, overridesById, ruleSet) {
   const allowed = new Set(category_catalog(ruleSet));
   rows.forEach(r => {
     const legacyId = tx_id({ ...r, _txId: undefined });
-    const category = overridesById[tx_id(r)] || overridesById[r._matchedManualTxId] || overridesById[legacyId];
+    const category = overridesById[tx_id(r)] || overridesById[r._matchedManualTxId] || overridesById[r._matchedBankTxId] || overridesById[legacyId] || r._matchedManualCategory || (r.source === 'manual' ? r.Kategorie : null);
     if (!category || !allowed.has(category)) return;
     r._cls = {
       ruleId: null,
       label: category,
       category,
-      group: groupByCategory[category] || (budget_category(ruleSet, category) ? 'discretionary' : (r._cls ? r._cls.group : FALLBACK_GROUP)),
-      excluded: r._cls ? r._cls.excluded : false,
+      group: category === UNCATEGORIZED ? 'unclassified' : category === ADDITIONAL_INCOME ? 'income' : groupByCategory[category] || 'discretionary',
+      incomeType: category === ADDITIONAL_INCOME ? 'other' : undefined,
+      excluded: (ruleSet.rules || []).some(rule => rule.category === category && rule.excludeFromTotals),
       source: 'manual'
     };
   });

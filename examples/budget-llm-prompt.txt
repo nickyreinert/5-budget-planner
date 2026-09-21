@@ -1,8 +1,8 @@
 Analysiere meine historischen CSV-Transaktionen aus mehreren Konten (z. B. DKB und PayPal) und erstelle ein vollständiges SETTING-JSON für MoneyMoney Analyzer. Falls vorhanden, nutze currentRuleSet als Ausgangspunkt und erhalte stabile IDs, manuelle Regeln, Budgetnamen und Zuordnungen.
 
 1. Vermeide doppelte Ausgaben: PayPal-Händlerkäufe und die zugehörigen Bankabbuchungen sind dieselben Käufe. PayPal-Finanzierungen sind interne Transfers, kein Einkommen. Verwende Händlerdetails zur Identifikation des Kaufzwecks. Die App gleicht exakte Einzelbeträge und eindeutige Sammelbeträge kontenübergreifend ab. Erfinde keine Zuordnung bei Unsicherheit.
-2. Erstelle etwa fünf übergeordnete Budgets und mehrere semantische Transaktionskategorien je Budget. Kategorien beschreiben den Zweck: Lebensmittel, Drogerie, Kleidung, Gaming, Mobilität, Restaurant, Wohnen. Amazon, PayPal, Klarna, DKB, Steam oder andere Händler/Konten/Zahlungswege sind KEINE Transaktionskategorien. Bei unbekanntem Kaufzweck verwende Sonstige Ausgaben im Budget Sonstiges. Jede nicht wiederkehrende Ausgabe MUSS genau einer Transaktionskategorie und einem vorhandenen Budget zugeordnet sein. Keine leeren categoryMappings oder fehlenden Budgetverweise für variable Ausgaben.
-3. Identifiziere laufende Verträge als group fixed, mit recurring.intervalMonths (1, 3, 6 oder 12). Erkläre unsichere Fälle kurz in budgetRecommendation.rationale. Gehalt gehört in group income mit incomeType salary; andere positive Buchungen haben incomeType other. Erstattungen, Geschenke, Verkäufe und andere Nebeneinnahmen erscheinen als Other income und dürfen das Wochenbudget NICHT erhöhen. Kontotransfers sind kein Einkommen.
+2. Erstelle etwa fünf übergeordnete Budgets und mehrere semantische Transaktionskategorien je Budget. Kategorien beschreiben den Zweck: Lebensmittel, Drogerie, Kleidung, Gaming, Mobilität, Restaurant, Wohnen. Amazon, PayPal, Klarna, DKB, Steam oder andere Händler/Konten/Zahlungswege sind KEINE Transaktionskategorien. Bei unbekanntem Kaufzweck verwende Unkategorisiert mit leerer Budgetzuordnung (sichtbarer Bereich Nicht zugeordnet). Jede erkannte nicht wiederkehrende Ausgabe soll einer semantischen Transaktionskategorie und einem vorhandenen Budget zugeordnet sein. Nicht erkennbare Zwecke bleiben Unkategorisiert mit categoryMappings.Unkategorisiert = "". Die App zeigt sie ausdrücklich unter Nicht zugeordnet; sie zählen weiterhin zu den Ausgaben.
+3. Identifiziere laufende Verträge als group fixed, mit recurring.intervalMonths (1, 3, 6 oder 12). Erkläre unsichere Fälle kurz in budgetRecommendation.rationale. Gehalt gehört in group income mit incomeType salary; andere positive Buchungen haben incomeType other. Erstattungen, Geschenke, Verkäufe und andere Nebeneinnahmen erscheinen als Zusätzliche Einnahmen und dürfen das Wochenbudget NICHT erhöhen. Kontotransfers sind kein Einkommen.
 4. Berechne das regelmäßige monatliche Nettoeinkommen: summiere alle Gehaltsströme pro Kalendermonat und verwende den Median der letzten drei verfügbaren Gehaltsmonate. Normalisiere aktuelle laufende Vertragszahlungen auf Monatswerte. Wochenlimit = max(0, (monatliches Gehalt - monatliche Fixkosten) * 12 / 52). Verteile dieses Limit als Vorschlag auf die Budgets, orientiert an historischen Ausgaben. Die Summe der vorgeschlagenen Wochenlimits darf das verfügbare Wochenlimit nicht überschreiten. Alle Beträge im JSON sind ganzzahlige Cent. Jahres- und Quartalsverträge nicht als Monatsbeträge abziehen. Nicht wiederkehrende Ausgaben werden im Budget gezählt und nicht zusätzlich als Fixkosten abgezogen.
 5. Jede Regel braucht eine eindeutige id, category und group. Matche Name und Verwendungszweck mit gültigen JavaScript-Regulärausdrücken (JSON-Backslashes doppelt escapen); kategoriePattern bleibt leer, denn CSV-Kategorien werden standardmäßig ignoriert. Höhere priority gewinnt; lokale manuelle Anpassungen haben Vorrang. Wende keine pauschalen PayPal/Amazon-Ausschlussregeln an. Eine hohe Priorität beweist keine fachlich richtige Kategorie.
 6. Stelle bei wesentlichen Unsicherheiten zunächst höchstens drei Fragen. Gib anschließend NUR das vollständige JSON aus, ohne Markdown. Der Import zeigt spätere Änderungen an; eigene Anpassungen bleiben ohne explizite Auswahl erhalten. Default-Regeln dürfen beim ersten Import ersetzt werden.
@@ -47,19 +47,14 @@ Schema (ersetze die Beispielwerte; liefere alle benötigten Regeln, Kategorien u
     {
       "id": "alltag",
       "label": "Alltag"
-    },
-    {
-      "id": "sonstiges",
-      "label": "Sonstiges"
     }
   ],
   "categoryMappings": {
     "Lebensmittel": "alltag",
-    "Sonstige Ausgaben": "sonstiges"
+    "Unkategorisiert": ""
   },
   "subBudgetCaps": {
-    "alltag": 10000,
-    "sonstiges": 2000
+    "alltag": 10000
   },
   "budgetRecommendation": {
     "monthlyIncomeCents": 300000,

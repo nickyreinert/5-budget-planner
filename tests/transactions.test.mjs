@@ -80,3 +80,33 @@ test('recipient Konto/Bank are never used as the source account', async () => {
  assert.equal(account_key(parse_csv_rows(text,{...default_csv_config(),accountName:'DKB Giro'})[0]),'DKB Giro');
  assert.equal(account_key(parse_csv_rows(text.replace('Konto;Bank','Kontoname;Bank').replace('DE123','PayPal'),default_csv_config())[0]),'PayPal');
 });
+
+test('booked DKB sync matches a manual entry by date and signed cents and retains its category', async () => {
+  const {transaction_to_row}=await import('../src/gocardless.js');
+  const bank={...transaction_to_row({bookingDate:'2026-09-20',transactionAmount:{amount:'-12.34'},creditorName:'Bank merchant'}),id:'gc_dkb_1',source:'gocardless',_account:'DKB'};
+  const manual=row({id:'manual-1',_txId:'manual:1',source:'manual',Kategorie:'Dining'});
+  const settings={rules:[{id:'bank',category:'Food',group:'essential',namePattern:'Bank merchant'}],categoryMappings:{Dining:'daily'},mainCategories:[{id:'daily',label:'Daily'}]};
+  const result=reconcile_transactions([], [bank,manual]);
+  classify_all(result,settings);apply_manual_overrides(result,{},settings);
+  assert.equal(result.length,1);assert.equal(result[0]._cls.category,'Dining');assert.equal(result[0]._matchedManualId,'manual-1');
+  // An overlapping CSV later still leaves one booking with the same manual choice.
+  const withCSV=reconcile_transactions(csv_records([enrich_row({...bank})]),[bank,manual]);
+  classify_all(withCSV,settings);apply_manual_overrides(withCSV,{},settings);
+  assert.equal(withCSV.length,1);assert.equal(withCSV[0]._cls.category,'Dining');
+});
+
+test('unmatched bank imports follow rules then uncategorized/additional-income fallbacks', () => {
+  const rows=reconcile_transactions([], [row({id:'gc1',source:'gocardless',Name:'Shop'}),row({id:'gc2',source:'gocardless',Name:'Unknown',Betrag:'-8'}),row({id:'gc3',source:'gocardless',Name:'Gift',Betrag:'25'})]);
+  classify_all(rows,{rules:[{id:'food',category:'Food',group:'essential',namePattern:'Shop'}]});
+  assert.deepEqual(rows.map(r=>r._cls.category),['Food','Unkategorisiert','Zusätzliche Einnahmen']);
+  assert.equal(rows[2]._cls.incomeType,'other');
+});
+
+test('manual matching uses each entry once and never pairs opposite signs or different dates', () => {
+  const imports=csv_records([row(),row(),row({Betrag:'12.34'}),row({Datum:'21.09.2026'})]);
+  const manual=[row({id:'m',_txId:'manual:m',source:'manual',Kategorie:'Unkategorisiert'})];
+  const result=reconcile_transactions(imports,manual);
+  assert.equal(result.length,4);assert.equal(result.filter(r=>r._matchedManualId).length,1);
+  classify_all(result,{rules:[]});apply_manual_overrides(result,{}, {rules:[]});
+  assert.equal(result[0]._cls.category,'Unkategorisiert');
+});

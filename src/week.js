@@ -246,7 +246,7 @@ export function build_main_budget_report(rows, monday, mains, caps, categoryToMa
     const bucket = buckets.find(m => m.id === categoryToMain(c.category)) || unassigned;
     bucket.categories.push(c);
   });
-  if (unassigned.categories.length) buckets.push(unassigned);
+  buckets.push(unassigned);
   return buckets.map(m => {
     const spentCents = m.categories.reduce((sum, c) => sum + c.cents, 0);
     return { ...m, spentCents, remainingCents: m.capCents - spentCents,

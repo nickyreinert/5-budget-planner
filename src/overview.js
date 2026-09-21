@@ -29,20 +29,20 @@ export function build_timeline(rows, settings, kind, granularity = 'month', dril
   }
   for (const row of rows) {
     if (!is_real_cashflow(row)) continue;
-    const cls = row._cls || {}, category = cls.category || 'Sonstige Ausgaben';
+    const cls = row._cls || {}, category = cls.category || 'Unkategorisiert';
     let key, label, cents, color;
     if (kind === 'budget') {
       if (row.betrag_cents >= 0 || cls.group === 'fixed') continue;
-      const id = budget_category(settings, category) || 'sonstiges';
+      const id = budget_category(settings, category) || '__unassigned';
       if (drill && id !== drill) continue;
       const main = (settings.mainCategories || []).find(m => m.id === id);
-      key = drill ? category : id; label = drill ? category : main?.label || 'Sonstiges'; color = drill ? category_color(category) : main?.color || category_color(id);
+      key = drill ? category : id; label = drill ? category : main?.label || 'Nicht zugeordnet'; color = drill ? category_color(category) : main?.color || category_color(id);
       cents = -row.betrag_cents;
     } else if (kind === 'fixed') {
       if (row.betrag_cents >= 0 || cls.group !== 'fixed' || (drill && category !== drill)) continue;
       key = drill ? row.name : category; label = key; cents = -row.betrag_cents; color = category_color(key);
     } else {
-      key = row.betrag_cents < 0 ? 'Ausgaben' : is_salary(row) ? 'Gehalt' : 'Other income';
+      key = row.betrag_cents < 0 ? 'Ausgaben' : is_salary(row) ? 'Gehalt' : 'Zusätzliche Einnahmen';
       label = key; cents = row.betrag_cents;
       color = key === 'Ausgaben' ? '#db6671' : key === 'Gehalt' ? '#35a880' : '#679ce4';
     }

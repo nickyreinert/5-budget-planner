@@ -92,20 +92,17 @@ export function validate_budget_settings(settings, { checkSuggestionCaps = true 
   return settings;
 }
 
-// Every non-recurring expense has a real budget destination, even when its
-// purpose still needs clarification. Never guess the purpose from a marketplace.
+// Keep unknown categories explicit and available for assignment. Empty mappings
+// feed the visible "Nicht zugeordnet" budget bucket; they are never guessed.
 export function ensure_budget_coverage(settings, rows = []) {
   settings.mainCategories ||= [];
   settings.categoryMappings ||= {};
   const variableRules = (settings.rules || []).filter(r => !['fixed', 'income', 'internal_transfer'].includes(r.group) && !r.excludeFromTotals);
-  const categories = new Set([...Object.keys(settings.categoryMappings), ...variableRules.map(r => r.category),
-    ...rows.filter(r => r.betrag_cents < 0 && !r._cls?.excluded && r._cls?.group !== 'fixed').map(r => r._cls?.category || 'Sonstige Ausgaben')]);
-  categories.add('Sonstige Ausgaben');
+  const categories = new Set([...variableRules.map(r => r.category),
+    ...rows.filter(r => r.betrag_cents < 0 && !r._cls?.excluded && r._cls?.group !== 'fixed').map(r => r._cls?.category || 'Unkategorisiert'), 'Unkategorisiert']);
   for (const category of categories) {
-    if ((settings.rules || []).some(r => r.category === category && ['fixed', 'income', 'internal_transfer'].includes(r.group))) continue;
-    if (budget_category(settings, category)) continue;
-    if (!settings.mainCategories.some(m => m.id === 'sonstiges')) settings.mainCategories.push({ id: 'sonstiges', label: 'Sonstiges', entryCategory: 'Sonstige Ausgaben', color: '#8b91a1' });
-    settings.categoryMappings[category] = 'sonstiges';
+    if (!budget_category(settings, category) && !Object.hasOwn(settings.categoryMappings, category)) settings.categoryMappings[category] = '';
   }
+  settings.categoryMappings.Unkategorisiert = '';
   return settings;
 }

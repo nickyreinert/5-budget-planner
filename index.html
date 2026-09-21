@@ -110,7 +110,7 @@
                 </section>
                 <section class="timeline-section" id="incomeTrend" tabindex="-1">
                     <div class="timeline-heading"><h2>Finanzielle Entwicklung</h2></div>
-                    <p class="timeline-caption">Einnahmen und Ausgaben des gewählten Kontos. Other income zählt nicht zum Wochenbudget. Netto zeigt die Veränderung, keinen Kontostand.</p>
+                    <p class="timeline-caption">Einnahmen und Ausgaben des gewählten Kontos. Zusätzliche Einnahmen zählen nicht zum Wochenbudget. Netto zeigt die Veränderung, keinen Kontostand.</p>
                     <div class="timeline-canvas"><canvas id="incomeChart" aria-label="Einnahmen und Ausgaben im Zeitverlauf" role="img"></canvas></div>
                     <div id="cashflowNet" class="cashflow-net"></div>
                 </section>
@@ -332,7 +332,7 @@
                         <button id="loadDefaultRulesBtn" data-i18n="importexport.loadDefault">↺ Standardregeln laden</button>
                         <button id="exportRulesBtn" data-i18n="importexport.export">📤 SETTING exportieren</button>
                         <button id="importRulesBtn" data-i18n="importexport.import">📥 SETTING importieren</button>
-                        <p><a href="./examples/five-budgets.setting.json" download>Beispiel: 5 Budgets + Sonstiges</a></p>
+                        <p><a href="./examples/five-budgets.setting.json" download>Beispiel: 5 Budgets importieren</a></p>
                         <p>Transaktionskategorie wählen → Betrag eingeben → ✓. Die Zuordnung zum Hauptbudget erfolgt automatisch. Export / Import enthält auch Budgetnamen, Reihenfolge, Kategoriezuordnungen und Wochenlimits.</p>
                         <input type="file" id="importRulesFile" accept=".json" style="display: none;">
                         <p id="settingsImportStatus" role="status" aria-live="polite"></p>
@@ -396,7 +396,7 @@
         import { get_csv_config, save_csv_config, default_csv_config } from './src/csv_config.js';
         import { load_footer } from './src/footer.js';
         import { csv_records, reconcile_transactions, transaction_source_label } from './src/transactions.js';
-        import { category_catalog, sort_categories } from './src/categories.js';
+        import { category_catalog, sort_categories, UNCATEGORIZED } from './src/categories.js';
         import { upsert_imported_entries, load_imported_entries } from './src/db.js';
         import { apply_amount_overrides } from './src/data.js';
         import { load_amount_overrides, save_amount_override, load_all_overrides, save_overrides, add_manual_entry, load_manual_entries, delete_manual_entry } from './src/db.js';
@@ -448,9 +448,6 @@
             apply_internal_transfer_pairs(module_data, find_internal_transfer_pairs(module_data, get_transfer_max_days()));
             apply_manual_overrides(module_data, overridesById, ruleSet);
             reconcile_paypal(module_data, Math.max(7, get_transfer_max_days()));
-            module_data.forEach(row => {
-                if (!row._cls.excluded && row.betrag_cents < 0 && row._cls.category === 'Unklassifiziert') row._cls.category = 'Sonstige Ausgaben';
-            });
             ensure_budget_coverage(ruleSet, module_data);
         }
 
@@ -775,7 +772,7 @@
 
         const escape_budget = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
         function main_category_label(id) {
-            return ((ruleSet.mainCategories || []).find(m => m.id === id) || {}).label || id;
+            return id === '__unassigned' ? 'Nicht zugeordnet' : ((ruleSet.mainCategories || []).find(m => m.id === id) || {}).label || id;
         }
         let editingCategory = null;
         function wire_category_actions(card, category) {
@@ -786,9 +783,9 @@
                 document.getElementById('categoryActionError').textContent = '';
                 const replacement = document.getElementById('categoryReplacement');
                 replacement.replaceChildren(...collect_category_options(true).filter(c => c !== category).map(c => new Option(c,c)));
-                if (category !== 'Sonstige Ausgaben') replacement.value = 'Sonstige Ausgaben';
-                document.getElementById('removeCategoryBtn').disabled = category === 'Sonstige Ausgaben';
-                document.getElementById('renameCategoryBtn').disabled = category === 'Sonstige Ausgaben';
+                if (category !== UNCATEGORIZED) replacement.value = UNCATEGORIZED;
+                document.getElementById('removeCategoryBtn').disabled = category === UNCATEGORIZED;
+                document.getElementById('renameCategoryBtn').disabled = category === UNCATEGORIZED;
                 document.getElementById('categoryActionsDialog').showModal();
             };
             card.oncontextmenu = event => { event.preventDefault(); open(); };
@@ -1033,7 +1030,7 @@
                 Datum: datum_string(keypadDate),
                 Name: note || keypadCategory,
                 Verwendungszweck: '',
-                Kategorie: '',
+                Kategorie: keypadCategory,
                 Betrag: (-amountCents / 100).toFixed(2)
             };
             record._txId = 'manual:' + record.id;
@@ -1093,10 +1090,9 @@
         }
 
         function persist_budgets() {
-            ensure_budget_coverage(ruleSet, module_data);
             ruleSet._manualRuleIds = manual_rule_ids(ruleSet, settingsBaseline || defaultRuleSet);
-            save_rule_set(ruleSet);
             reclassify();
+            save_rule_set(ruleSet);
             render_week();
             render_all();
         }
@@ -1906,7 +1902,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
                 const id = budget_category(ruleSet, category);
                 const main = ruleSet.mainCategories.find(m => m.id === id);
                 if (main && !next.mainCategories.some(m => m.id === id)) next.mainCategories.push(structuredClone(main));
-                next.categoryMappings[category] = id || 'sonstiges';
+                next.categoryMappings[category] = id || '';
             }
             ensure_budget_coverage(next);
             validate_budget_settings(next, { checkSuggestionCaps: false });
@@ -2172,7 +2168,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             for (const accountId of accountIds) {
                 statusEl.textContent = t('bank.syncing');
                 const data = await gc_api(`/accounts/${accountId}/transactions`);
-                const txs = [...((data.transactions && data.transactions.booked) || []), ...((data.transactions && data.transactions.pending) || [])];
+                const txs = (data.transactions && data.transactions.booked) || []; // Pending entries may change date/ID; import when booked.
                 for (const tx of txs) {
                     const id = transaction_key(tx, accountId);
                     const record = { id, ...transaction_to_row(tx), _account: 'Bank · ' + accountId, source: 'gocardless' };
