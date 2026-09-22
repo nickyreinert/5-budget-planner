@@ -70,7 +70,6 @@ input, select { font-family: inherit; margin: 0; padding: 8px 10px; border: 1px 
 /* ===== Header: title + main tabs + settings gear, all in one row ===== */
 .app-header { display: flex; align-items: center; gap: 12px; padding: max(14px, env(safe-area-inset-top)) 16px 8px; background: var(--surface); border-bottom: 1px solid var(--border); }
 .app-logo { flex-shrink: 0; width: 28px; height: 28px; border-radius: 8px; }
-.app-header h1 { flex-shrink: 0; }
 .main-tabs { display: flex; gap: 4px; flex: 1; min-width: 0; }
 .main-tab-btn { flex: 1; background: none; border: none; padding: 10px 12px; cursor: pointer; font-size: 0.95em; border-radius: var(--radius-sm); color: var(--text-muted); font-weight: 600; white-space: nowrap; }
 .main-tab-btn.active { background: var(--accent-soft); color: var(--accent); }

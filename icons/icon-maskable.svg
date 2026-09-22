@@ -7,8 +7,12 @@
   </defs>
   <rect x="0" y="0" width="64" height="64" fill="url(#g)"/>
   <!-- Kept inside the ~80% maskable safe zone so OS icon masks (circle,
-       squircle, ...) don't clip the glyph. -->
-  <text x="32" y="43" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="900" fill="#ffffff" text-anchor="middle">5</text>
-  <rect x="23" y="19" width="4" height="22" fill="#ffffff"/>
-  <rect x="37" y="19" width="4" height="22" fill="#ffffff"/>
+       squircle, ...) don't clip the glyph. Blocky seven-segment-display "5"
+       (straight bars only) with one vertical bar through it, like $. -->
+  <rect x="20" y="16" width="24" height="5" fill="#ffffff"/>
+  <rect x="20" y="21" width="5" height="7" fill="#ffffff"/>
+  <rect x="20" y="28" width="24" height="5" fill="#ffffff"/>
+  <rect x="39" y="33" width="5" height="8" fill="#ffffff"/>
+  <rect x="20" y="41" width="24" height="5" fill="#ffffff"/>
+  <rect x="30" y="12" width="4" height="40" fill="#ffffff"/>
 </svg>
