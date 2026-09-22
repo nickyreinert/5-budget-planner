@@ -697,7 +697,7 @@
             // One combined "..." trigger instead of separate small icon
             // buttons - opens a dialog with the same actions full-size.
             const actionsCell = (canMarkRecurring || r._manualId)
-                ? `<button type="button" class="tx-actions-btn" data-tx-id="${txId}" data-manual-id="${r._manualId || ''}" data-recurring="${canMarkRecurring ? '1' : ''}" title="${t('txActions.title')}" aria-label="${t('txActions.title')}">⋯</button>`
+                ? `<button type="button" class="tx-actions-btn" data-tx-id="${txId}" data-manual-id="${r._manualId || ''}" data-recurring="${canMarkRecurring ? '1' : ''}" title="${t('txActions.title')}" aria-label="${t('txActions.title')}">⋮</button>`
                 : '';
             return `<tr>
                 <td>${fmt_date(r.date)}<small class="transaction-source">${transaction_source_label(r)}</small></td>
