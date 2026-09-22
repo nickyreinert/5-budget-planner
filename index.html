@@ -30,6 +30,7 @@
     </script>
 
     <header class="app-header">
+        <img src="favicon.svg" alt="" class="app-logo" width="28" height="28">
         <h1 data-i18n="app.title">5</h1>
         <div class="main-tabs">
             <button class="main-tab-btn active" data-main-tab="week" data-i18n="mainTabs.week">📅 Woche</button>
@@ -176,8 +177,8 @@
                 <div class="settings-tabs">
                     <button class="settings-tab-btn active" data-settings-tab="rules" data-i18n="settingsTabs.rules">⚙️ Allgemein</button>
                     <button class="settings-tab-btn" data-settings-tab="income" data-i18n="settingsTabs.income">💵 Income</button>
-                    <button class="settings-tab-btn" data-settings-tab="budgets" data-i18n="settingsTabs.budgets">💰 Budgets</button>
                     <button class="settings-tab-btn" data-settings-tab="fixexpense" data-i18n="settingsTabs.fixexpense">🔁 Fix Expense</button>
+                    <button class="settings-tab-btn" data-settings-tab="budgets" data-i18n="settingsTabs.budgets">💰 Budgets</button>
                     <button class="settings-tab-btn" data-settings-tab="importexport" data-i18n="settingsTabs.importexport">📤 Export / Import</button>
                     <button class="settings-tab-btn" data-settings-tab="sync" data-i18n="settingsTabs.sync">🔄 Sync</button>
                 </div>
@@ -414,7 +415,6 @@
         <p>Suchmuster anpassen, Vorschau prüfen und anschließend für diese Regel übernehmen.</p>
         <div id="ruleTransactionBrowserMatchers" class="rule-matchers"></div>
         <button type="button" id="ruleTransactionBrowserAddMatcher">+ Suchmuster</button>
-        <div class="browser-preview-filters"><input id="ruleTransactionBrowserTextFilter" type="search" placeholder="Buchungen filtern"><select id="ruleTransactionBrowserAmountFilter"><option value="">Alle Beträge</option><option value="gt:0">Größer als 0 €</option><option value="lt:100">Kleiner als 100 €</option></select></div>
         <div class="transaction-browser-table"><table><thead><tr><th data-browser-sort="date">Datum</th><th data-browser-sort="name">Buchung</th><th data-browser-sort="category">Transaktionskategorie</th><th data-browser-sort="budget">Budget</th><th data-browser-sort="direction">Typ</th><th data-browser-sort="amount">Betrag</th></tr></thead><tbody id="ruleTransactionBrowserRows"></tbody></table></div>
         <div class="dialog-actions"><button type="button" id="applyRuleTransactionBrowser" class="primary">Für Regel übernehmen</button></div>
     </dialog>
@@ -454,6 +454,24 @@
         <div class="dialog-actions"><button type="button" id="cancelRecurringExpense" data-i18n="modal.cancel">Abbrechen</button><button type="button" id="saveRecurringExpense" class="primary" data-i18n="recurringExpense.save">Als wiederkehrend speichern</button></div>
     </dialog>
 
+    <dialog id="txEditDialog" class="review-dialog" aria-labelledby="txEditTitle">
+        <h2 id="txEditTitle" data-i18n="txEdit.title">Buchung bearbeiten</h2>
+        <label><span data-i18n="table.kategorie">Kategorie</span><button type="button" id="txEditCategory" class="category-picker-btn" data-category=""></button></label>
+        <label><span data-i18n="txEdit.note">Notiz / Verwendungszweck</span><input type="text" id="txEditNote"></label>
+        <label><span data-i18n="txEdit.date">Datum</span><input type="date" id="txEditDate"></label>
+        <p id="txEditError" role="alert"></p>
+        <div class="dialog-actions"><button type="button" id="cancelTxEdit" data-i18n="modal.cancel">Abbrechen</button><button type="button" id="saveTxEdit" class="primary" data-i18n="modal.save">Speichern</button></div>
+    </dialog>
+
+    <dialog id="txRowActionsDialog" class="review-dialog tx-row-actions-dialog" aria-labelledby="txActionsTitle">
+        <h2 id="txActionsTitle" data-i18n="txActions.title">Aktionen</h2>
+        <div class="tx-row-actions-list">
+            <button type="button" id="txRowActionRecurring" class="tx-row-action-btn" data-i18n="recurringExpense.markTitle">↻ Als wiederkehrende Ausgabe markieren</button>
+            <button type="button" id="txRowActionDelete" class="tx-row-action-btn tx-row-action-danger" data-i18n="txActions.delete">× Löschen</button>
+        </div>
+        <div class="dialog-actions"><button type="button" id="cancelTxRowActions" data-i18n="modal.cancel">Abbrechen</button></div>
+    </dialog>
+
     <script type="module">
         import { parse_csv, data as module_data, build_group_summary, build_unclassified_report, enrich_row, tx_id } from './src/data.js';
         import { filter_overview_rows, build_timeline, render_timeline } from './src/overview.js';
@@ -466,11 +484,11 @@
         import { csv_records, reconcile_transactions, transaction_source_label } from './src/transactions.js';
         import { category_catalog, sort_categories, fixed_expense_categories, UNCATEGORIZED } from './src/categories.js';
         import { upsert_imported_entries, load_imported_entries } from './src/db.js';
-        import { apply_amount_overrides } from './src/data.js';
-        import { load_amount_overrides, save_amount_override, load_all_overrides, save_overrides, add_manual_entry, load_manual_entries, delete_manual_entry } from './src/db.js';
+        import { apply_amount_overrides, apply_note_overrides, apply_date_overrides } from './src/data.js';
+        import { load_amount_overrides, save_amount_override, load_all_overrides, save_overrides, add_manual_entry, load_manual_entries, delete_manual_entry, load_note_overrides, save_note_override, load_date_overrides, save_date_override } from './src/db.js';
         import {
             build_budget_basis, build_week_report, build_sub_budget_report, build_main_budget_report, category_color,
-            week_start, add_days, iso_week_number, top_categories
+            week_start, add_days, iso_week_number, top_categories, rule_monthly_equivalent
         } from './src/week.js';
         import { get_sub_budgets, save_sub_budgets, budget_category, validate_budget_settings, ensure_budget_coverage } from './src/budgets.js';
         import { push_digit, pop_digit, buffer_to_cents } from './src/keypad.js';
@@ -489,6 +507,8 @@
         let weekMonday = week_start(new Date());
         let overridesById = {};
         let amountOverrides = {};
+        let noteOverrides = {};
+        let dateOverrides = {};
         let subBudgetCaps = {};
         // Which budget groups have their assigned-categories list expanded in
         // Settings > Budgets - purely a UI state, not persisted.
@@ -513,6 +533,8 @@
             const ignoreCategories = get_csv_config().ignoreCategories !== false;
             module_data.forEach(row => { row._ignoreCsvCategories = row.source === 'csv' && ignoreCategories; });
             apply_amount_overrides(module_data, amountOverrides);
+            apply_note_overrides(module_data, noteOverrides);
+            apply_date_overrides(module_data, dateOverrides);
             classify_all(module_data, ruleSet);
             apply_internal_transfer_pairs(module_data, find_internal_transfer_pairs(module_data, get_transfer_max_days()));
             apply_manual_overrides(module_data, overridesById, ruleSet);
@@ -671,48 +693,55 @@
             const txId = encodeURIComponent(tx_id(r));
             const amountText = fmt_eur(-r.betrag_cents);
             const amountCell = `<button type="button" class="tx-amount-btn" data-tx-id="${txId}" title="Betrag ändern">${amountText}</button>`;
-            const recurringCell = r.in_out === 'out' && r._cls?.group !== 'fixed'
-                ? `<button type="button" class="recurring-expense-btn" data-tx-id="${txId}" title="${t('recurringExpense.markTitle')}" aria-label="${t('recurringExpense.markTitle')}">↻</button>`
-                : '';
-            const deleteCell = r._manualId
-                ? `<button type="button" class="quickentry-delete" data-manual-id="${r._manualId}" data-tx-id="${txId}">×</button>`
+            const canMarkRecurring = r.in_out === 'out' && r._cls?.group !== 'fixed';
+            // One combined "..." trigger instead of separate small icon
+            // buttons - opens a dialog with the same actions full-size.
+            const actionsCell = (canMarkRecurring || r._manualId)
+                ? `<button type="button" class="tx-actions-btn" data-tx-id="${txId}" data-manual-id="${r._manualId || ''}" data-recurring="${canMarkRecurring ? '1' : ''}" title="${t('txActions.title')}" aria-label="${t('txActions.title')}">⋯</button>`
                 : '';
             return `<tr>
                 <td>${fmt_date(r.date)}<small class="transaction-source">${transaction_source_label(r)}</small></td>
                 <td class="tx-description"><button type="button" class="tx-name-btn" data-tx-id="${txId}">${escape_budget(r.name)}<span class="tx-category-label" style="border-left:4px solid ${category_color(r._cls.category)}">${escape_budget(r._cls.category)}</span></button></td>
                 <td class="num">${amountCell}</td>
-                <td class="delete-col">${recurringCell}${deleteCell}</td>
+                <td class="delete-col">${actionsCell}</td>
             </tr>`;
         }
 
+        async function delete_tx_row(manualId, txId) {
+            if (!confirm(t('week.confirmDeleteEntry'))) return;
+            await delete_manual_entry(manualId, txId);
+            delete overridesById[txId];
+            delete amountOverrides[txId];
+            delete noteOverrides[txId];
+            delete dateOverrides[txId];
+            const idx = module_data.findIndex(r => r._manualId === manualId);
+            if (idx !== -1) module_data.splice(idx, 1);
+            reclassify();
+            render_all();
+            render_week();
+        }
+
+        function open_tx_row_actions_dialog(btn) {
+            const dialog = document.getElementById('txRowActionsDialog');
+            const txId = decodeURIComponent(btn.dataset.txId);
+            const manualId = btn.dataset.manualId;
+            document.getElementById('txRowActionRecurring').hidden = !btn.dataset.recurring;
+            document.getElementById('txRowActionDelete').hidden = !manualId;
+            document.getElementById('txRowActionRecurring').onclick = () => { dialog.close(); open_recurring_expense_dialog(txId); };
+            document.getElementById('txRowActionDelete').onclick = () => { dialog.close(); delete_tx_row(manualId, txId); };
+            dialog.showModal();
+        }
+        document.getElementById('cancelTxRowActions').addEventListener('click', () => document.getElementById('txRowActionsDialog').close());
+
         function wire_tx_rows(container) {
             container.querySelectorAll('.tx-name-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    open_category_popover(btn, collect_category_options(), (category) => {
-                        assign_category([decodeURIComponent(btn.dataset.txId)], category);
-                    });
-                });
+                btn.addEventListener('click', () => open_tx_edit_dialog(decodeURIComponent(btn.dataset.txId)));
             });
             container.querySelectorAll('.tx-amount-btn').forEach(btn => {
                 btn.addEventListener('click', () => start_edit_amount(btn));
             });
-            container.querySelectorAll('.recurring-expense-btn').forEach(btn => {
-                btn.addEventListener('click', () => open_recurring_expense_dialog(decodeURIComponent(btn.dataset.txId)));
-            });
-            container.querySelectorAll('.quickentry-delete').forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    if (!confirm(t('week.confirmDeleteEntry'))) return;
-                    const manualId = btn.dataset.manualId;
-                    const txId = decodeURIComponent(btn.dataset.txId);
-                    await delete_manual_entry(manualId, txId);
-                    delete overridesById[txId];
-                    delete amountOverrides[txId];
-                    const idx = module_data.findIndex(r => r._manualId === manualId);
-                    if (idx !== -1) module_data.splice(idx, 1);
-                    reclassify();
-                    render_all();
-                    render_week();
-                });
+            container.querySelectorAll('.tx-actions-btn').forEach(btn => {
+                btn.addEventListener('click', () => open_tx_row_actions_dialog(btn));
             });
         }
 
@@ -780,6 +809,60 @@
             render_all();
             render_week();
             render_rule_group_list('fixed');
+            dialog.close();
+        });
+
+        // "DD.MM.YYYY"-formatted dates stay the storage format; edits go
+        // through this ISO form since <input type="date"> only speaks ISO.
+        function iso_date_string(d) {
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        // Single dialog to edit a transaction's category, note (Verwendungszweck)
+        // and date - replaces the old name-click-opens-category-popover-only
+        // behavior, since users also need to fix a wrong note/date.
+        function open_tx_edit_dialog(txId) {
+            const row = module_data.find(r => tx_id(r) === txId);
+            if (!row) return;
+            const dialog = document.getElementById('txEditDialog');
+            const categoryButton = document.getElementById('txEditCategory');
+            categoryButton.dataset.category = row._cls?.category || '';
+            categoryButton.textContent = row._cls?.category || t('recurringExpense.chooseCategory');
+            categoryButton.onclick = () => open_category_popover(categoryButton, collect_category_options(), (category) => {
+                categoryButton.dataset.category = category;
+                categoryButton.textContent = category;
+            });
+            document.getElementById('txEditNote').value = row.verwendungszweck || '';
+            document.getElementById('txEditDate').value = iso_date_string(row.date);
+            document.getElementById('txEditError').textContent = '';
+            dialog.dataset.txId = txId;
+            dialog.showModal();
+        }
+
+        document.getElementById('cancelTxEdit').addEventListener('click', () => {
+            close_popover();
+            document.getElementById('txEditDialog').close();
+        });
+        document.getElementById('txEditDialog').addEventListener('close', close_popover);
+        document.getElementById('saveTxEdit').addEventListener('click', async () => {
+            const dialog = document.getElementById('txEditDialog');
+            const txId = dialog.dataset.txId;
+            const row = module_data.find(r => tx_id(r) === txId);
+            const category = document.getElementById('txEditCategory').dataset.category;
+            const note = document.getElementById('txEditNote').value;
+            const isoDate = document.getElementById('txEditDate').value;
+            if (!row || !category || !isoDate) {
+                document.getElementById('txEditError').textContent = t('txEdit.invalid');
+                return;
+            }
+            const tasks = [];
+            if (category !== row._cls?.category) tasks.push(save_overrides([[txId, category]]).then(() => { overridesById[txId] = category; }));
+            if (note !== (row.verwendungszweck || '')) tasks.push(save_note_override(txId, note).then(() => { noteOverrides[txId] = note; }));
+            if (isoDate !== iso_date_string(row.date)) tasks.push(save_date_override(txId, isoDate).then(() => { dateOverrides[txId] = isoDate; }));
+            await Promise.all(tasks);
+            reclassify();
+            render_all();
+            render_week();
             dialog.close();
         });
 
@@ -865,7 +948,9 @@
             const heroProgressEl = document.getElementById('weekHeroProgress');
             const heroFillEl = document.getElementById('weekHeroFill');
             heroFillEl.style.width = usedPct + '%';
-            heroFillEl.style.background = over ? 'rgba(231,76,60,0.18)' : 'var(--accent-soft)';
+            // Traffic-light scale for money spent - kept visually distinct
+            // from the blue "days of week elapsed" bar right below it.
+            heroFillEl.style.background = over ? 'rgba(231,76,60,0.35)' : usedPct >= 75 ? 'rgba(243,156,18,0.35)' : 'rgba(46,204,113,0.3)';
             heroProgressEl.setAttribute('aria-valuenow', Math.round(usedPct));
 
             const lastWeekReport = build_week_report(module_data, add_days(weekMonday, -7));
@@ -891,14 +976,14 @@
                 <h4>${t('week.contractsTitle')}</h4>
                 ${fixedRules.length ? fixedRules.map(rule => {
                     const matches = rule_recent_matches(rule, r => r.betrag_cents < 0);
-                    const totalCents = matches.reduce((sum, r) => sum - r.betrag_cents, 0);
+                    const totalCents = rule_monthly_equivalent(matches, rule.recurringOverrides || {}).totalCents;
                     return `
                         <details class="main-budget">
                             <summary>
                                 <span class="main-budget-row">
                                     <span class="main-budget-arrow" aria-hidden="true"></span>
                                     <strong>${escape_budget(rule.category || rule.label || '')}</strong>
-                                    <span class="main-budget-value">${fmt_eur(totalCents)}</span>
+                                    <span class="main-budget-value" title="${t('fixExpense.monthlyHint')}">${fmt_eur(totalCents)}</span>
                                 </span>
                             </summary>
                             ${matches.length ? `<table class="transaction-rows"><colgroup><col style="width:23%"><col><col style="width:28%"><col style="width:20px"></colgroup>${group_rows_by_month(matches.slice().sort((a, b) => b.date - a.date), render_tx_row)}</table>` : `<p>${t('fixExpense.noMatches')}</p>`}
@@ -1294,16 +1379,47 @@
         // the shared category popover so a wrongly-matched one-off (e.g. a
         // reimbursement caught by a salary rule) can be reassigned away
         // without leaving this list.
-        function render_transaction_preview_table(rows, amountValue = (r => -r.betrag_cents)) {
-            if (!rows.length) return `<p>${t('fixExpense.noMatches')}</p>`;
-            const sorted = rows.slice().sort((a, b) => b.date - a.date);
-            const rowsHtml = group_rows_by_month(sorted, r => `
+        function tx_preview_row_html(r, amountValue) {
+            return `
                 <tr>
                     <td>${fmt_date(r.date)}<small class="transaction-source">${transaction_source_label(r)}</small></td>
                     <td><button type="button" class="tx-preview-name-btn" data-tx-id="${encodeURIComponent(tx_id(r))}">${escape_budget(r.name)}</button></td>
                     <td class="num">${fmt_eur(amountValue(r))}</td>
                 </tr>
-            `, 3);
+            `;
+        }
+
+        // `opts.byBillingPeriod` (Fix Expense/Income rule previews only)
+        // groups by payee cluster instead of calendar month, each with its
+        // own detected/overridable interval and resulting monthly-equivalent
+        // - a mixed-rhythm category (e.g. one monthly and one annual
+        // insurance policy) or a bill whose date drifts across a month
+        // boundary (paid on the 1st one month, the 30th the next) otherwise
+        // reads as a confusing flat repeat, or gets double-counted into one
+        // calendar month.
+        function render_transaction_preview_table(rows, amountValue = (r => -r.betrag_cents), opts = {}) {
+            if (!rows.length) return `<p>${t('fixExpense.noMatches')}</p>`;
+            if (!opts.byBillingPeriod) {
+                const sorted = rows.slice().sort((a, b) => b.date - a.date);
+                const rowsHtml = group_rows_by_month(sorted, r => tx_preview_row_html(r, amountValue), 3);
+                return `<table class="transaction-preview">${rowsHtml}</table>`;
+            }
+            const { clusters } = rule_monthly_equivalent(rows, opts.overrides || {});
+            const rowsHtml = clusters.map(cluster => `
+                <tr class="tx-interval-header">
+                    <td colspan="3">
+                        <span class="tx-interval-payee">${escape_budget(cluster.name)}</span>
+                        <select class="tx-interval-select" data-rule="${escape_budget(opts.ruleId || '')}" data-payee="${escape_budget(cluster.payee)}" aria-label="${t('recurringExpense.interval')}: ${escape_budget(cluster.name)}">
+                            <option value="1" ${cluster.months === 1 ? 'selected' : ''}>${t('week.interval.1')}</option>
+                            <option value="3" ${cluster.months === 3 ? 'selected' : ''}>${t('week.interval.3')}</option>
+                            <option value="6" ${cluster.months === 6 ? 'selected' : ''}>${t('week.interval.6')}</option>
+                            <option value="12" ${cluster.months === 12 ? 'selected' : ''}>${t('week.interval.12')}</option>
+                        </select>
+                        <span class="tx-interval-monthly">≈ ${fmt_eur(cluster.monthlyCents)} ${t('fixExpense.perMonth')}</span>
+                    </td>
+                </tr>
+                ${cluster.rows.map(r => tx_preview_row_html(r, amountValue)).join('')}
+            `).join('');
             return `<table class="transaction-preview">${rowsHtml}</table>`;
         }
 
@@ -1315,6 +1431,14 @@
                         if (onReassigned) onReassigned();
                     });
                 });
+            });
+        }
+
+        // Manual per-payee interval override (Settings > Fix Expense/Income
+        // rule previews only) - `onChange(ruleId, payee, months)`.
+        function wire_recurring_interval_selects(container, onChange) {
+            container.querySelectorAll('.tx-interval-select').forEach(select => {
+                select.addEventListener('change', () => onChange(select.dataset.rule, select.dataset.payee, Number(select.value)));
             });
         }
 
@@ -1589,16 +1713,6 @@
             return module_data.filter(r => r.date >= windowStart && r.date <= now && amountFilter(r) && rule_matches(r, rule));
         }
 
-        function monthly_median_cents(rows, amountValue) {
-            const perMonth = new Map();
-            rows.forEach(row => {
-                const month = `${row.date.getFullYear()}-${row.date.getMonth()}`;
-                perMonth.set(month, (perMonth.get(month) || 0) + amountValue(row));
-            });
-            const values = [...perMonth.values()].sort((a, b) => a - b);
-            return values.length ? values[Math.floor(values.length / 2)] : 0;
-        }
-
         function rule_matchers(rule) {
             if (Array.isArray(rule.matchers) && rule.matchers.length) return rule.matchers;
             const legacyPattern = rule.namePattern || rule.verwendungPattern || rule.kategoriePattern || '';
@@ -1642,28 +1756,22 @@
             const rule = (ruleSet.rules || []).find(item => item.id === ruleId);
             if (!rule) return;
             ruleBrowserState = { kind, ruleId, matchers: structuredClone(rule_matchers(rule)), sort: 'date', descending: true };
-            document.getElementById('ruleTransactionBrowserTextFilter').value = '';
-            document.getElementById('ruleTransactionBrowserAmountFilter').value = '';
             render_rule_transaction_browser();
             document.getElementById('ruleTransactionBrowser').showModal();
         }
 
-        function render_rule_transaction_browser() {
-            if (!ruleBrowserState) return;
-            const browser = document.getElementById('ruleTransactionBrowser');
+        // Live preview rows: driven only by the actual matchers (no separate
+        // ad-hoc filter box) - if none of them have a value yet, fall back to
+        // every transaction not already claimed by a different category, so
+        // opening a fresh rule immediately shows candidates to pick from.
+        function rule_transaction_browser_rows() {
             const cfg = RULE_GROUP_EDITORS[ruleBrowserState.kind];
-            const matcherContainer = document.getElementById('ruleTransactionBrowserMatchers');
-            matcherContainer.innerHTML = matcher_editor_html(ruleBrowserState.matchers);
-            const query = document.getElementById('ruleTransactionBrowserTextFilter').value.trim().toLocaleLowerCase();
-            const amountFilter = document.getElementById('ruleTransactionBrowserAmountFilter').value;
-            const previewRule = { matchers: ruleBrowserState.matchers.filter(matcher => matcher.value) };
-            let rows = module_data.filter(row => cfg.amountFilter(row) && rule_matches(row, previewRule));
-            if (query) rows = rows.filter(row => [row.name, row.verwendungszweck, row.Kategorie].join(' ').toLocaleLowerCase().includes(query));
-            if (amountFilter) {
-                const [operator, rawValue] = amountFilter.split(':');
-                const value = Number(rawValue) * 100;
-                rows = rows.filter(row => operator === 'gt' ? Math.abs(row.betrag_cents) > value : Math.abs(row.betrag_cents) < value);
-            }
+            const rule = (ruleSet.rules || []).find(item => item.id === ruleBrowserState.ruleId);
+            const ownCategory = rule ? (rule.category || rule.label) : '';
+            const activeMatchers = ruleBrowserState.matchers.filter(matcher => matcher.value);
+            const rows = activeMatchers.length
+                ? module_data.filter(row => cfg.amountFilter(row) && rule_matches(row, { matchers: activeMatchers }))
+                : module_data.filter(row => cfg.amountFilter(row) && (!row._cls?.category || row._cls.category === UNCATEGORIZED || row._cls.category === ownCategory));
             const valueFor = (row, key) => {
                 if (key === 'date') return row.date.getTime();
                 if (key === 'amount') return row.betrag_cents;
@@ -1677,10 +1785,30 @@
                 const compare = typeof left === 'number' ? left - right : String(left).localeCompare(String(right), locale());
                 return ruleBrowserState.descending ? -compare : compare;
             });
+            return { rows, valueFor };
+        }
+
+        function render_rule_transaction_browser_rows() {
+            const { rows, valueFor } = rule_transaction_browser_rows();
             document.getElementById('ruleTransactionBrowserRows').innerHTML = rows.map(row => `<tr><td>${fmt_date(row.date)}</td><td>${escape_budget(row.name)}</td><td>${escape_budget(row._cls?.category || 'Unkategorisiert')}</td><td>${escape_budget(valueFor(row, 'budget'))}</td><td>${valueFor(row, 'direction')}</td><td class="num">${fmt_eur(row.betrag_cents)}</td></tr>`).join('') || '<tr><td colspan="6">Keine passenden Buchungen.</td></tr>';
+        }
+
+        function render_rule_transaction_browser() {
+            if (!ruleBrowserState) return;
+            const browser = document.getElementById('ruleTransactionBrowser');
+            const matcherContainer = document.getElementById('ruleTransactionBrowserMatchers');
+            matcherContainer.innerHTML = matcher_editor_html(ruleBrowserState.matchers);
+            render_rule_transaction_browser_rows();
 
             matcherContainer.querySelectorAll('.rule-matcher-row').forEach((element, index) => {
-                element.querySelectorAll('input, select').forEach(control => control.addEventListener('change', () => {
+                // Value field updates the preview as you type (true live
+                // preview) without re-rendering the matcher inputs themselves,
+                // so focus/caret position survives each keystroke.
+                element.querySelector('[data-matcher-value]').addEventListener('input', () => {
+                    ruleBrowserState.matchers[index].value = element.querySelector('[data-matcher-value]').value.trim();
+                    render_rule_transaction_browser_rows();
+                });
+                [element.querySelector('[data-matcher-field]'), element.querySelector('[data-matcher-operator]'), element.querySelector('[data-matcher-exclude]')].forEach(control => control.addEventListener('change', () => {
                     const matcher = {
                         field: element.querySelector('[data-matcher-field]').value,
                         operator: element.querySelector('[data-matcher-operator]').value,
@@ -1697,7 +1825,7 @@
             });
             browser.querySelectorAll('[data-browser-sort]').forEach(header => header.onclick = () => {
                 ruleBrowserState.descending = ruleBrowserState.sort === header.dataset.browserSort ? !ruleBrowserState.descending : false;
-                ruleBrowserState.sort = header.dataset.browserSort; render_rule_transaction_browser();
+                ruleBrowserState.sort = header.dataset.browserSort; render_rule_transaction_browser_rows();
             });
         }
 
@@ -1705,8 +1833,6 @@
             ruleBrowserState.matchers.push({ field: 'any', operator: 'contains', value: '', exclude: false });
             render_rule_transaction_browser();
         });
-        document.getElementById('ruleTransactionBrowserTextFilter').addEventListener('input', render_rule_transaction_browser);
-        document.getElementById('ruleTransactionBrowserAmountFilter').addEventListener('change', render_rule_transaction_browser);
         document.getElementById('closeRuleTransactionBrowser').addEventListener('click', () => document.getElementById('ruleTransactionBrowser').close());
         document.getElementById('applyRuleTransactionBrowser').addEventListener('click', () => {
             const rule = (ruleSet.rules || []).find(item => item.id === ruleBrowserState?.ruleId);
@@ -1726,10 +1852,12 @@
             const rules = (ruleSet.rules || []).filter(r => r.group === kind);
 
             const matches_for = rule => rule_recent_matches(rule, cfg.amountFilter);
+            let overviewTotalCents = 0;
 
             const rowsHtml = rules.map(rule => {
                 const matches = matches_for(rule);
-                const totalCents = monthly_median_cents(matches, cfg.amountValue);
+                const totalCents = rule_monthly_equivalent(matches, rule.recurringOverrides || {}).totalCents;
+                overviewTotalCents += totalCents;
                 const expanded = cfg.expanded.has(rule.id);
                 const matchers = rule_matchers(rule);
 
@@ -1737,7 +1865,7 @@
                     <div class="main-budget-editor-row fixexpense-row" data-rule="${escape_budget(rule.id)}" data-kind="${kind}">
                         <button type="button" class="group-toggle-btn" data-rule="${escape_budget(rule.id)}" title="${t('budgets.toggleCategories')}">${expanded ? '▼' : '▶'}</button>
                         <input value="${escape_budget(rule.category || rule.label || '')}" data-rule="${escape_budget(rule.id)}" data-field="category" aria-label="Kategorie">
-                        <span class="fixexpense-monthly" title="Monatsmedian der letzten drei Monate">${fmt_eur(totalCents)} / Monat</span>
+                        <span class="fixexpense-monthly" title="${t('fixExpense.monthlyHint')}">${fmt_eur(totalCents)} ${t('fixExpense.perMonth')}</span>
                         <button type="button" class="remove-btn" data-rule="${escape_budget(rule.id)}" title="${t('fixExpense.removeRow')}">×</button>
                     </div>
                     <div class="main-budget-group-categories fixexpense-body" ${expanded ? '' : 'hidden'}>
@@ -1745,7 +1873,7 @@
                         <div class="rule-matcher-actions"><button type="button" class="add-matcher-btn" data-rule="${escape_budget(rule.id)}">+ Suchmuster</button><button type="button" class="browse-rule-btn" data-rule="${escape_budget(rule.id)}">Buchungen durchsuchen</button></div>
                         <details class="fixexpense-preview" data-rule="${escape_budget(rule.id)}" ${openPreviews.has(rule.id) ? 'open' : ''}>
                             <summary>${t('fixExpense.previewToggle', { count: matches.length })}</summary>
-                            ${render_transaction_preview_table(matches, cfg.amountValue)}
+                            ${render_transaction_preview_table(matches, cfg.amountValue, { byBillingPeriod: true, overrides: rule.recurringOverrides || {}, ruleId: rule.id })}
                         </details>
                     </div>
                 `;
@@ -1753,10 +1881,8 @@
 
             container.innerHTML = rowsHtml || `<p style="color:#999;">${t('fixExpense.noRows')}</p>`;
             const overview = document.getElementById(kind === 'income' ? 'incomeOverview' : 'fixExpenseOverview');
-            const allMatches = rules.flatMap(rule => matches_for(rule));
-            const uniqueMatches = [...new Map(allMatches.map(row => [tx_id(row), row])).values()];
             const label = kind === 'income' ? 'Wiederkehrendes Einkommen pro Monat' : 'Wiederkehrende Ausgaben pro Monat';
-            overview.innerHTML = `<div class="budget-totals-row"><div class="budget-totals-cell"><span>${label}</span><strong>${fmt_eur(monthly_median_cents(uniqueMatches, cfg.amountValue))}</strong><small>Median der letzten drei Monate</small></div></div>`;
+            overview.innerHTML = `<div class="budget-totals-row"><div class="budget-totals-cell"><span>${label}</span><strong>${fmt_eur(overviewTotalCents)}</strong><small>${t('fixExpense.monthlyHint')}</small></div></div>`;
             wire_rule_group_list(kind);
         }
 
@@ -1765,6 +1891,14 @@
             const container = document.getElementById(cfg.containerId);
 
             wire_transaction_preview(container, () => render_rule_group_list(kind));
+            wire_recurring_interval_selects(container, (ruleId, payee, months) => {
+                const rule = (ruleSet.rules || []).find(r => r.id === ruleId);
+                if (!rule) return;
+                rule.recurringOverrides ||= {};
+                rule.recurringOverrides[payee] = months;
+                persist_budgets();
+                render_rule_group_list(kind);
+            });
 
             container.querySelectorAll('.fixexpense-row .group-toggle-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -2587,7 +2721,9 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
                 importedEntries: await load_imported_entries(),
                 manualEntries: await load_manual_entries(),
                 overrides: await load_all_overrides(),
-                amountOverrides: await load_amount_overrides()
+                amountOverrides: await load_amount_overrides(),
+                noteOverrides: await load_note_overrides(),
+                dateOverrides: await load_date_overrides()
             };
         }
 
@@ -2597,6 +2733,8 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             if (Array.isArray(data.manualEntries)) for (const entry of data.manualEntries) await add_manual_entry(entry);
             if (data.overrides) await save_overrides(Object.entries(data.overrides));
             if (data.amountOverrides) for (const [id, cents] of Object.entries(data.amountOverrides)) await save_amount_override(id, cents);
+            if (data.noteOverrides) for (const [id, note] of Object.entries(data.noteOverrides)) await save_note_override(id, note);
+            if (data.dateOverrides) for (const [id, isoDate] of Object.entries(data.dateOverrides)) await save_date_override(id, isoDate);
         }
 
         document.getElementById('syncUploadBtn').addEventListener('click', async () => {
@@ -2637,6 +2775,8 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
                     await apply_synced_transactions(await sync_pull_data(firebaseConfig, user.uid, 'transactions'));
                     overridesById = await load_all_overrides();
                     amountOverrides = await load_amount_overrides();
+                    noteOverrides = await load_note_overrides();
+                    dateOverrides = await load_date_overrides();
                 }
                 await merge_manual_entries();
                 reclassify();
@@ -2737,6 +2877,8 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             ruleSet._manualRuleIds = manual_rule_ids(ruleSet, settingsBaseline);
             amountOverrides = await load_amount_overrides();
             overridesById = await load_all_overrides();
+            noteOverrides = await load_note_overrides();
+            dateOverrides = await load_date_overrides();
             subBudgetCaps = get_sub_budgets();
 
             // Merge quick-entries and reclassify unconditionally - even with

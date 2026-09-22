@@ -80,19 +80,9 @@ export function interval_months(dates) {
 // All contracts (payee + amount cluster) of the 'fixed' group that are
 // still running at `refDate`, each with its monthly equivalent.
 export function active_contracts(rows, refDate) {
-  const byPayee = {};
-  rows
-    .filter(r => r.in_out === 'out' && is_real_cashflow(r) && r._cls && r._cls.group === 'fixed')
-    .sort((a, b) => b.date - a.date)
-    .forEach(r => {
-      const clusters = byPayee[payee_key(r)] = byPayee[payee_key(r)] || [];
-      const amount = Math.abs(r.betrag_cents);
-      const cluster = clusters.find(c => Math.abs(amount - c.latestCents) <= c.latestCents * AMOUNT_TOLERANCE);
-      if (cluster) cluster.rows.push(r);
-      else clusters.push({ latestCents: amount, rows: [r] });
-    });
+  const clusters = cluster_by_payee(rows.filter(r => r.in_out === 'out' && is_real_cashflow(r) && r._cls && r._cls.group === 'fixed'));
 
-  return Object.values(byPayee).flat()
+  return clusters
     .map(c => {
       const latest = c.rows[0];
       const months = latest._cls?.recurring?.intervalMonths || interval_months(c.rows.map(r => r.date).reverse());
@@ -108,6 +98,52 @@ export function active_contracts(rows, refDate) {
     })
     .filter(c => c && days_between(c.lastDate, refDate) <= c.months * 30.44 * 1.5 + 30)
     .sort((a, b) => b.monthlyCents - a.monthlyCents);
+}
+
+// Groups rows by payee name + broadly similar amount (see AMOUNT_TOLERANCE),
+// most-recent-first within each cluster - shared by active_contracts() above
+// and rule_monthly_equivalent() below. `keyFn` lets callers scope the
+// cluster key further (active_contracts also folds in the category, since
+// the same payee name could in theory recur under a different one).
+export function cluster_by_payee(rows, keyFn = payee_key) {
+  const byKey = {};
+  [...rows].sort((a, b) => b.date - a.date).forEach(r => {
+    const clusters = byKey[keyFn(r)] = byKey[keyFn(r)] || [];
+    const amount = Math.abs(r.betrag_cents);
+    const cluster = clusters.find(c => Math.abs(amount - c.latestCents) <= c.latestCents * AMOUNT_TOLERANCE);
+    if (cluster) cluster.rows.push(r);
+    else clusters.push({ latestCents: amount, rows: [r] });
+  });
+  return Object.values(byKey).flat();
+}
+
+// Monthly-equivalent for one Fix Expense/Income rule's matches, clustered by
+// payee (name + amount) so a category mixing different billing rhythms
+// (e.g. one monthly and one annual insurance policy under "Versicherungen")
+// isn't flattened into a single misleading average - each cluster gets its
+// own detected (or manually overridden) interval, then contributes
+// amount/interval, not a raw sum. `overrides` is an optional
+// { payeeName: intervalMonths } manual map (Settings > Fix Expense/Income)
+// that wins over auto-detection from the booking dates.
+export function rule_monthly_equivalent(rows, overrides = {}) {
+  const clusters = cluster_by_payee(rows, r => (r.name || '').trim().toLowerCase());
+  const items = clusters.map(c => {
+    const latest = c.rows[0];
+    const payee = (latest.name || '').trim().toLowerCase();
+    const autoMonths = interval_months(c.rows.map(r => r.date).reverse()) || 1;
+    const months = overrides[payee] || autoMonths;
+    return {
+      payee,
+      name: latest.name || '(ohne Namen)',
+      months,
+      autoMonths,
+      amountCents: c.latestCents,
+      monthlyCents: Math.round(c.latestCents / months),
+      lastDate: latest.date,
+      rows: c.rows
+    };
+  }).sort((a, b) => b.lastDate - a.lastDate);
+  return { totalCents: items.reduce((sum, c) => sum + c.monthlyCents, 0), clusters: items };
 }
 
 // Net 'reserve' spend over the last 12 months (or less if the data is

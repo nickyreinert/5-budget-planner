@@ -293,3 +293,33 @@ export function apply_amount_overrides(rows, amounts) {
   });
   return rows;
 }
+
+// Local note (Verwendungszweck) edits - also feeds rule matching, since
+// rules.js reads the same verwendungszweck/Verwendungszweck fields.
+export function apply_note_overrides(rows, notes) {
+  rows.forEach(row => {
+    const legacyId = tx_id({ ...row, _txId: undefined });
+    const value = notes[tx_id(row)] ?? notes[row._matchedManualTxId] ?? notes[legacyId];
+    if (value === undefined) return;
+    row._originalVerwendungszweck ??= row.verwendungszweck;
+    row.verwendungszweck = value;
+    row.Verwendungszweck = value;
+  });
+  return rows;
+}
+
+// Local date edits, stored as "YYYY-MM-DD" strings - only `date` (the Date
+// object every grouping/sorting computation actually reads) is touched;
+// the original Datum stays untouched since it (or tx_id) is the storage key.
+export function apply_date_overrides(rows, dates) {
+  rows.forEach(row => {
+    const legacyId = tx_id({ ...row, _txId: undefined });
+    const value = dates[tx_id(row)] ?? dates[row._matchedManualTxId] ?? dates[legacyId];
+    if (!value) return;
+    const [y, m, d] = value.split('-').map(Number);
+    if (!y || !m || !d) return;
+    row._originalDate ??= row.date;
+    row.date = new Date(y, m - 1, d);
+  });
+  return rows;
+}

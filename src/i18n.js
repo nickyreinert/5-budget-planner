@@ -99,6 +99,13 @@ const dict = {
     'recurringExpense.markTitle': 'Als wiederkehrende Ausgabe markieren',
     'recurringExpense.invalid': 'Bitte Kategorie, Intervall und Zahlungsempfänger prüfen.',
 
+    'txEdit.title': 'Buchung bearbeiten',
+    'txEdit.note': 'Notiz / Verwendungszweck',
+    'txEdit.date': 'Datum',
+    'txEdit.invalid': 'Bitte Kategorie und Datum prüfen.',
+    'txActions.title': 'Aktionen',
+    'txActions.delete': '× Löschen',
+
     'quickEntry.fabTitle': 'Ausgabe erfassen',
     'quickEntry.title': 'Ausgabe erfassen',
     'quickEntry.notePlaceholder': 'Notiz (optional)',
@@ -133,7 +140,7 @@ const dict = {
     'budgets.addCategory': 'Kategorie hinzufügen',
     'budgets.mappingTitle': 'Transaktionskategorien den Hauptbudgets zuordnen',
 
-    'fixExpense.intro': 'Fixkosten (Miete, Verträge, Abos, ...): eine Kategorie pro Zeile mit einem einfachen Suchmuster statt komplexer Regeln. Der Betrag ist die Summe der letzten 3 Monate, nicht pro Monat - Aufklappen zeigt die einzelnen Buchungen samt Datum.',
+    'fixExpense.intro': 'Fixkosten (Miete, Verträge, Abos, ...): eine Kategorie pro Zeile mit einem einfachen Suchmuster statt komplexer Regeln. Der Betrag ist ein Monatswert je Zahlungsempfänger (Intervall automatisch erkannt, in der Vorschau unten korrigierbar) - Aufklappen zeigt die einzelnen Buchungen samt Datum.',
     'fixExpense.addRow': '+ Fixkosten-Kategorie',
     'fixExpense.patternLabel': 'Suchmuster (Regex, einfach)',
     'fixExpense.patternPlaceholder': 'z. B. Miete|Nebenkosten',
@@ -144,9 +151,10 @@ const dict = {
     'fixExpense.newCategoryLabel': 'Neue Fixkosten',
     'fixExpense.invalidPattern': 'Ungültiger regulärer Ausdruck.',
     'fixExpense.perMonth': '/Monat',
+    'fixExpense.monthlyHint': 'Monatswert je Zahlungsempfänger, hochgerechnet aus dem erkannten oder manuell gesetzten Intervall.',
     'fixExpense.allAssigned': 'Alle bekannten Kategorien sind einer Fixkosten-Regel zugeordnet.',
 
-    'incomeRules.intro': 'Einnahmen (Gehalt, Erstattungen, ...): eine Kategorie pro Zeile mit einem einfachen Suchmuster statt komplexer Regeln. Der Betrag ist die Summe der letzten 3 Monate, nicht pro Monat - Aufklappen zeigt die einzelnen Buchungen samt Datum.',
+    'incomeRules.intro': 'Einnahmen (Gehalt, Erstattungen, ...): eine Kategorie pro Zeile mit einem einfachen Suchmuster statt komplexer Regeln. Der Betrag ist ein Monatswert je Zahler (Intervall automatisch erkannt, in der Vorschau unten korrigierbar) - Aufklappen zeigt die einzelnen Buchungen samt Datum.',
     'incomeRules.addRow': '+ Einnahmen-Kategorie',
     'incomeRules.newCategoryLabel': 'Neue Einnahme',
 
@@ -157,13 +165,13 @@ const dict = {
 
     'settingsTabs.rules': '⚙️ Allgemein',
     'settingsTabs.budgets': '💰 Budgets',
-    'settingsTabs.fixexpense': '🔁 Fix Expense',
-    'settingsTabs.income': '💵 Income',
+    'settingsTabs.fixexpense': '🔁 Fixkosten',
+    'settingsTabs.income': '💵 Einnahmen',
     'settingsTabs.importexport': '📤 Export / Import',
     'settingsTabs.languages': '🌐 Sprache',
     'settingsTabs.csvimport': '📄 CSV-Import',
     'settingsTabs.bank': '🏦 Bank',
-    'settingsTabs.sync': '🔄 Sync',
+    'settingsTabs.sync': '🔄 Synchronisierung',
 
     'sync.intro': 'Sichere dein SETTING (und optional deine Transaktionsdaten) in einem eigenen, kostenlosen Firebase-Projekt und nutze es auf mehreren Geräten. Erstelle dazu ein Firebase-Projekt (Firestore + Google-Anmeldung aktivieren) und füge unten die Web-App-Konfiguration ein.',
     'sync.firebaseConfigLabel': 'Firebase-Konfiguration (JSON)',
@@ -392,6 +400,13 @@ const dict = {
     'recurringExpense.markTitle': 'Mark as recurring expense',
     'recurringExpense.invalid': 'Please check the category, interval and payee.',
 
+    'txEdit.title': 'Edit transaction',
+    'txEdit.note': 'Note / purpose',
+    'txEdit.date': 'Date',
+    'txEdit.invalid': 'Please check the category and date.',
+    'txActions.title': 'Actions',
+    'txActions.delete': '× Delete',
+
     'quickEntry.fabTitle': 'Log expense',
     'quickEntry.title': 'Log expense',
     'quickEntry.notePlaceholder': 'Note (optional)',
@@ -426,9 +441,9 @@ const dict = {
     'budgets.addCategory': 'Add category',
     'budgets.mappingTitle': 'Map transaction categories to main budgets',
 
-    'fixExpense.intro': 'Fixed expenses (rent, contracts, subscriptions, ...): one category per row with a single simple search pattern instead of complex rules. The amount is the sum of the last 3 months, not a monthly figure - expand to see the individual dated transactions.',
-    'fixExpense.addRow': '+ Fixed expense category',
-    'fixExpense.patternLabel': 'Search pattern (simple regex)',
+    'fixExpense.intro': 'Fixed expenses (rent, contracts, subscriptions, ...): one category per row with a single simple search pattern instead of complex rules. The amount is a monthly value per payee (interval auto-detected, correctable in the preview below) - expand to see the individual dated transactions.',
+    'fixExpense.addRow': '+ Add fixed expense',
+    'fixExpense.patternLabel': 'Search pattern (regex, simple)',
     'fixExpense.patternPlaceholder': 'e.g. Rent|Utilities',
     'fixExpense.previewToggle': 'Transactions in the last 3 months ({count})',
     'fixExpense.noMatches': 'No transactions found in the last 3 months.',
@@ -437,9 +452,10 @@ const dict = {
     'fixExpense.newCategoryLabel': 'New fixed expense',
     'fixExpense.invalidPattern': 'Invalid regular expression.',
     'fixExpense.perMonth': '/month',
+    'fixExpense.monthlyHint': 'Monthly value per payee, extrapolated from the detected or manually set interval.',
     'fixExpense.allAssigned': 'Every known category is already assigned to a fixed expense rule.',
 
-    'incomeRules.intro': 'Income (salary, refunds, ...): one category per row with a single simple search pattern instead of complex rules. The amount is the sum of the last 3 months, not a monthly figure - expand to see the individual dated transactions.',
+    'incomeRules.intro': 'Income (salary, refunds, ...): one category per row with a single simple search pattern instead of complex rules. The amount is a monthly value per payer (interval auto-detected, correctable in the preview below) - expand to see the individual dated transactions.',
     'incomeRules.addRow': '+ Income category',
     'incomeRules.newCategoryLabel': 'New income',
 

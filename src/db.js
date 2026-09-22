@@ -11,6 +11,8 @@ const IMPORT_STORE = 'importedEntries';
 // Namespaced numeric entries reuse the existing store, avoiding upgrades that
 // would block while an older app tab is still open. Category values are strings.
 const AMOUNT_PREFIX = 'amount:';
+const NOTE_PREFIX = 'note:';
+const DATE_PREFIX = 'date:';
 const STORE = 'categoryOverrides';
 const MANUAL_STORE = 'manualEntries';
 
@@ -50,7 +52,9 @@ export async function load_all_overrides() {
     req.onsuccess = (e) => {
       const cursor = e.target.result;
       if (cursor) {
-        if (typeof cursor.value === 'string') overrides[cursor.key] = cursor.value;
+        const key = String(cursor.key);
+        const isNamespaced = key.startsWith(AMOUNT_PREFIX) || key.startsWith(NOTE_PREFIX) || key.startsWith(DATE_PREFIX);
+        if (!isNamespaced && typeof cursor.value === 'string') overrides[cursor.key] = cursor.value;
         cursor.continue();
       } else {
         resolve(overrides);
@@ -106,7 +110,10 @@ export async function delete_manual_entry(id, txId) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction([MANUAL_STORE, STORE], 'readwrite');
     tx.objectStore(MANUAL_STORE).delete(id);
-    if (txId) { tx.objectStore(STORE).delete(txId); tx.objectStore(STORE).delete(AMOUNT_PREFIX + txId); }
+    if (txId) {
+      const store = tx.objectStore(STORE);
+      [txId, AMOUNT_PREFIX + txId, NOTE_PREFIX + txId, DATE_PREFIX + txId].forEach(key => store.delete(key));
+    }
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -138,6 +145,60 @@ export async function save_amount_override(id, cents) {
   });
 }
 
+// Manual note (Verwendungszweck) edits, namespaced the same way as amount
+// overrides so they share the categoryOverrides store without colliding.
+export async function load_note_overrides() {
+  const db = await open_db();
+  return new Promise((resolve, reject) => {
+    const result = {};
+    const req = db.transaction(STORE, 'readonly').objectStore(STORE).openCursor();
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (!cursor) return resolve(result);
+      if (String(cursor.key).startsWith(NOTE_PREFIX) && typeof cursor.value === 'string') result[cursor.key.slice(NOTE_PREFIX.length)] = cursor.value;
+      cursor.continue();
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function save_note_override(id, note) {
+  const db = await open_db();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(String(note || ''), NOTE_PREFIX + id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// Manual date edits, stored as "YYYY-MM-DD" strings.
+export async function load_date_overrides() {
+  const db = await open_db();
+  return new Promise((resolve, reject) => {
+    const result = {};
+    const req = db.transaction(STORE, 'readonly').objectStore(STORE).openCursor();
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (!cursor) return resolve(result);
+      if (String(cursor.key).startsWith(DATE_PREFIX) && typeof cursor.value === 'string') result[cursor.key.slice(DATE_PREFIX.length)] = cursor.value;
+      cursor.continue();
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function save_date_override(id, isoDate) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate || '')) throw new Error('Invalid date');
+  const db = await open_db();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(isoDate, DATE_PREFIX + id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 // Imports have their own durable store; put() is an upsert by source identity.
 export async function upsert_imported_entries(records) {
   const db = await open_db();
@@ -151,7 +212,7 @@ export async function upsert_imported_entries(records) {
       request.onsuccess = () => {
         if (!request.result || request.result._account) return;
         imports.delete(record.legacyId);
-        for (const prefix of ['', AMOUNT_PREFIX]) {
+        for (const prefix of ['', AMOUNT_PREFIX, NOTE_PREFIX, DATE_PREFIX]) {
           const old = overrides.get(prefix + record.legacyId);
           old.onsuccess = () => { if (old.result !== undefined) { overrides.put(old.result, prefix + record.id); overrides.delete(prefix + record.legacyId); } };
         }
