@@ -6,7 +6,7 @@ export let filtered_data = [];
 export let current_path = [];
 
 // `config` follows the shape of csv_config.js's default_csv_config(); if
-// omitted, the classic MoneyMoney/DKB defaults are used (";" delimiter,
+// omitted, the classic 5ive app defaults are used (";" delimiter,
 // German decimal comma, fixed Datum/Name/Verwendungszweck/Betrag/Kategorie
 // header names).
 // Derives the fields every row needs regardless of where it came from (a

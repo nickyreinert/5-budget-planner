@@ -1,7 +1,7 @@
 # gocardless-proxy
 
 A minimal Cloudflare Worker that holds your GoCardless Bank Account Data API
-credentials and proxies the handful of calls the MoneyMoney Analyzer
+frontend needs. It exists because the 5ive app itself is a static, client-only
 frontend needs. It exists because the app itself is a static, client-only
 site with no backend — GoCardless's `secret_id`/`secret_key` must never
 reach the browser, so this small Worker is the one piece of server-side
@@ -56,7 +56,7 @@ add (not included here — see `gc_token()` in `src/index.js`).
    npx wrangler deploy
    ```
 
-   This prints the Worker's URL (`https://moneymoney-gocardless-proxy.<your-subdomain>.workers.dev`).
+   This prints the Worker's URL (`https://five-gocardless-proxy.<your-subdomain>.workers.dev`).
    Enter that URL, along with the `APP_KEY` from step 3, into the app's
    Settings → 🏦 Bank tab.
 

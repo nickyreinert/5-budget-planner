@@ -1,7 +1,7 @@
 // --- gocardless-proxy: minimal Cloudflare Worker ---
 // Holds the GoCardless secret_id/secret_key (never exposed to the browser)
-// and proxies the handful of Bank Account Data API calls the MoneyMoney
-// Analyzer frontend needs. Deliberately stateless - no KV/token caching:
+// and proxies the handful of Bank Account Data API calls the 5ive app frontend needs. 
+// Deliberately stateless - no KV/token caching:
 // this serves one personal user, so re-fetching a token per incoming
 // request is simpler to deploy and plenty fast enough. Add caching later
 // if that ever stops being true.

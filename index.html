@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>MoneyMoney Analyzer</title>
+    <title>5ive Budgets</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="mask-icon" href="favicon.svg" color="#0066cc">
     <link rel="apple-touch-icon" href="favicon.svg">
@@ -11,7 +11,7 @@
     <meta name="theme-color" content="#0066cc">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="MM Analyzer">
+    <meta name="apple-mobile-web-app-title" content="5ive Budgets">
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -211,7 +211,7 @@
                     <p data-i18n="bank.intro">Verbinde dein Bankkonto über GoCardless. Dafür brauchst du einen eigenen kleinen Proxy-Server (siehe gocardless-proxy/README.md im Repo) - trag hier dessen URL und App-Key ein.</p>
                     <div class="csv-field">
                         <label data-i18n="bank.proxyUrlLabel">Proxy-URL</label>
-                        <input type="text" id="gcProxyUrl" placeholder="https://moneymoney-gocardless-proxy.dein-subdomain.workers.dev">
+                        <input type="text" id="gcProxyUrl" placeholder="https://five-gocardless-proxy.dein-subdomain.workers.dev">
                     </div>
                     <div class="csv-field">
                         <label data-i18n="bank.appKeyLabel">App-Key</label>
@@ -278,7 +278,7 @@
 
                 <div id="settingsTab-importexport" class="settings-tab-pane" hidden>
                     <section class="settings-section">
-                    <p data-i18n="csv.intro">Lade hier deine CSV-Datei und stelle bei Bedarf das Format ein, falls dein Export nicht dem MoneyMoney-Standard entspricht.</p>
+                    <p data-i18n="csv.intro">Lade hier deine CSV-Datei und stelle bei Bedarf das Format ein, falls dein Export nicht dem Standard entspricht.</p>
                     <div class="csv-field">
                         <label data-i18n="csv.pickFile">Datei auswählen</label>
                         <input type="file" id="csvFile" accept=".csv">
@@ -404,6 +404,7 @@
             </div>
             <div class="modal-footer">
                 <button id="saveRulesBtn" class="primary" data-i18n="modal.save">Speichern</button>
+                <button id="undoRulesBtn" data-i18n="modal.undo" disabled>Rückgängig</button>
                 <button id="cancelRulesBtn" data-i18n="modal.cancel">Abbrechen</button>
             </div>
         </div>
@@ -516,6 +517,19 @@
         let keypadCategory = null;
         let keypadBuffer = '';
         let keypadDate = new Date();
+
+        // Settings-modal undo/cancel: `modalOpenSnapshot` is the state as of
+        // opening the modal (Abbrechen/X/backdrop-click always reverts all
+        // the way back to it, since every inline edit persists immediately
+        // instead of waiting for "Speichern"). `settingsUndoStack` holds one
+        // entry per persisted change since then, for the "Rückgängig" button;
+        // `lastSettingsSnapshot` is the state right before the next change.
+        let modalOpenSnapshot = null;
+        let lastSettingsSnapshot = null;
+        let settingsUndoStack = [];
+        function settings_snapshot() {
+            return JSON.stringify({ ruleSet, subBudgetCaps });
+        }
 
         // Sensible starting weekly caps (cents) for the bundled default main
         // categories - used when resetting to defaults, since default_rules.json
@@ -1316,11 +1330,48 @@
         }
 
         function persist_budgets() {
+            if (lastSettingsSnapshot) {
+                settingsUndoStack.push(lastSettingsSnapshot);
+                if (settingsUndoStack.length > 50) settingsUndoStack.shift();
+                update_undo_button();
+            }
             ruleSet._manualRuleIds = manual_rule_ids(ruleSet, settingsBaseline || defaultRuleSet);
             reclassify();
             save_rule_set(ruleSet);
             render_week();
             render_all();
+            lastSettingsSnapshot = settings_snapshot();
+        }
+
+        // Updates the "Rückgängig" button's enabled state.
+        function update_undo_button() {
+            const btn = document.getElementById('undoRulesBtn');
+            if (btn) btn.disabled = !settingsUndoStack.length;
+        }
+
+        // Re-renders whichever settings tab is currently visible - shared by
+        // the tab-switch handler, "Rückgängig" and the Abbrechen/X revert.
+        function render_active_settings_tab() {
+            const target = document.querySelector('.settings-tab-btn.active')?.dataset.settingsTab;
+            if (target === 'rules') { render_transfer_preview(); render_connected_accounts(); }
+            if (target === 'budgets') render_sub_budget_settings();
+            if (target === 'fixexpense') render_fix_expense_list();
+            if (target === 'income') render_rule_group_list('income');
+        }
+
+        // Restores a settings_snapshot() string wholesale (used by both the
+        // Abbrechen/X/backdrop-click revert and the "Rückgängig" button).
+        function restore_settings_snapshot(json) {
+            const restored = JSON.parse(json);
+            ruleSet = restored.ruleSet;
+            subBudgetCaps = restored.subBudgetCaps;
+            ruleSet._manualRuleIds = manual_rule_ids(ruleSet, settingsBaseline || defaultRuleSet);
+            save_rule_set(ruleSet);
+            save_sub_budgets(subBudgetCaps);
+            lastSettingsSnapshot = settings_snapshot();
+            render_active_settings_tab();
+            render_quick_add_tiles();
+            if (module_data.length) { reclassify(); render_all(); render_week(); }
         }
         document.getElementById('addMainCategory').addEventListener('click', () => {
             ruleSet.mainCategories.push({id: 'budget_' + Date.now(), label: 'Neues Budget'});
@@ -1543,6 +1594,10 @@
                     render_quick_add_tiles();
                     render_main_budget_progress();
                 });
+                // One undo checkpoint per edit session (on blur/enter), not
+                // one per keystroke - the 'input' handler above already
+                // persists live without the heavier reclassify/render.
+                input.addEventListener('change', () => persist_budgets());
             });
 
             editor.querySelectorAll('.move-up-btn').forEach(btn => {
@@ -1741,13 +1796,20 @@
             `).join('');
         }
 
+        // Keeps every row exactly as edited, including ones with an empty
+        // value - filtering those out here used to delete a matcher row the
+        // moment you changed e.g. its field to "Betrag" before typing a
+        // value (any 'change' event re-saved the whole list and silently
+        // dropped the still-empty row). An empty matcher is harmless: it
+        // behaves as a no-op for text fields and simply won't match yet for
+        // "Betrag" until a value is entered.
         function normalized_matchers(container) {
             return [...container.querySelectorAll('.rule-matcher-row')].map(row => ({
                 field: row.querySelector('[data-matcher-field]').value,
                 operator: row.querySelector('[data-matcher-operator]').value,
                 value: row.querySelector('[data-matcher-value]').value.trim(),
                 exclude: row.querySelector('[data-matcher-exclude]').checked
-            })).filter(matcher => matcher.value);
+            }));
         }
 
         let ruleBrowserState = null;
@@ -2161,12 +2223,17 @@
         const closeBtn = modal.querySelector('.close');
         const configBtn = document.getElementById('configRulesBtn');
         const saveBtn = document.getElementById('saveRulesBtn');
+        const undoBtn = document.getElementById('undoRulesBtn');
         const cancelBtn = document.getElementById('cancelRulesBtn');
         const loadDefaultRulesBtn = document.getElementById('loadDefaultRulesBtn');
 
         configBtn.addEventListener('click', () => {
             render_transfer_preview();
             render_connected_accounts();
+            modalOpenSnapshot = settings_snapshot();
+            lastSettingsSnapshot = modalOpenSnapshot;
+            settingsUndoStack = [];
+            update_undo_button();
             modal.style.display = 'block';
         });
 
@@ -2182,10 +2249,7 @@
                 document.getElementById('settingsTab-income').hidden = target !== 'income';
                 document.getElementById('settingsTab-importexport').hidden = target !== 'importexport';
                 document.getElementById('settingsTab-sync').hidden = target !== 'sync';
-                if (target === 'rules') { render_transfer_preview(); render_connected_accounts(); }
-                if (target === 'budgets') render_sub_budget_settings();
-                if (target === 'fixexpense') render_fix_expense_list();
-                if (target === 'income') render_rule_group_list('income');
+                render_active_settings_tab();
                 if (target === 'sync') subscribe_sync_auth();
             });
         });
@@ -2197,11 +2261,25 @@
             });
         });
 
-        closeBtn.addEventListener('click', () => { modal.style.display = 'none'; });
-        cancelBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+        // Every inline edit in this modal persists immediately (there is no
+        // separate draft state) - Abbrechen/X/backdrop-click must actively
+        // revert to how things were when the modal was opened, not just
+        // close the window and leave whatever was last persisted in place.
+        function close_settings_modal_and_revert() {
+            if (modalOpenSnapshot && modalOpenSnapshot !== settings_snapshot()) restore_settings_snapshot(modalOpenSnapshot);
+            modal.style.display = 'none';
+        }
+        closeBtn.addEventListener('click', close_settings_modal_and_revert);
+        cancelBtn.addEventListener('click', close_settings_modal_and_revert);
 
         window.addEventListener('click', (e) => {
-            if (e.target === modal) modal.style.display = 'none';
+            if (e.target === modal) close_settings_modal_and_revert();
+        });
+
+        undoBtn.addEventListener('click', () => {
+            if (!settingsUndoStack.length) return;
+            restore_settings_snapshot(settingsUndoStack.pop());
+            update_undo_button();
         });
 
         loadDefaultRulesBtn.addEventListener('click', async () => {
@@ -2233,7 +2311,7 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'moneymoney_classification_settings.json';
+            a.download = '5ive_classification_settings.json';
             a.click();
             URL.revokeObjectURL(url);
         });
@@ -2390,7 +2468,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'moneymoney_unclassified_validation.json';
+            a.download = '5ive_unclassified_validation.json';
             a.click();
             URL.revokeObjectURL(url);
         });

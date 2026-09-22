@@ -7,7 +7,7 @@ import { csv_records, reconcile_transactions } from '../src/transactions.js';
 import { enrich_row } from '../src/data.js';
 // Real IndexedDB, isolated from the app's database and removed after the test.
 const nativeDB = globalThis.indexedDB;
-const name = 'moneyMoneyAnalyzer-test-' + crypto.randomUUID();
+const name = 'fiveAnalyzer-test-' + crypto.randomUUID();
 Object.defineProperty(globalThis, 'indexedDB', { value: { open: (_, version) => nativeDB.open(name, version) } });
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 const raw = { Datum: '20.09.2026', Name: 'Fixture shop', Verwendungszweck: '', Kategorie: '', Betrag: '-12.34' };

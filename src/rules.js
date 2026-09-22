@@ -126,7 +126,7 @@ export function classify(tx, ruleSet) {
   }
   const bankKategorie = !tx._ignoreCsvCategories && tx.Kategorie && tx.Kategorie.trim();
   if (bankKategorie) {
-    // MoneyMoney/DKB exports nest categories as "AUSGABEN - <Bereich> - <Detail>"
+    // Transaction exports nest categories as "AUSGABEN - <Bereich> - <Detail>"
     // or "EINNAHMEN - <Detail>". The leading AUSGABEN/EINNAHMEN segment itself
     // carries no useful grouping info, so fall back to the segment after it.
     const parts = bankKategorie.split(' - ');

@@ -1,7 +1,7 @@
 {
-  "name": "MoneyMoney Analyzer",
-  "short_name": "MM Analyzer",
-  "description": "Analysiert und kategorisiert Kontoauszüge (MoneyMoney/CSV), zeigt Ausgaben, Budgets und Trends.",
+  "name": "5ive Budgets",
+  "short_name": "5ive",
+  "description": "5ive Budgets hilft dir, deine Ausgaben zu verwalten und Budgets zu planen.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

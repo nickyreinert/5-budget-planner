@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "moneymoney-gocardless-proxy",
+  "name": "five-gocardless-proxy",
   "main": "src/index.js",
   "compatibility_date": "2026-09-20",
   "observability": {

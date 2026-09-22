@@ -5,7 +5,7 @@
 // (and thus overrides) can grow into the thousands over time - far beyond
 // what's comfortable to keep as one big JSON blob in localStorage.
 
-const DB_NAME = 'moneyMoneyAnalyzer';
+const DB_NAME = 'fiveBudgets';
 const DB_VERSION = 3;
 const IMPORT_STORE = 'importedEntries';
 // Namespaced numeric entries reuse the existing store, avoiding upgrades that

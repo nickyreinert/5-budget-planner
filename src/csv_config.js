@@ -1,7 +1,7 @@
 // --- csv_config.js ---
 // Configurable CSV import: delimiter, line break, encoding and column
 // mapping (by header name or numeric index), so exports from banks other
-// than MoneyMoney/DKB can be loaded without touching the code.
+// than DKB can be loaded without touching the code.
 
 const STORAGE_KEY = 'csvImportConfig';
 
