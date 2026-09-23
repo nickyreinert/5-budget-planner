@@ -475,15 +475,19 @@ dialog.setup-wizard:not([open]) { display: none; }
 .recurring-overview .budget-totals-cell { background: var(--surface); }
 .recurring-overview small { font-weight: 400; }
 .fixexpense-monthly { flex: 0 0 auto !important; font-weight: 600; font-size: 0.82em; color: var(--text-muted); white-space: nowrap; }
-.fixexpense-body { gap: 8px; }
+/* Own background (was inheriting --surface-muted from the shared
+   .main-budget-group-categories class) so it reads as neutral ground
+   between the group header above it and the matchers/preview boxes below,
+   which each need their own distinct shade against it. */
+.fixexpense-body { gap: 8px; background: var(--surface); }
 .fixexpense-pattern-label { font-size: 0.8em; font-weight: 600; color: var(--text-muted); }
 .fixexpense-pattern { width: 100%; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-/* "Search settings" (matchers) and "results" (preview) used to share the
-   same gray background as their .fixexpense-body wrapper - hard to tell
-   apart once a rule has several matcher rows plus a long preview table.
-   Different shades make the two sections visually distinct. */
-.rule-matchers { display: grid; gap: 8px; background: var(--accent-soft); border-radius: var(--radius-sm); padding: 10px; }
-.fixexpense-preview { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; margin-top: 8px; }
+/* "Search settings" (matchers) and "results" (preview) need clearly
+   different shades from each other AND from the neutral .fixexpense-body
+   they sit on - both used to be the same gray, hard to tell apart once a
+   rule has several matcher rows plus a long preview table. */
+.rule-matchers { display: grid; gap: 8px; background: var(--surface-muted); border-radius: var(--radius-sm); padding: 10px; }
+.fixexpense-preview { background: var(--accent-soft); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; margin-top: 8px; }
 .fixexpense-preview summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 0.85em; padding: 4px 0; list-style: none; }
 .fixexpense-preview summary::-webkit-details-marker { display: none; }
 .fixexpense-preview table { width: 100%; border-collapse: collapse; font-size: 0.85em; margin-top: 6px; }
@@ -491,18 +495,21 @@ dialog.setup-wizard:not([open]) { display: none; }
 .fixexpense-preview td.num { width: 25%; text-align: right; white-space: nowrap; }
 /* Second category level (dot-notation subcategories, e.g.
    "Versicherungen.HDI Leben"): a group wraps either one flat/unsplit rule
-   or several subcategory rows. Subrows get a slight indent + lighter
-   background so they read as nested under their parent's header row. */
+   or several subcategory rows. The main/parent category row gets its own
+   accent-tinted shade so it visually reads as "the important one", child
+   subrows stay plain surface so they read as nested underneath it. */
 .fixexpense-group { display: flex; flex-direction: column; }
 .fixexpense-group.drag-over { outline: 2px dashed var(--accent); outline-offset: 2px; }
-.fixexpense-group-row { background: var(--surface-muted); border-radius: var(--radius-sm); }
+.fixexpense-group-row { background: var(--accent-soft); border-radius: var(--radius-sm); }
 .fixexpense-group-body { display: flex; flex-direction: column; gap: 4px; padding-left: 20px; border-left: 2px solid var(--border); margin: 2px 0 8px; }
 .fixexpense-group-body[hidden] { display: none; }
 .fixexpense-group-body .fixexpense-row { background: var(--surface); border-radius: var(--radius-sm); }
 .fixexpense-row.drag-over { outline: 2px dashed var(--accent); outline-offset: 2px; }
-/* Special background so it reads as a distinct "add" affordance, matching
-   the Budgets tab's .cat-add-btn dashed-outline look. */
-.fixexpense-add-sub-btn { align-self: flex-start; margin: 2px 0 8px; background: var(--accent-soft); border: 1px dashed var(--accent); color: var(--accent); font-weight: 600; min-height: 32px; padding: 4px 10px; font-size: 0.85em; }
+/* Icon-only "+" - only ever rendered inside an already-expanded body/group,
+   never next to a collapsed row. Special background so it still reads as
+   a distinct "add" affordance, matching the Budgets tab's .cat-add-btn
+   dashed-outline look. */
+.fixexpense-add-sub-btn { align-self: flex-start; margin: 2px 0 4px; background: var(--accent-soft); border: 1px dashed var(--accent); color: var(--accent); font-weight: 700; min-width: 32px; min-height: 32px; padding: 0; font-size: 1em; line-height: 1; }
 .rule-matcher-row { display: grid; grid-template-columns: minmax(115px, .9fr) minmax(105px, .8fr) minmax(120px, 1.4fr) auto 36px; gap: 7px; align-items: center; }
 .rule-matcher-row input, .rule-matcher-row select { width: 100%; min-width: 0; }
 .matcher-exclude { display: flex; align-items: center; gap: 4px; font-size: 0.82em; color: var(--text-muted); white-space: nowrap; }

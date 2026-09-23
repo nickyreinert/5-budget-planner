@@ -2152,7 +2152,7 @@
                 groups.get(parent).push(rule);
             });
 
-            function rule_row_html(rule, displayName) {
+            function rule_row_html(rule, displayName, extraBodyHtml = '') {
                 const matches = matches_for(rule);
                 const totalCents = rule_monthly_equivalent(matches, rule.recurringOverrides || {}).totalCents;
                 const expanded = cfg.expandedRules.has(rule.id);
@@ -2171,18 +2171,22 @@
                             <summary>${t('fixExpense.previewToggle', { count: matches.length })}</summary>
                             ${render_transaction_preview_table(matches, cfg.amountValue, { byBillingPeriod: true, overrides: rule.recurringOverrides || {}, ruleId: rule.id })}
                         </details>
+                        ${extraBodyHtml}
                     </div>
                 `;
                 return { html, totalCents };
             }
 
             const rowsHtml = [...groups.entries()].map(([parent, groupRules]) => {
-                const addBtnHtml = `<button type="button" class="fixexpense-add-sub-btn" data-parent="${escape_budget(parent)}" data-kind="${kind}">+ ${t('fixExpense.addSubcategory')}</button>`;
+                const addBtnHtml = `<button type="button" class="fixexpense-add-sub-btn" data-parent="${escape_budget(parent)}" data-kind="${kind}" title="${t('fixExpense.addSubcategory')}" aria-label="${t('fixExpense.addSubcategory')}">+</button>`;
                 if (groupRules.length === 1) {
                     const rule = groupRules[0];
-                    const { html, totalCents } = rule_row_html(rule, rule.category || rule.label || '');
+                    // Only reachable once this (single, unsplit) category's own
+                    // row is expanded - the "+" lives inside its body, not next
+                    // to the collapsed row.
+                    const { html, totalCents } = rule_row_html(rule, rule.category || rule.label || '', addBtnHtml);
                     overviewTotalCents += totalCents;
-                    return `<div class="fixexpense-group" data-parent="${escape_budget(parent)}" data-kind="${kind}">${html}${addBtnHtml}</div>`;
+                    return `<div class="fixexpense-group" data-parent="${escape_budget(parent)}" data-kind="${kind}">${html}</div>`;
                 }
                 const groupExpanded = cfg.expandedGroups.has(parent);
                 const sortedRules = [...groupRules].sort((a, b) => (a.priority || 0) - (b.priority || 0));
@@ -2199,9 +2203,9 @@
                             <input value="${escape_budget(parent)}" data-parent="${escape_budget(parent)}" data-kind="${kind}" data-field="parent-category" aria-label="Kategorie">
                             <span class="fixexpense-monthly" title="${t('fixExpense.monthlyHint')}">${fmt_eur(groupTotalCents)} ${t('fixExpense.perMonth')}</span>
                         </div>
-                        ${addBtnHtml}
                         <div class="fixexpense-group-body" ${groupExpanded ? '' : 'hidden'}>
                             ${rendered.map(r => r.html).join('')}
+                            ${addBtnHtml}
                         </div>
                     </div>
                 `;
