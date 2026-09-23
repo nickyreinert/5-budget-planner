@@ -1261,7 +1261,7 @@
             if (!module_data.length) return [];
             const today = new Date(Math.min(+new Date(), Math.max(...module_data.map(r => +r.date))));
             const first = new Date(Math.min(...module_data.map(r => +r.date)));
-            let cursor = week_start(currentYear ? new Date(Number(currentYear), 0, 1) : new Date(Math.max(+first, +new Date(today.getFullYear(), today.getMonth() - 5, 1))));
+            let cursor = week_start(currentYear ? new Date(Number(currentYear), 0, 1) : first);
             const end = week_start(currentYear ? new Date(Math.min(+today, +new Date(Number(currentYear), 11, 31))) : today);
             const mondays = [];
             while (cursor <= end) { mondays.push(new Date(cursor)); cursor = add_days(cursor, 7); }
@@ -1305,21 +1305,23 @@
             };
 
             container.innerHTML = `
-                <h3 class="week-cal-title">${t('week.calendarTitle')}</h3>
+                <h3 class="week-cal-title">${currentYear ? t('week.calendarTitle') : t('week.calendarTitleAllYears')}</h3>
                 <table class="week-savings-cal"><tbody>
                     ${monthKeys.map(key => {
                         const list = monthsMap.get(key).slice().sort((a, b) => a.monday - b.monday);
                         const totalCents = list.reduce((sum, w) => sum + w.savingsCents, 0);
+                        const summaryCents = currentYear ? totalCents : Math.round(totalCents / list.length);
+                        const summaryLabel = currentYear ? t('week.calendarTotal') : t('week.calendarAverage');
                         const cells = list.map(w => `
                             <td role="button" tabindex="0" class="week-cal-cell${w.monday.getTime() === currentMonday.getTime() ? ' current-week' : ''}${weekFilterMonday && w.monday.getTime() === weekFilterMonday.getTime() ? ' selected' : ''}" data-monday="${w.monday.getTime()}" style="${cell_style(w.savingsCents)}">
                                 <div class="week-cal-week">KW ${iso_week_number(w.monday)}</div>
                                 <div class="week-cal-value">${fmt_savings(w.savingsCents)}</div>
                             </td>`).join('');
                         return `<tr>
-                            <th class="week-cal-month">${escape_budget(month_label(key))}</th>
-                            <td class="week-cal-total" role="button" tabindex="0" data-month="${key}" style="${cell_style(totalCents)}">
-                                <div class="week-cal-week">${t('week.calendarTotal')}</div>
-                                <div class="week-cal-value">${fmt_savings(totalCents)}</div>
+                            <th class="week-cal-month${monthFilter === key ? ' selected' : ''}" role="button" tabindex="0" data-month="${key}">${escape_budget(month_label(key))}</th>
+                            <td class="week-cal-total" role="button" tabindex="0" data-month="${key}" style="${cell_style(summaryCents)}">
+                                <div class="week-cal-week">${summaryLabel}</div>
+                                <div class="week-cal-value">${fmt_savings(summaryCents)}</div>
                             </td>
                             ${cells}
                         </tr>`;
@@ -1327,8 +1329,8 @@
                 </tbody></table>
             `;
 
-            container.querySelectorAll('.week-cal-total').forEach(cell => {
-                cell.onclick = () => { monthFilter = cell.dataset.month; weekFilterMonday = null; render_all(); jump_to_chart('budgetTrend'); };
+            container.querySelectorAll('.week-cal-total, .week-cal-month').forEach(cell => {
+                cell.onclick = () => { set_month_filter(cell.dataset.month); jump_to_chart('budgetTrend'); };
             });
             container.querySelectorAll('[role="button"]').forEach(cell => cell.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cell.click(); } });
             container.querySelectorAll('.week-cal-cell').forEach(cell => {
@@ -3150,6 +3152,11 @@
 
         function set_week_filter(monday) {
             weekFilterMonday = monday; monthFilter = null;
+            render_all();
+        }
+
+        function set_month_filter(month) {
+            monthFilter = month; weekFilterMonday = null;
             render_all();
         }
 

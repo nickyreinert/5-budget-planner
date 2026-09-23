@@ -95,7 +95,9 @@ const dict = {
     'week.leftoverLastWeek': 'Übrig letzte Woche:',
     'week.leftoverThisMonth': 'Übrig diesen Monat:',
     'week.calendarTitle': 'Ersparnis pro Woche',
+    'week.calendarTitleAllYears': 'Durchschnittliche Ersparnis pro Woche',
     'week.calendarTotal': 'Gesamt',
+    'week.calendarAverage': 'Ø / Woche',
 
     'recurringExpense.title': 'Wiederkehrende Ausgabe',
     'recurringExpense.intro': 'Lege für diese Buchung eine Regel für wiederkehrende Fixkosten an.',
@@ -455,7 +457,9 @@ const dict = {
     'week.leftoverLastWeek': 'Left over last week:',
     'week.leftoverThisMonth': 'Left over this month:',
     'week.calendarTitle': 'Savings per week',
+    'week.calendarTitleAllYears': 'Average savings per week',
     'week.calendarTotal': 'Total',
+    'week.calendarAverage': 'Avg / week',
 
     'recurringExpense.title': 'Recurring expense',
     'recurringExpense.intro': 'Create a rule for this booking as a recurring fixed expense.',
