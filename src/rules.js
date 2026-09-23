@@ -226,23 +226,35 @@ export function classify_all(rows, ruleSet) {
 // set, falling back to whatever group classify_all() had assigned.
 export function apply_manual_overrides(rows, overridesById, ruleSet) {
   if (!overridesById) return rows;
-  const groupByCategory = {};
+  const ruleByCategory = {};
   (ruleSet.rules || []).forEach(rule => {
     const cat = rule.category || rule.label;
-    if (cat && !(cat in groupByCategory)) groupByCategory[cat] = rule.group || FALLBACK_GROUP;
+    if (cat && !(cat in ruleByCategory)) ruleByCategory[cat] = rule;
   });
   const allowed = new Set(category_catalog(ruleSet));
   rows.forEach(r => {
     const legacyId = tx_id({ ...r, _txId: undefined });
     const category = overridesById[tx_id(r)] || overridesById[r._matchedManualTxId] || overridesById[r._matchedBankTxId] || overridesById[legacyId] || r._matchedManualCategory || (r.source === 'manual' ? r.Kategorie : null);
     if (!category || !allowed.has(category)) return;
+    // A manually-overridden row bypasses rule_matches() entirely, but it
+    // can still belong to a Fix Expense/Income rule that has an explicit
+    // recurringOverrides entry for this payee (e.g. a manual "fixed
+    // expense" booking - see Settings > Fix Expense/Income - always sets
+    // one for its own payee so it counts toward the budget immediately
+    // instead of needing a second occurrence before an interval can be
+    // detected). Without this, `_cls.recurring` would always be empty here,
+    // silently ignoring that override.
+    const rule = ruleByCategory[category];
+    const payee = String(r.name || r.Name || '').trim().toLocaleLowerCase();
+    const intervalMonths = rule?.recurringOverrides?.[payee];
     r._cls = {
       ruleId: null,
       label: category,
       category,
-      group: category === UNCATEGORIZED ? 'unclassified' : category === ADDITIONAL_INCOME ? 'income' : groupByCategory[category] || 'discretionary',
+      group: category === UNCATEGORIZED ? 'unclassified' : category === ADDITIONAL_INCOME ? 'income' : rule?.group || 'discretionary',
       incomeType: category === ADDITIONAL_INCOME ? 'other' : undefined,
-      excluded: (ruleSet.rules || []).some(rule => rule.category === category && rule.excludeFromTotals),
+      recurring: intervalMonths ? { ...(rule.recurring || {}), intervalMonths } : rule?.recurring,
+      excluded: !!rule?.excludeFromTotals,
       source: 'manual'
     };
   });

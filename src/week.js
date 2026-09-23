@@ -80,8 +80,24 @@ export function interval_months(dates) {
   return 12;
 }
 
+// A contract counts as still running if its last payment isn't older than
+// ~1.5x its own billing interval (plus a month of slack) - shared by
+// active_contracts() and rule_monthly_equivalent() so "is this contract
+// still active" is defined exactly once and can never disagree between the
+// actual budget calculation and any UI total derived from it.
+export function contract_is_active(lastDate, months, refDate) {
+  return days_between(lastDate, refDate) <= months * 30.44 * 1.5 + 30;
+}
+
 // All contracts (payee + amount cluster) of the 'fixed' group that are
-// still running at `refDate`, each with its monthly equivalent.
+// still running at `refDate`, each with its monthly equivalent. A cluster
+// with only ONE occurrence and no explicit recurringOverride is treated as
+// a one-off, not an ongoing contract (see tests) - unlike
+// rule_monthly_equivalent() below, which is fine defaulting an
+// unrecognized single occurrence to "monthly" for the Settings/Week-tab
+// per-rule preview, since that one only ever reflects ALREADY-EXISTING
+// rows, whereas this total directly reduces the user's spendable budget
+// and must stay conservative about brand-new/unconfirmed patterns.
 export function active_contracts(rows, refDate) {
   const clusters = cluster_by_payee(rows.filter(r => r.in_out === 'out' && is_real_cashflow(r) && r._cls && r._cls.group === 'fixed'));
 
@@ -99,7 +115,7 @@ export function active_contracts(rows, refDate) {
         lastDate: latest.date
       };
     })
-    .filter(c => c && days_between(c.lastDate, refDate) <= c.months * 30.44 * 1.5 + 30)
+    .filter(c => c && contract_is_active(c.lastDate, c.months, refDate))
     .sort((a, b) => b.monthlyCents - a.monthlyCents);
 }
 
@@ -139,7 +155,16 @@ export function cluster_by_payee(rows, keyFn = payee_key) {
 // together by a manual contract merge (rule.contractMerges, e.g. a PayPal
 // settlement leg + the actual merchant charge it pays for) cluster by that
 // shared contractId instead of by name, so they count as ONE expense.
-export function rule_monthly_equivalent(rows, overrides = {}) {
+// `rows` should be the FULL matching history, not a recent-months window -
+// interval detection needs enough date gaps to work with, and a windowed
+// input that happens to contain only one occurrence of an annual/
+// semi-annual bill silently falls back to "autoMonths = 1" (treating it as
+// monthly), wildly overcounting it. `refDate`, if given, additionally zeroes
+// out (excludes from totalCents, but keeps in `clusters` with `active:
+// false`) any contract that's no longer running per contract_is_active() -
+// this is what makes this total agree with build_budget_basis().fixedCents,
+// which already applies the exact same cutoff via active_contracts().
+export function rule_monthly_equivalent(rows, overrides = {}, refDate = null) {
   const clusters = cluster_by_payee(rows, r => r._cls?.contractId ? `contract:${r._cls.contractId}` : (r.name || '').trim().toLowerCase());
   const items = clusters.map(c => {
     const latest = c.rows[0];
@@ -154,10 +179,11 @@ export function rule_monthly_equivalent(rows, overrides = {}) {
       amountCents: c.latestCents,
       monthlyCents: Math.round(c.latestCents / months),
       lastDate: latest.date,
+      active: refDate ? contract_is_active(latest.date, months, refDate) : true,
       rows: c.rows
     };
   }).sort((a, b) => b.lastDate - a.lastDate);
-  return { totalCents: items.reduce((sum, c) => sum + c.monthlyCents, 0), clusters: items };
+  return { totalCents: items.filter(c => c.active).reduce((sum, c) => sum + c.monthlyCents, 0), clusters: items };
 }
 
 // Net 'reserve' spend over the last 12 months (or less if the data is
@@ -178,10 +204,15 @@ export function reserve_monthly_cents(rows, refDate) {
 // reserve rows only, NOT the latest row overall: quick-entry (manual)
 // spend is always dated "today" regardless of how stale the last CSV
 // import is, and would otherwise drag refDate forward past every real
-// contract's last payment, making every one of them look "ended".
+// contract's last payment, making every one of them look "ended". This
+// now also explicitly excludes manual rows (`_manualId` set) even when
+// classified into one of these groups - Settings > Fix Expense/Income has
+// a "manuelle Buchung erfassen" action for bookings that never appear in
+// any bank export (e.g. cash rent), and those are dated "today" by the
+// same construction, so they must not anchor refDate either.
 const BANK_DATA_GROUPS = new Set(['income', 'fixed', 'reserve']);
 function bank_data_ref_date(rows) {
-  const bankRows = rows.filter(r => BANK_DATA_GROUPS.has(r._cls && r._cls.group));
+  const bankRows = rows.filter(r => BANK_DATA_GROUPS.has(r._cls && r._cls.group) && !r._manualId);
   return bankRows.length ? latest_date(bankRows) : latest_date(rows);
 }
 

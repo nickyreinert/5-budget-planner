@@ -637,6 +637,8 @@
         let keypadCategory = null;
         let keypadBuffer = '';
         let keypadDate = new Date();
+        let keypadPositive = false;
+        let keypadOnDone = null;
 
         // Settings-modal undo/cancel: `modalOpenSnapshot` is the state as of
         // opening the modal (Abbrechen/X/backdrop-click always reverts all
@@ -1177,8 +1179,8 @@
                 </table>
                 <h4>${t('week.contractsTitle')}</h4>
                 ${fixedRules.length ? fixedRules.map(rule => {
-                    const matches = rule_recent_matches(rule, r => r.betrag_cents < 0);
-                    const totalCents = rule_monthly_equivalent(matches, rule.recurringOverrides || {}).totalCents;
+                    const matches = rule_all_matches(rule, r => r.betrag_cents < 0);
+                    const totalCents = rule_monthly_equivalent(matches, rule.recurringOverrides || {}, basis.refDate).totalCents;
                     return `
                         <details class="main-budget">
                             <summary>
@@ -1462,10 +1464,12 @@
             document.getElementById('keypadConfirm').disabled = buffer_to_cents(keypadBuffer) <= 0;
         }
 
-        function open_keypad(category) {
+        function open_keypad(category, opts = {}) {
             keypadCategory = category;
             keypadBuffer = '';
             keypadDate = new Date();
+            keypadPositive = !!opts.positive;
+            keypadOnDone = opts.onDone || null;
             document.getElementById('keypadCategoryLabel').textContent = category;
             document.getElementById('keypadNote').value = '';
             document.getElementById('keypadDateInput').hidden = true;
@@ -1493,7 +1497,7 @@
                 Name: note || keypadCategory,
                 Verwendungszweck: '',
                 Kategorie: keypadCategory,
-                Betrag: (-amountCents / 100).toFixed(2)
+                Betrag: ((keypadPositive ? amountCents : -amountCents) / 100).toFixed(2)
             };
             record._txId = 'manual:' + record.id;
             await add_manual_entry(record);
@@ -1504,9 +1508,34 @@
             overridesById[id] = keypadCategory;
             await merge_manual_entries();
             reclassify();
+            // A brand new manual Fix Expense/Income booking has, by
+            // definition, exactly one occurrence so far - active_contracts()
+            // (the actual budget calculation) deliberately treats an
+            // undetectable interval as "one-off, not a real contract" to
+            // stay conservative about real bank one-offs (see week.js
+            // tests), which would otherwise make this manual booking count
+            // toward the Settings/Week-tab preview immediately but NOT
+            // toward the real budget until a second occurrence exists.
+            // Defaulting its interval to monthly here (same as any other
+            // rule's manual override, editable afterward via the preview's
+            // interval dropdown) resolves that ambiguity explicitly instead
+            // of leaving it to a fallback that disagrees between the two.
+            // Looked up by category, not _cls.ruleId - a manually-overridden
+            // row's ruleId is always null (see apply_manual_overrides()).
+            const manualRule = (ruleSet.rules || []).find(r => (r.category || r.label) === keypadCategory);
+            if (manualRule && (manualRule.group === 'fixed' || manualRule.group === 'income')) {
+                const payeeKey = (record.Name || '').trim().toLowerCase();
+                manualRule.recurringOverrides ||= {};
+                if (!manualRule.recurringOverrides[payeeKey]) {
+                    manualRule.recurringOverrides[payeeKey] = 1;
+                    persist_budgets();
+                    reclassify();
+                }
+            }
             render_all();
             render_week();
             close_keypad();
+            if (keypadOnDone) { const done = keypadOnDone; keypadOnDone = null; done(); }
         }
 
         document.querySelectorAll('.keypad-key[data-digit]').forEach(btn => {
@@ -1677,8 +1706,8 @@
         // selection, same tier as expandedCatChips/RULE_GROUP_EDITORS
         // Sets elsewhere).
         const ruleMergeSelections = new Map();
-        // Detection window is 12 months (see rule_recent_matches) so annual
-        // bills show up, but a monthly bill would then dump 12 rows into the
+        // Clustering uses the FULL match history (see rule_all_matches), so a
+        // long-running monthly bill would dump years of rows into the
         // preview - cap the DISPLAYED rows per cluster to the most recent
         // few, the collapsed rest is summarized by a single count line.
         const RECURRING_PREVIEW_ROW_LIMIT = 5;
@@ -1689,7 +1718,7 @@
                 const rowsHtml = group_rows_by_month(sorted, r => tx_preview_row_html(r, amountValue), 3);
                 return `<table class="transaction-preview">${rowsHtml}</table>`;
             }
-            const { clusters } = rule_monthly_equivalent(rows, opts.overrides || {});
+            const { clusters } = rule_monthly_equivalent(rows, opts.overrides || {}, opts.refDate || null);
             const ruleId = opts.ruleId || '';
             const selected = ruleMergeSelections.get(ruleId) || new Set();
             // Keyed by payee+amount, not payee alone - the same payee name
@@ -1722,6 +1751,7 @@
                             <option value="12" ${cluster.months === 12 ? 'selected' : ''}>${t('week.interval.12')}</option>
                         </select>
                         <span class="tx-interval-monthly">≈ ${fmt_eur(cluster.monthlyCents)} ${t('fixExpense.perMonth')}</span>
+                        ${cluster.active === false ? `<span class="tx-interval-ended" title="${t('fixExpense.contractEndedHint')}">${t('fixExpense.contractEnded')}</span>` : ''}
                         ${ruleId && mergedRow ? `<button type="button" class="tx-unmerge-btn" data-rule="${escape_budget(ruleId)}" data-merge-id="${escape_budget(mergedRow._cls.contractId)}" title="${t('fixExpense.unmerge')}">${t('fixExpense.unmerge')}</button>` : ''}
                     </td>
                 </tr>
@@ -2087,11 +2117,22 @@
         // exactly one category (classify() already picked the highest-
         // priority matching rule), so two categories whose patterns happen
         // to overlap must never both claim/count the same booking.
-        function rule_recent_matches(rule, amountFilter) {
-            const now = module_data.length ? build_budget_basis(module_data).refDate : new Date();
-            const windowStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+        // Same match set as rule_matches() would find for this rule, but
+        // pre-filtered to the resolved classification (see comment above)
+        // and using the FULL history (no date window) - required for
+        // correct monthly-total/interval detection. A windowed input that
+        // happens to contain only ONE occurrence of an annual/semi-annual
+        // bill makes interval_months() return null, silently defaulting to
+        // "monthly" and wildly overcounting it (this is what caused the
+        // fixed-expense total shown here to disagree with the actual weekly
+        // budget calculation, which always uses full history via
+        // active_contracts()). The transaction preview table still only
+        // DISPLAYS the most recent few rows per cluster (see
+        // RECURRING_PREVIEW_ROW_LIMIT) - only the totals/interval detection
+        // basis changes here, not what's shown.
+        function rule_all_matches(rule, amountFilter) {
             const category = rule.category || rule.label;
-            return module_data.filter(r => r.date >= windowStart && r.date <= now && amountFilter(r) && r._cls?.category === category);
+            return module_data.filter(r => amountFilter(r) && r._cls?.category === category);
         }
 
         function rule_matchers(rule) {
@@ -2240,7 +2281,13 @@
             const openPreviews = new Set([...container.querySelectorAll('details[open]')].map(el => el.dataset.rule));
             const rules = (ruleSet.rules || []).filter(r => r.group === kind);
 
-            const matches_for = rule => rule_recent_matches(rule, cfg.amountFilter);
+            // Full history (not a recent-months window) - see rule_all_matches
+            // for why, and refDate so a contract that's stopped renewing is
+            // excluded from the total exactly like build_budget_basis()'s
+            // actual weekly-budget calculation excludes it, instead of the
+            // two silently disagreeing.
+            const refDate = module_data.length ? build_budget_basis(module_data).refDate : new Date();
+            const matches_for = rule => rule_all_matches(rule, cfg.amountFilter);
             let overviewTotalCents = 0;
 
             // One category can now be split into subcategories via dot
@@ -2258,7 +2305,7 @@
 
             function rule_row_html(rule, displayName, extraBodyHtml = '') {
                 const matches = matches_for(rule);
-                const totalCents = rule_monthly_equivalent(matches, rule.recurringOverrides || {}).totalCents;
+                const totalCents = rule_monthly_equivalent(matches, rule.recurringOverrides || {}, refDate).totalCents;
                 const expanded = cfg.expandedRules.has(rule.id);
                 const matchers = rule_matchers(rule);
                 const html = `
@@ -2270,10 +2317,10 @@
                     </div>
                     <div class="main-budget-group-categories fixexpense-body" ${expanded ? '' : 'hidden'}>
                         <div class="rule-matchers" data-rule="${escape_budget(rule.id)}">${matcher_editor_html(matchers)}</div>
-                        <div class="rule-matcher-actions"><button type="button" class="add-matcher-btn" data-rule="${escape_budget(rule.id)}">+ Suchmuster</button><button type="button" class="browse-rule-btn" data-rule="${escape_budget(rule.id)}">Buchungen durchsuchen</button></div>
+                        <div class="rule-matcher-actions"><button type="button" class="add-matcher-btn" data-rule="${escape_budget(rule.id)}">+ Suchmuster</button><button type="button" class="browse-rule-btn" data-rule="${escape_budget(rule.id)}">Buchungen durchsuchen</button><button type="button" class="add-manual-tx-btn" data-rule="${escape_budget(rule.id)}" data-kind="${kind}">${t('fixExpense.addManualEntry')}</button></div>
                         <details class="fixexpense-preview" data-rule="${escape_budget(rule.id)}" ${openPreviews.has(rule.id) ? 'open' : ''}>
                             <summary>${t('fixExpense.recurringPreviewToggle', { count: matches.length })}</summary>
-                            ${render_transaction_preview_table(matches, cfg.amountValue, { byBillingPeriod: true, overrides: rule.recurringOverrides || {}, ruleId: rule.id })}
+                            ${render_transaction_preview_table(matches, cfg.amountValue, { byBillingPeriod: true, overrides: rule.recurringOverrides || {}, ruleId: rule.id, refDate })}
                         </details>
                         ${extraBodyHtml}
                     </div>
@@ -2437,6 +2484,18 @@
                 persist_budgets(); render_rule_group_list(kind);
             }));
             container.querySelectorAll('.browse-rule-btn').forEach(btn => btn.addEventListener('click', () => open_rule_transaction_browser(kind, btn.dataset.rule)));
+            // Manually book a payment that will never show up in an imported
+            // CSV (e.g. rent or a subscription paid in cash) directly under
+            // this rule's category - reuses the same quick-entry keypad the
+            // Week tab's "Ausgabe hinzufügen" tiles use, just without the
+            // fixed/income exclusion that keypad's regular category picker
+            // applies (that exclusion only makes sense for one-off spend,
+            // not for a rule you're deliberately adding manual bookings to).
+            container.querySelectorAll('.add-manual-tx-btn').forEach(btn => btn.addEventListener('click', () => {
+                const rule = (ruleSet.rules || []).find(r => r.id === btn.dataset.rule);
+                if (!rule) return;
+                open_keypad(rule.category || rule.label, { positive: btn.dataset.kind === 'income', onDone: () => render_rule_group_list(btn.dataset.kind) });
+            }));
 
             container.querySelectorAll('.fixexpense-row .remove-btn').forEach(btn => {
                 btn.addEventListener('click', () => {

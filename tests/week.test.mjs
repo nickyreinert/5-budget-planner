@@ -36,6 +36,37 @@ test('a contract merge combines rows into one cluster even when amounts differ w
   assert.equal(merged.clusters[0].rows.length, 2);
 });
 
+test('rule_monthly_equivalent needs the FULL history to detect an annual interval - a windowed subset with only one occurrence silently defaults to "monthly" and wildly overcounts it', () => {
+  const fullHistory = [
+    tx('2026-09-01', -12000, 'Jahresversicherung', 'fixed'),
+    tx('2025-09-01', -12000, 'Jahresversicherung', 'fixed'),
+    tx('2024-09-01', -12000, 'Jahresversicherung', 'fixed'),
+  ];
+  const full = rule_monthly_equivalent(fullHistory);
+  assert.equal(full.clusters[0].months, 12);
+  assert.equal(full.totalCents, 1000); // 12000 / 12
+
+  const windowed = rule_monthly_equivalent([fullHistory[0]]);
+  assert.equal(windowed.clusters[0].months, 1, 'only one occurrence visible - interval cannot be detected, falls back to 1');
+  assert.equal(windowed.totalCents, 12000, 'this is the overcounting bug: the annual bill is (wrongly) treated as monthly');
+});
+
+test('rule_monthly_equivalent excludes a contract that stopped renewing from totalCents when refDate is given, matching build_budget_basis()', () => {
+  const rows = [
+    tx('2026-09-01', -1000, 'Aktiv GmbH', 'fixed'),
+    tx('2026-08-01', -1000, 'Aktiv GmbH', 'fixed'),
+    tx('2025-01-01', -5000, 'Gekuendigt AG', 'fixed'),
+    tx('2024-12-01', -5000, 'Gekuendigt AG', 'fixed'),
+  ];
+  const refDate = new Date('2026-09-15');
+  const result = rule_monthly_equivalent(rows, {}, refDate);
+  const active = result.clusters.find(c => c.name === 'Aktiv GmbH');
+  const ended = result.clusters.find(c => c.name === 'Gekuendigt AG');
+  assert.equal(active.active, true);
+  assert.equal(ended.active, false, 'last payment over a year ago for a monthly contract - no longer running');
+  assert.equal(result.totalCents, active.monthlyCents, 'ended contract must not count toward the total');
+});
+
 test('weeks start on Monday, Sunday belongs to the previous week', () => {
   assert.equal(week_start(new Date(2026, 8, 14)).getDate(), 14); // Mo
   assert.equal(week_start(new Date(2026, 8, 20)).getDate(), 14); // So
