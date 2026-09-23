@@ -1286,11 +1286,18 @@
 
             const monthsMap = new Map();
             weeks.forEach(w => {
-                const key = `${w.monday.getFullYear()}-${String(w.monday.getMonth()).padStart(2, '0')}`;
+                const key = currentYear
+                    ? `${w.monday.getFullYear()}-${String(w.monday.getMonth()).padStart(2, '0')}`
+                    : `all-${String(w.monday.getMonth()).padStart(2, '0')}`;
                 if (!monthsMap.has(key)) monthsMap.set(key, []);
                 monthsMap.get(key).push(w);
             });
-            const monthKeys = [...monthsMap.keys()].sort().reverse(); // most recent month first
+            // A chosen year keeps the chronological month list. “All years”
+            // intentionally becomes a compact Jan–Dec table: each cell is the
+            // average for that ISO week over every available year.
+            const monthKeys = currentYear
+                ? [...monthsMap.keys()].sort().reverse()
+                : Array.from({ length: 12 }, (_, month) => `all-${String(month).padStart(2, '0')}`);
 
             const fmt_savings = cents => (cents >= 0 ? '+' : '') + fmt_eur_int(cents);
             const cell_style = cents => {
@@ -1300,23 +1307,44 @@
                 return `background:rgba(${cents < 0 ? '231,76,60' : '46,204,113'},${alpha})`;
             };
             const month_label = key => {
-                const [y, m] = key.split('-').map(Number);
-                return new Date(y, m, 1).toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
+                const [year, month] = key.split('-');
+                return new Date(Number(year) || 2000, Number(month), 1).toLocaleDateString(locale(), currentYear ? { month: 'long', year: 'numeric' } : { month: 'long' });
             };
 
             container.innerHTML = `
                 <h3 class="week-cal-title">${currentYear ? t('week.calendarTitle') : t('week.calendarTitleAllYears')}</h3>
                 <table class="week-savings-cal"><tbody>
                     ${monthKeys.map(key => {
-                        const list = monthsMap.get(key).slice().sort((a, b) => a.monday - b.monday);
-                        const totalCents = list.reduce((sum, w) => sum + w.savingsCents, 0);
-                        const summaryCents = currentYear ? totalCents : Math.round(totalCents / list.length);
-                        const summaryLabel = currentYear ? t('week.calendarTotal') : t('week.calendarAverage');
-                        const cells = list.map(w => `
-                            <td role="button" tabindex="0" class="week-cal-cell${w.monday.getTime() === currentMonday.getTime() ? ' current-week' : ''}${weekFilterMonday && w.monday.getTime() === weekFilterMonday.getTime() ? ' selected' : ''}" data-monday="${w.monday.getTime()}" style="${cell_style(w.savingsCents)}">
-                                <div class="week-cal-week">KW ${iso_week_number(w.monday)}</div>
-                                <div class="week-cal-value">${fmt_savings(w.savingsCents)}</div>
-                            </td>`).join('');
+                        const list = (monthsMap.get(key) || []).slice().sort((a, b) => a.monday - b.monday);
+                        const summaryLabel = currentYear ? t('week.calendarTotal') : t('week.calendarAverageMonth');
+                        let summaryCents, cells;
+                        if (currentYear) {
+                            summaryCents = list.reduce((sum, w) => sum + w.savingsCents, 0);
+                            cells = list.map(w => `
+                                <td role="button" tabindex="0" class="week-cal-cell${w.monday.getTime() === currentMonday.getTime() ? ' current-week' : ''}${weekFilterMonday && w.monday.getTime() === weekFilterMonday.getTime() ? ' selected' : ''}" data-monday="${w.monday.getTime()}" style="${cell_style(w.savingsCents)}">
+                                    <div class="week-cal-week">${t('week.label', { week: iso_week_number(w.monday) })}</div>
+                                    <div class="week-cal-value">${fmt_savings(w.savingsCents)}</div>
+                                </td>`).join('');
+                        } else {
+                            const monthTotals = new Map();
+                            const weekGroups = new Map();
+                            list.forEach(w => {
+                                const year = w.monday.getFullYear();
+                                monthTotals.set(year, (monthTotals.get(year) || 0) + w.savingsCents);
+                                const week = iso_week_number(w.monday);
+                                if (!weekGroups.has(week)) weekGroups.set(week, []);
+                                weekGroups.get(week).push(w.savingsCents);
+                            });
+                            const totals = [...monthTotals.values()];
+                            summaryCents = totals.length ? Math.round(totals.reduce((sum, cents) => sum + cents, 0) / totals.length) : 0;
+                            cells = [...weekGroups.entries()].sort(([a], [b]) => a - b).map(([week, values]) => {
+                                const averageCents = Math.round(values.reduce((sum, cents) => sum + cents, 0) / values.length);
+                                return `<td class="week-cal-cell week-cal-average" style="${cell_style(averageCents)}">
+                                    <div class="week-cal-week">${t('week.label', { week })}</div>
+                                    <div class="week-cal-value">${fmt_savings(averageCents)}</div>
+                                </td>`;
+                            }).join('');
+                        }
                         return `<tr>
                             <th class="week-cal-month${monthFilter === key ? ' selected' : ''}" role="button" tabindex="0" data-month="${key}">${escape_budget(month_label(key))}</th>
                             <td class="week-cal-total" role="button" tabindex="0" data-month="${key}" style="${cell_style(summaryCents)}">
@@ -2201,8 +2229,9 @@
         }
         function overview_rows() {
             let from = weekFilterMonday, to = from ? add_days(from, 7) : null;
-            if (monthFilter) { const [y,m] = monthFilter.split('-').map(Number); from = new Date(y,m,1); to = new Date(y,m+1,1); }
-            return filter_overview_rows(module_data, { year: currentYear, from, to, account: selectedAccount });
+            if (monthFilter && !monthFilter.startsWith('all-')) { const [y,m] = monthFilter.split('-').map(Number); from = new Date(y,m,1); to = new Date(y,m+1,1); }
+            const rows = filter_overview_rows(module_data, { year: currentYear, from, to, account: selectedAccount });
+            return monthFilter?.startsWith('all-') ? rows.filter(row => row.date.getMonth() === Number(monthFilter.slice(4))) : rows;
         }
         function render_all() {
             if (!ruleSet) return;
@@ -2219,7 +2248,10 @@
             render_finance_overview();
             render_week_savings_calendar();
             document.querySelectorAll('#yearButtons button').forEach(b => b.classList.toggle('active', b.dataset.year === String(currentYear)));
-            document.getElementById('overviewFilterNote').textContent = `${currentYear || 'Alle Jahre'} · ${selectedAccount || 'Alle Konten'}${monthFilter ? ' · ' + new Date(Number(monthFilter.split('-')[0]), Number(monthFilter.split('-')[1]), 1).toLocaleDateString(locale(), { month:'long', year:'numeric' }) : ''}${weekFilterMonday ? ' · KW ' + iso_week_number(weekFilterMonday) : ''} · ${rows.length} Buchungen`;
+            const monthFilterLabel = monthFilter && monthFilter.startsWith('all-')
+                ? new Date(2000, Number(monthFilter.slice(4)), 1).toLocaleDateString(locale(), { month: 'long' })
+                : monthFilter ? new Date(Number(monthFilter.split('-')[0]), Number(monthFilter.split('-')[1]), 1).toLocaleDateString(locale(), { month:'long', year:'numeric' }) : '';
+            document.getElementById('overviewFilterNote').textContent = `${currentYear || 'Alle Jahre'} · ${selectedAccount || 'Alle Konten'}${monthFilterLabel ? ' · ' + monthFilterLabel : ''}${weekFilterMonday ? ' · KW ' + iso_week_number(weekFilterMonday) : ''} · ${rows.length} Buchungen`;
             const unmatched = module_data.filter(r => r._paypalUnmatched).length;
             const notice = document.getElementById('paypalNotice');
             const missingAccount = module_data.some(r => account_key(r) === 'Konto unbekannt');
