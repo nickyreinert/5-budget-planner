@@ -55,16 +55,51 @@ export function build_timeline(rows, settings, kind, granularity = 'month', dril
     series: [...series.values()].map(s => ({ ...s, values: stamps.map(p => s.values.get(p) || 0) })) };
 }
 
-export function render_timeline(canvas, model, onSelect) {
+export function relative_deviation(values, baseline) {
+  const nonZero = values.filter(value => value !== 0);
+  const referenceValues = nonZero.length ? nonZero : values;
+  const sorted = [...referenceValues].sort((a, b) => a - b);
+  const reference = baseline === 'median'
+    ? sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0
+    : referenceValues.reduce((sum, value) => sum + value, 0) / (referenceValues.length || 1);
+  return {
+    reference,
+    values: values.map(value => reference ? (value - reference) / Math.abs(reference) * 100 : 0)
+  };
+}
+
+export function render_timeline(canvas, model, onSelect, { layout = 'stacked', deviation = 'none' } = {}) {
   const previous = globalThis.Chart?.getChart(canvas);
   if (previous) previous.destroy();
   if (!globalThis.Chart) return;
   const muted = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim();
+  const showDeviation = deviation === 'average' || deviation === 'median';
+  const datasets = model.series.map(s => {
+    const comparison = showDeviation ? relative_deviation(s.values, deviation) : null;
+    return {
+      label: s.label,
+      data: comparison ? comparison.values : s.values.map(value => value / 100),
+      rawValues: s.values,
+      referenceValue: comparison?.reference,
+      backgroundColor: s.color,
+      borderRadius: 3,
+      maxBarThickness: 48
+    };
+  });
   return new Chart(canvas, {
-    type: 'bar', data: { labels: model.labels, datasets: model.series.map(s => ({ label: s.label, data: s.values.map(v => v / 100), backgroundColor: s.color, borderRadius: 3, maxBarThickness: 48 })) },
+    type: 'bar', data: { labels: model.labels, datasets },
     options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'nearest', intersect: true },
-      plugins: { legend: { position: 'bottom', labels: { color: muted, boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y.toLocaleString('de-DE', { style:'currency', currency:'EUR' })}` } } },
-      scales: { x: { stacked: true, ticks: { color: muted, maxRotation: 0, autoSkip: true }, grid: { display: false } }, y: { stacked: true, ticks: { color: muted, callback: v => v.toLocaleString('de-DE') + ' €' } } },
+      plugins: { legend: { position: 'bottom', labels: { color: muted, boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: c => {
+        if (!showDeviation) return `${c.dataset.label}: ${c.parsed.y.toLocaleString('de-DE', { style:'currency', currency:'EUR' })}`;
+        const raw = c.dataset.rawValues[c.dataIndex] / 100;
+        const reference = c.dataset.referenceValue / 100;
+        const sign = c.parsed.y > 0 ? '+' : '';
+        return `${c.dataset.label}: ${sign}${c.parsed.y.toFixed(1)}% (${raw.toLocaleString('de-DE', { style:'currency', currency:'EUR' })} · Ø ${reference.toLocaleString('de-DE', { style:'currency', currency:'EUR' })})`;
+      } } } },
+      scales: {
+        x: { stacked: layout === 'stacked', ticks: { color: muted, maxRotation: 0, autoSkip: true }, grid: { display: false } },
+        y: { stacked: layout === 'stacked', ticks: { color: muted, callback: value => showDeviation ? `${value > 0 ? '+' : ''}${value}%` : value.toLocaleString('de-DE') + ' €' }, title: { display: showDeviation, text: deviation === 'median' ? 'Abweichung zum Median (%)' : 'Abweichung zum Durchschnitt (%)' } }
+      },
       onClick: (_event, elements) => { if (elements.length && onSelect) onSelect(model.series[elements[0].datasetIndex].key, model.stamps[elements[0].index]); },
       onHover: (event, elements) => { if (event.native?.target) event.native.target.style.cursor = elements.length && onSelect ? 'pointer' : 'default'; }
     }

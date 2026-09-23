@@ -97,6 +97,8 @@ input[type="file"]::file-selector-button:hover { background: var(--accent-soft);
 .main-tabs { display: flex; gap: 4px; flex: 1; min-width: 0; }
 .main-tab-btn { flex: 1; background: none; border: none; padding: 10px 12px; cursor: pointer; font-size: 0.95em; border-radius: var(--radius-sm); color: var(--text-muted); font-weight: 600; white-space: nowrap; }
 .main-tab-btn.active { background: var(--accent-soft); color: var(--accent); }
+.chart-view-controls { display: flex; gap: 4px; flex-shrink: 0; }
+.chart-view-controls select { width: auto; min-height: 34px; max-width: 116px; padding: 4px 22px 4px 8px; font-size: 0.78em; background-color: var(--surface-muted); border-color: transparent; }
 
 /* ===== Pager: swipe between Woche / Übersicht ===== */
 .pager { flex: 1; min-height: 0; overflow: hidden; position: relative; }
@@ -711,6 +713,9 @@ button.budget-totals-cell:hover { border-color: var(--accent); }
   #tab-overview { padding-left: max(24px, calc((100vw - 1200px) / 2)); padding-right: max(24px, calc((100vw - 1200px) / 2)); }
 }
 @media (max-width: 540px) {
+  .app-header { gap: 6px; flex-wrap: wrap; }
+  .chart-view-controls { order: 4; width: 100%; }
+  .chart-view-controls select { flex: 1; max-width: none; }
   .tab-pane { padding: 8px 6px calc(8px + env(safe-area-inset-bottom)); }
   .overview-filters { top: -12px; }
   .stats-bar { grid-template-columns: repeat(2,1fr); gap: 10px; }

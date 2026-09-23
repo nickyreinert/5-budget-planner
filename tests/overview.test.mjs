@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { build_timeline, filter_overview_rows, period_start } from '../src/overview.js';
+import { build_timeline, filter_overview_rows, period_start, relative_deviation } from '../src/overview.js';
 import { build_budget_basis, salary_monthly_cents } from '../src/week.js';
 import { ensure_budget_coverage, budget_category } from '../src/budgets.js';
 const row = (month,cents,category,group = 'essential', extra = {}) => ({ date:new Date(2026,month-1,15), name:'Fixture', Account:'DKB', in_out: cents < 0 ? 'out':'in', betrag_cents:cents, _cls:{ category,group,...extra } });
@@ -41,4 +41,14 @@ test('explicit other income overrides a salary-looking category name', () => {
  const rows=[row(1,100000,'Gehalt Erstattung','income',{incomeType:'other'})];
  assert.equal(salary_monthly_cents(rows),0);
  assert.equal(build_timeline(rows,setting(),'income').series[0].key,'Zusätzliche Einnahmen');
+});
+
+test('relative chart comparison normalizes every series against its own average or median', () => {
+  const values = [100, 200, 0];
+  const average = relative_deviation(values, 'average');
+  assert.equal(average.reference, 150);
+  assert.deepEqual(average.values.map(value => Math.round(value)), [-33, 33, -100]);
+  const median = relative_deviation(values, 'median');
+  assert.equal(median.reference, 200);
+  assert.deepEqual(median.values, [-50, 0, -100]);
 });

@@ -43,6 +43,17 @@
             <button class="main-tab-btn active" data-main-tab="week" data-i18n="mainTabs.week">📅 Woche</button>
             <button class="main-tab-btn" data-main-tab="overview" data-i18n="mainTabs.overview">📊 Übersicht</button>
         </div>
+        <div id="chartViewControls" class="chart-view-controls" hidden>
+            <select id="chartLayoutSelect" data-i18n-aria-label="charts.layout" aria-label="Diagrammtyp">
+                <option value="stacked" data-i18n="charts.stacked">Gestapelt</option>
+                <option value="grouped" data-i18n="charts.grouped">Gruppiert</option>
+            </select>
+            <select id="chartDeviationSelect" data-i18n-aria-label="charts.comparison" aria-label="Vergleich">
+                <option value="none" data-i18n="charts.absolute">Absolut</option>
+                <option value="average" data-i18n="charts.averageDeviation">Δ Ø</option>
+                <option value="median" data-i18n="charts.medianDeviation">Δ Median</option>
+            </select>
+        </div>
         <button type="button" id="languageToggleBtn" class="settings-gear" data-i18n-title="language.toggle" data-i18n-aria-label="language.toggle" title="Sprache wechseln" aria-label="Sprache wechseln"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3z"/></svg></button>
         <button type="button" id="themeToggleBtn" class="settings-gear" title="Darstellung umschalten" aria-label="Darstellung umschalten"><svg class="icon icon-theme-dark" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12.5A8.5 8.5 0 1 1 11.5 4a7 7 0 0 0 8.5 8.5z"/></svg><svg class="icon icon-theme-light" viewBox="0 0 24 24" aria-hidden="true" hidden><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
         <button type="button" id="configRulesBtn" class="settings-gear" data-i18n-title="filters.settings" title="Einstellungen" aria-label="Einstellungen"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6l1 3 3 1v8l-3 1-1 3H9l-1-3-3-1V8l3-1z"/><circle cx="12" cy="12" r="3"/></svg></button>
@@ -586,6 +597,7 @@
         let currentYear = '';
         let weekFilterMonday = null; // Monday of the week the Übersicht tab is narrowed to, or null for none
         let granularity = 'month', selectedAccount = '', monthFilter = null;
+        let chartLayout = 'stacked', chartDeviation = 'none';
         const chartDrill = { budget: null, fixed: null };
         let settingsBaseline = null;
         let ruleSet = null;
@@ -732,6 +744,7 @@
         const pagerEl = document.getElementById('pager');
         const trackEl = document.getElementById('pagerTrack');
         const mainTabBtns = document.querySelectorAll('.main-tab-btn');
+        const chartViewControls = document.getElementById('chartViewControls');
         let activeTabIndex = 0; // 0 = week, 1 = overview
 
         // `render` is false only for the initial setup call below, made
@@ -744,6 +757,7 @@
             trackEl.classList.toggle('dragging', !animate);
             trackEl.style.transform = `translateX(-${index * 50}%)`;
             mainTabBtns.forEach(b => b.classList.toggle('active', parseInt(b.dataset.tabIndex, 10) === index));
+            chartViewControls.hidden = index !== 1;
             if (!render) return;
             if (index === 1) render_all();
             if (index === 0) render_week();
@@ -2212,7 +2226,7 @@
             for (const kind of ['budget','fixed','income']) {
                 const model = build_timeline(rows, ruleSet, kind, granularity, chartDrill[kind]);
                 const onSelect = kind === 'income' ? null : key => { if (!chartDrill[kind]) { chartDrill[kind] = key; render_all(); } };
-                render_timeline(document.getElementById(kind+'Chart'), model, onSelect);
+                render_timeline(document.getElementById(kind+'Chart'), model, onSelect, { layout: chartLayout, deviation: chartDeviation });
                 if (kind !== 'income') {
                     const options = document.getElementById(kind+'DrillOptions'); options.replaceChildren();
                     if (!chartDrill[kind]) model.series.forEach(series => {
@@ -3155,7 +3169,11 @@
         // tab/filter click.
         function sync_url_from_state() {
             const params = new URLSearchParams();
-            if (activeTabIndex === 1) params.set('view', 'overview');
+            if (activeTabIndex === 1) {
+                params.set('view', 'overview');
+                params.set('chart', chartLayout);
+                params.set('deviation', chartDeviation);
+            }
             if (currentYear) params.set('year', String(currentYear));
             if (modal.style.display === 'block') {
                 const activeSettingsTab = document.querySelector('.settings-tab-btn.active');
@@ -3164,6 +3182,15 @@
             const query = params.toString();
             history.replaceState(null, '', location.pathname + (query ? `?${query}` : ''));
         }
+
+        document.getElementById('chartLayoutSelect').addEventListener('change', e => {
+            chartLayout = e.target.value === 'grouped' ? 'grouped' : 'stacked';
+            render_all(); sync_url_from_state();
+        });
+        document.getElementById('chartDeviationSelect').addEventListener('change', e => {
+            chartDeviation = ['average', 'median'].includes(e.target.value) ? e.target.value : 'none';
+            render_all(); sync_url_from_state();
+        });
 
         // Opens the Settings modal directly on a given sub-tab - used by the
         // small gear-icon deep links in the weekly budget breakdown and by
@@ -3936,6 +3963,10 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             // plain last-selected-year fallback, so a reload keeps whichever
             // view/filter was last reflected in the URL.
             const urlParams = new URLSearchParams(location.search);
+            chartLayout = urlParams.get('chart') === 'grouped' ? 'grouped' : 'stacked';
+            chartDeviation = ['average', 'median'].includes(urlParams.get('deviation')) ? urlParams.get('deviation') : 'none';
+            document.getElementById('chartLayoutSelect').value = chartLayout;
+            document.getElementById('chartDeviationSelect').value = chartDeviation;
             if (module_data.length) {
                 const selectedYear = urlParams.get('year') || localStorage.getItem('selectedYear');
                 currentYear = selectedYear || '';
