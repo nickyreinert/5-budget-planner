@@ -488,6 +488,12 @@
 
         <div class="wizard-step" data-wizard-step="salary" hidden>
             <p data-i18n="wizard.stepSalaryIntro">Wir haben folgende regelmäßigen Zahlungseingänge des letzten Jahres gefunden. Markiere alle, die zu deinem Einkommen gehören (auch mehrere möglich).</p>
+            <label class="wizard-tolerance-control">
+                <span data-i18n="wizard.toleranceLabel">Toleranz für ähnliche Beträge</span>
+                <input type="range" id="wizardSalaryTolerance" class="wizard-tolerance-slider" min="0" max="15" step="1" value="5">
+                <output id="wizardSalaryToleranceValue" class="wizard-tolerance-value">5%</output>
+            </label>
+            <p class="dialog-hint" data-i18n="wizard.toleranceHint">0% = nur exakt gleiche Beträge zählen als ähnlich, 15% = großzügiger. Niedriger einstellen, wenn zu unterschiedliche Beträge zusammengefasst werden.</p>
             <div id="wizardSalaryCandidates" class="wizard-candidate-list"></div>
             <div class="wizard-manual-add">
                 <input type="text" id="wizardSalaryCustomName" data-i18n-placeholder="wizard.customNamePlaceholder" placeholder="Name (wie im Kontoauszug)">
@@ -499,6 +505,12 @@
 
         <div class="wizard-step" data-wizard-step="expenses" hidden>
             <p data-i18n="wizard.stepExpensesIntro">Diese wiederkehrenden Ausgaben haben wir erkannt. Ordne jeder eine Kategorie zu, oder ignoriere sie.</p>
+            <label class="wizard-tolerance-control">
+                <span data-i18n="wizard.toleranceLabel">Toleranz für ähnliche Beträge</span>
+                <input type="range" id="wizardExpenseTolerance" class="wizard-tolerance-slider" min="0" max="15" step="1" value="5">
+                <output id="wizardExpenseToleranceValue" class="wizard-tolerance-value">5%</output>
+            </label>
+            <p class="dialog-hint" data-i18n="wizard.toleranceHint">0% = nur exakt gleiche Beträge zählen als ähnlich, 15% = großzügiger. Niedriger einstellen, wenn zu unterschiedliche Beträge zusammengefasst werden.</p>
             <div id="wizardExpenseCandidates" class="wizard-candidate-list"></div>
             <div class="wizard-manual-add">
                 <input type="text" id="wizardExpenseCustomName" data-i18n-placeholder="wizard.customNamePlaceholder" placeholder="Name (wie im Kontoauszug)">
@@ -2295,8 +2307,16 @@
             salaryCandidates: [],
             selectedSalaryPayees: new Set(),
             expenseCandidates: [],
-            budgetCaps: {}
+            budgetCaps: {},
+            // Step tolerance for "is this the same recurring amount", as a
+            // fraction (0.05 = 5%) - user-adjustable via the slider in the
+            // salary/expenses steps, since what counts as "similar enough"
+            // genuinely depends on the data (too loose merges unrelated
+            // bookings, too strict misses a real recurring payment with a
+            // few cents of drift).
+            amountTolerance: 0.05
         };
+        const WIZARD_MAX_TOLERANCE_PCT = 15;
 
         // Payee-name clusters with a detected recurring interval (>=2
         // occurrences with a regular gap) - the raw building block for both
@@ -2308,36 +2328,37 @@
         // names (PayPal, Klarna, DKB, ...) anywhere. A generic payment
         // intermediary's bank-visible name can cover many unrelated real
         // purchases, but the fix isn't guessing brand names: it's requiring
-        // amounts to actually be similar. `WIZARD_AMOUNT_TOLERANCE` is
-        // deliberately tighter than week.js's cluster_by_payee() (used for
-        // already-confirmed contracts, where allowing more drift for e.g. a
-        // price increase is fine) - a fresh SUGGESTION needs to be trustworthy
-        // by itself, so amounts are grouped sequentially (each next amount
-        // within tolerance of the previous one, not all anchored to a single
+        // amounts to actually be similar. `tolerance` (user-adjustable, see
+        // `wizardState.amountTolerance`) is deliberately tighter than
+        // week.js's cluster_by_payee() (used for already-confirmed
+        // contracts, where allowing more drift for e.g. a price increase is
+        // fine) - a fresh SUGGESTION needs to be trustworthy by itself, so
+        // amounts are grouped sequentially (each next amount within
+        // tolerance of the previous one, not all anchored to a single
         // reference) and the whole group is rejected if its overall min/max
-        // spread is still too wide, or if fewer than two occurrences share a
-        // genuinely similar value - "at least two times of a similar value"
-        // is the actual signal, not a payee-name match by itself.
-        const WIZARD_AMOUNT_TOLERANCE = 0.12;
-        const WIZARD_MAX_SPREAD = 0.25;
-        function wizard_cluster_by_amount(rows) {
+        // spread is still too wide (2x the step tolerance), or if fewer than
+        // two occurrences share a genuinely similar value - "at least two
+        // times of a similar value" is the actual signal, not a payee-name
+        // match by itself.
+        function wizard_cluster_by_amount(rows, tolerance) {
+            const maxSpread = tolerance * 2;
             const sorted = [...rows].sort((a, b) => Math.abs(a.betrag_cents) - Math.abs(b.betrag_cents));
             const clusters = [];
             sorted.forEach(r => {
                 const amount = Math.abs(r.betrag_cents);
                 const last = clusters.at(-1);
                 const prevAmount = last ? Math.abs(last.rows.at(-1).betrag_cents) : null;
-                if (last && amount - prevAmount <= prevAmount * WIZARD_AMOUNT_TOLERANCE) last.rows.push(r);
+                if (last && amount - prevAmount <= prevAmount * tolerance) last.rows.push(r);
                 else clusters.push({ rows: [r] });
             });
             return clusters.filter(c => {
                 if (c.rows.length < 2) return false;
                 const amounts = c.rows.map(r => Math.abs(r.betrag_cents));
-                return (Math.max(...amounts) - Math.min(...amounts)) <= Math.min(...amounts) * WIZARD_MAX_SPREAD;
+                return (Math.max(...amounts) - Math.min(...amounts)) <= Math.min(...amounts) * maxSpread;
             });
         }
 
-        function wizard_cluster_recurring(rows) {
+        function wizard_cluster_recurring(rows, tolerance) {
             const byName = new Map();
             rows.forEach(r => {
                 const key = (r.name || '').trim().toLowerCase();
@@ -2346,7 +2367,7 @@
             });
             const results = [];
             byName.forEach(nameRows => {
-                wizard_cluster_by_amount(nameRows).forEach(cluster => {
+                wizard_cluster_by_amount(nameRows, tolerance).forEach(cluster => {
                     const sortedByDate = [...cluster.rows].sort((a, b) => b.date - a.date);
                     const months = interval_months(sortedByDate.map(r => r.date).reverse());
                     if (months === null) return;
@@ -2373,24 +2394,50 @@
         // excluding "income" outright hid the obvious candidate and left
         // only unrelated leftovers) - it's badged/pre-selected instead of
         // silently vanishing.
-        function detect_salary_candidates() {
+        function detect_salary_candidates(tolerance = wizardState.amountTolerance) {
             const sinceDate = add_days(new Date(), -365);
             const incoming = module_data.filter(r => r.in_out === 'in' && r.date >= sinceDate && is_real_cashflow(r) && r._cls?.group !== 'internal_transfer');
-            return wizard_cluster_recurring(incoming).filter(c => c.months === 1).sort((a, b) => b.amountCents - a.amountCents).slice(0, 6)
+            return wizard_cluster_recurring(incoming, tolerance).filter(c => c.months === 1).sort((a, b) => b.amountCents - a.amountCents).slice(0, 6)
                 .map(c => ({ ...c, ignored: false, expanded: false }));
         }
 
         // Outgoing money over the last 12 months, not already classified as
         // fixed/internal-transfer - any recurring interval counts (monthly,
         // quarterly, ...).
-        function detect_expense_candidates() {
+        function detect_expense_candidates(tolerance = wizardState.amountTolerance) {
             const sinceDate = add_days(new Date(), -365);
             const outgoing = module_data.filter(r => r.in_out === 'out' && r.date >= sinceDate && is_real_cashflow(r) && !['fixed', 'internal_transfer'].includes(r._cls?.group));
-            return wizard_cluster_recurring(outgoing)
+            return wizard_cluster_recurring(outgoing, tolerance)
                 .map(c => ({ ...c, monthlyCents: Math.round(c.amountCents / c.months), category: '', ignored: false, expanded: false }))
                 .sort((a, b) => b.monthlyCents - a.monthlyCents)
                 .slice(0, 15);
         }
+
+        // Preserves per-candidate decisions (ignored/expanded/category)
+        // across a re-detection triggered by moving the tolerance slider -
+        // otherwise every tweak would silently discard whatever the user
+        // had already picked.
+        function wizard_merge_candidate_state(oldCandidates, freshCandidates) {
+            return freshCandidates.map(c => {
+                const prev = oldCandidates.find(p => !p.manual && p.payee === c.payee);
+                return prev ? { ...c, ignored: prev.ignored, expanded: prev.expanded, category: prev.category ?? c.category } : c;
+            });
+        }
+
+        function wizard_set_amount_tolerance(pct) {
+            wizardState.amountTolerance = Math.max(0, Math.min(WIZARD_MAX_TOLERANCE_PCT, pct)) / 100;
+            document.querySelectorAll('.wizard-tolerance-slider').forEach(el => { el.value = pct; });
+            document.querySelectorAll('.wizard-tolerance-value').forEach(el => { el.textContent = `${pct}%`; });
+            const manualSalary = wizardState.salaryCandidates.filter(c => c.manual);
+            wizardState.salaryCandidates = [...wizard_merge_candidate_state(wizardState.salaryCandidates, detect_salary_candidates()), ...manualSalary];
+            const manualExpenses = wizardState.expenseCandidates.filter(c => c.manual);
+            wizardState.expenseCandidates = [...wizard_merge_candidate_state(wizardState.expenseCandidates, detect_expense_candidates()), ...manualExpenses];
+            render_wizard_salary_step();
+            render_wizard_expenses_step();
+        }
+        document.querySelectorAll('.wizard-tolerance-slider').forEach(slider => {
+            slider.addEventListener('input', () => wizard_set_amount_tolerance(Number(slider.value)));
+        });
 
         function open_setup_wizard() {
             wizardState.stepIndex = 0;
@@ -2398,6 +2445,7 @@
             wizardState.salaryCandidates = [];
             wizardState.expenseCandidates = [];
             wizardState.budgetCaps = { ...subBudgetCaps };
+            wizard_set_amount_tolerance(5);
             document.getElementById('wizardError').textContent = '';
             const hint = document.getElementById('wizardExistingDataHint');
             hint.hidden = !module_data.length;
