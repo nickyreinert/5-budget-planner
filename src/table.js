@@ -214,7 +214,7 @@ export function open_category_popover(anchorBtn, categoryOptions, onPick, { onCr
   createButton.textContent = t('table.addCategory');
   createForm.onsubmit = event => {
     event.preventDefault();
-    const category = createInput.value.trim();
+    const category = createInput.value.trim() || filterInput.value.trim();
     if (!category) return;
     if (categoryOptions.some(option => option.localeCompare(category, undefined, { sensitivity: 'accent' }) === 0)) {
       createInput.setCustomValidity(t('table.categoryExists'));

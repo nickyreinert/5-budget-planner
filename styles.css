@@ -248,7 +248,10 @@ input[type="file"]::file-selector-button:hover { background: var(--accent-soft);
 /* Once a category is picked, its candidates move into a group of their
    own, outlined in that category's color instead of the flat gray card. */
 .wizard-candidate-group { border: 1px solid var(--group-color, var(--border)); border-radius: var(--radius-sm); padding: 8px; }
-.wizard-candidate-group-title { display: flex; align-items: center; gap: 6px; font-size: 0.8em; font-weight: 600; color: var(--text-muted); margin: 0 0 6px; }
+.wizard-candidate-group-title { width: 100%; display: flex; align-items: center; gap: 6px; font-size: 0.8em; font-weight: 600; color: var(--text-muted); margin: 0 0 6px; padding: 2px 0; border: 0; border-radius: 0; background: transparent; text-align: left; min-height: 24px; }
+.wizard-candidate-group-title:hover { color: var(--text); border-color: transparent; }
+.wizard-candidate-group-title .wizard-candidate-group-count { margin-left: auto; font-weight: 400; opacity: 0.75; }
+.wizard-candidate-group-chevron { width: 1em; text-align: center; color: var(--accent); }
 .wizard-candidate-group-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--group-color, var(--accent)); flex-shrink: 0; }
 .wizard-candidate-group .wizard-candidate-row { background: var(--surface); }
 .wizard-candidate-group .wizard-candidate-row + .wizard-candidate-row { margin-top: 8px; }

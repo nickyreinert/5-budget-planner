@@ -2310,6 +2310,7 @@
             selectedSalaryPayees: new Set(),
             expenseCandidates: [],
             budgetCaps: {},
+            expandedExpenseCategories: new Set(),
             // Step tolerance for "is this the same recurring amount", as a
             // fraction (0.05 = 5%) - user-adjustable via the slider in the
             // salary/expenses steps, since what counts as "similar enough"
@@ -2446,6 +2447,7 @@
             wizardState.selectedSalaryPayees = new Set();
             wizardState.salaryCandidates = [];
             wizardState.expenseCandidates = [];
+            wizardState.expandedExpenseCategories = new Set();
             wizardState.budgetCaps = { ...subBudgetCaps };
             wizard_set_amount_tolerance(5);
             document.getElementById('wizardError').textContent = '';
@@ -2645,11 +2647,19 @@
             groups.forEach((rows, category) => {
                 const group = document.createElement('div'); group.className = 'wizard-candidate-group';
                 group.style.setProperty('--group-color', category_color(category));
-                const title = document.createElement('div'); title.className = 'wizard-candidate-group-title';
+                const expanded = wizardState.expandedExpenseCategories.has(category);
+                const title = document.createElement('button'); title.type = 'button'; title.className = 'wizard-candidate-group-title';
+                title.setAttribute('aria-expanded', String(expanded));
                 const dot = document.createElement('span'); dot.className = 'wizard-candidate-group-dot';
                 const label = document.createElement('span'); label.textContent = category;
-                title.append(dot, label); group.append(title);
-                rows.forEach(c => group.append(make_row(c)));
+                const count = document.createElement('span'); count.className = 'wizard-candidate-group-count'; count.textContent = String(rows.length);
+                const chevron = document.createElement('span'); chevron.className = 'wizard-candidate-group-chevron'; chevron.textContent = expanded ? '▾' : '▸';
+                title.append(dot, label, count, chevron); group.append(title);
+                title.addEventListener('click', () => {
+                    if (expanded) wizardState.expandedExpenseCategories.delete(category); else wizardState.expandedExpenseCategories.add(category);
+                    render_wizard_expenses_step();
+                });
+                if (expanded) rows.forEach(c => group.append(make_row(c)));
                 container.append(group);
             });
             pending.forEach(c => container.append(make_row(c)));
