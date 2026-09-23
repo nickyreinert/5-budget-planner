@@ -207,7 +207,11 @@ input[type="file"]::file-selector-button:hover { background: var(--accent-soft);
 .num { text-align: right; white-space: nowrap; }
 
 /* ===== Setup wizard (onboarding: upload -> salary -> expenses -> budgets) ===== */
-.setup-wizard { width: min(640px, calc(100vw - 24px)); height: min(900px, calc(100dvh - 24px)); max-height: calc(100dvh - 24px); display: flex; flex-direction: column; overflow: hidden; }
+/* Compound selector (not just .setup-wizard) so this beats the later,
+   equally-specific base .review-dialog rule (max-height:85dvh) in the
+   cascade - plain .setup-wizard lost that fight by source order alone,
+   silently capping the dialog at 85dvh instead of the full height below. */
+.review-dialog.setup-wizard { width: min(640px, calc(100vw - 24px)); height: min(900px, calc(100dvh - 24px)); max-height: calc(100dvh - 24px); display: flex; flex-direction: column; overflow: hidden; }
 dialog.setup-wizard:not([open]) { display: none; }
 .wizard-step { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; gap: 14px; overflow-y: auto; padding: 2px; }
 .wizard-step[hidden] { display: none; }
@@ -222,7 +226,17 @@ dialog.setup-wizard:not([open]) { display: none; }
 .wizard-progress-step.completed .wizard-progress-dot { background: var(--accent); border-color: var(--accent); color: #fff; }
 .wizard-progress-step.active .wizard-progress-dot { border-color: var(--accent); color: var(--accent); }
 .wizard-progress-step.active .wizard-progress-label { color: var(--text); font-weight: 600; }
-.wizard-candidate-list { display: flex; flex-direction: column; gap: 8px; max-height: 45vh; overflow-y: auto; padding: 2px; }
+/* No own max-height/overflow here anymore - this used to be its own
+   independent scroll box (capped at 45vh) SEPARATE from the outer
+   .wizard-step scroll region, which meant the intro text/tolerance
+   slider/hint above it never scrolled away (nothing forced the outer step
+   itself to scroll) while the actual candidate list was squeezed into a
+   tiny nested scrollbar - exactly the "can barely see the list" complaint.
+   Letting it flow as a normal block means the ONE scrollable region is
+   .wizard-step itself: sticky summary card stays pinned, everything else
+   (intro, slider, hint, full list, manual-add) scrolls together as a unit
+   and gets to use the dialog's full available height. */
+.wizard-candidate-list { display: flex; flex-direction: column; gap: 8px; padding: 2px; }
 .wizard-tolerance-control { display: flex; align-items: center; gap: 10px; }
 .wizard-tolerance-control span { flex: 0 0 auto; font-size: 0.9em; color: var(--text-muted); }
 .wizard-tolerance-control input[type="range"] { flex: 1; }
@@ -272,7 +286,7 @@ dialog.setup-wizard:not([open]) { display: none; }
    name/meta onto its own full-width line and the controls onto a second
    line below fixes that without touching the desktop layout. */
 @media (max-width: 600px) {
-    .setup-wizard { width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; }
+    .review-dialog.setup-wizard { width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; }
     .wizard-candidate-row { flex-wrap: wrap; }
     .wizard-candidate-info { flex-basis: 100%; }
     .wizard-candidate-interval { min-width: 0; flex: 1 1 auto; }
@@ -372,6 +386,10 @@ dialog.setup-wizard:not([open]) { display: none; }
 .settings-tab-btn.active { border-bottom-color: var(--accent); font-weight: 700; color: var(--accent); }
 .settings-tab-pane[hidden] { display: none; }
 .settings-tab-pane { display: grid; gap: 16px; }
+/* Mirrors the wizard's sticky summary card: sits right under the already-
+   sticky .settings-tabs bar (53px measured height) so the totals stay in
+   view while the intro text/editable list below scroll away underneath. */
+.settings-summary-sticky:not(:empty) { position: sticky; top: 53px; z-index: 15; background: var(--surface); padding: 10px 0 4px; margin: -16px 0 0; }
 .settings-section { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 18px; background: var(--surface-muted); }
 .settings-section:nth-child(even) { background: var(--accent-soft); }
 .settings-section h3:first-child, .settings-section > p:first-child { margin-top: 0; }
@@ -469,15 +487,25 @@ dialog.setup-wizard:not([open]) { display: none; }
 .rule-matcher-actions { display: flex; justify-content: space-between; gap: 8px; padding-top: 2px; }
 .rule-matcher-actions button { min-height: 36px; padding: 6px 10px; font-size: .85em; }
 .browse-rule-btn { margin-left: auto; }
-.rule-transaction-browser { width: min(1000px, calc(100vw - 32px)); max-height: min(82vh, 760px); }
+/* Same compound-selector fix as .setup-wizard above - beats the later
+   base .review-dialog rule instead of losing to it by source order.
+   Needs the same :not([open]) guard as .setup-wizard too: an unconditional
+   `display: flex` here otherwise outranks (by specificity) the browser's
+   own `dialog:not([open]) { display: none }` default, leaving the dialog
+   permanently visible even when never opened. */
+.review-dialog.rule-transaction-browser { display: flex; flex-direction: column; width: min(1000px, calc(100vw - 32px)); height: min(760px, calc(100dvh - 24px)); max-height: calc(100dvh - 24px); overflow: hidden; }
+dialog.rule-transaction-browser:not([open]) { display: none; }
+.rule-transaction-browser > * { flex: 0 0 auto; }
 .rule-transaction-browser > p { color: var(--text-muted); margin-top: 0; }
 .rule-transaction-browser .dialog-actions:first-child { justify-content: space-between; align-items: center; }
 .rule-transaction-browser h2 { margin: 0; }
-.transaction-browser-table { height: 310px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); margin-top: 14px; }
+/* Fills whatever height the header/matchers/footer don't need, instead of
+   a fixed 310px that leaves a big empty gap on taller dialogs/screens. */
+.transaction-browser-table { flex: 1 1 auto; min-height: 0; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); margin-top: 14px; }
 .transaction-browser-table th { white-space: nowrap; }
 @media (max-width: 600px) {
     .review-dialog { padding: 14px; width: 100vw; max-height: 100dvh; border-radius: 0; }
-    .rule-transaction-browser { width: 100vw; max-height: 100dvh; }
+    .review-dialog.rule-transaction-browser { width: 100vw; height: 100dvh; max-height: 100dvh; }
 }
 
 /* Groups several occurrences of the same recurring charge/income by month,
@@ -614,7 +642,7 @@ th.select-col:hover { background: var(--surface-muted); }
 
 @media (max-width: 600px) {
     .modal-content { width: 100%; margin: 0; border-radius: 0; max-height: 100dvh; }
-    .modal-content:has(.settings-tabs) { max-height: 100dvh; }
+    .modal-content:has(.settings-tabs) { height: 100dvh; max-height: 100dvh; }
     .modal-header { padding: 12px; border-radius: 0; }
     .modal-body { max-height: none; padding: 0 10px 14px; }
     .modal-footer { padding: 12px; border-radius: 0; }

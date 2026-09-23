@@ -25,7 +25,8 @@
             if (storedTheme === 'light' || storedTheme === 'dark') document.documentElement.dataset.theme = storedTheme;
         } catch {}
 
-        if ('serviceWorker' in navigator && !['localhost', '127.0.0.1'].includes(location.hostname)) {
+        const isLocalDev = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(location.hostname);
+        if ('serviceWorker' in navigator && !isLocalDev) {
             let refreshing = false;
             const hadController = !!navigator.serviceWorker.controller;
             navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -34,14 +35,26 @@
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW registration failed:', err));
             });
+        } else if ('serviceWorker' in navigator && isLocalDev) {
+            // Self-heals a local dev origin that previously matched an older,
+            // narrower hostname check (e.g. IPv6 loopback "::1", missing here
+            // before) and ended up with a real SW cache-first-ing everything -
+            // no more manual devtools unregister/cache-clear needed on reload.
+            window.addEventListener('load', async () => {
+                const regs = await navigator.serviceWorker.getRegistrations();
+                if (!regs.length) return;
+                await Promise.all(regs.map(r => r.unregister()));
+                await Promise.all((await caches.keys()).map(k => caches.delete(k)));
+                window.location.reload();
+            });
         }
     </script>
 
     <header class="app-header">
         <img src="favicon.svg" alt="5" class="app-logo" width="28" height="28">
         <div class="main-tabs">
-            <button class="main-tab-btn active" data-main-tab="week" data-i18n="mainTabs.week">📅 Woche</button>
-            <button class="main-tab-btn" data-main-tab="overview" data-i18n="mainTabs.overview">📊 Übersicht</button>
+            <button class="main-tab-btn active" data-main-tab="week" data-i18n="mainTabs.week">Woche</button>
+            <button class="main-tab-btn" data-main-tab="overview" data-i18n="mainTabs.overview">Übersicht</button>
         </div>
         <button type="button" id="languageToggleBtn" class="settings-gear" data-i18n-title="language.toggle" data-i18n-aria-label="language.toggle" title="Sprache wechseln" aria-label="Sprache wechseln"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3z"/></svg></button>
         <button type="button" id="themeToggleBtn" class="settings-gear" title="Darstellung umschalten" aria-label="Darstellung umschalten"><svg class="icon icon-theme-dark" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12.5A8.5 8.5 0 1 1 11.5 4a7 7 0 0 0 8.5 8.5z"/></svg><svg class="icon icon-theme-light" viewBox="0 0 24 24" aria-hidden="true" hidden><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
@@ -54,7 +67,7 @@
                 <div id="weekEmptyState" class="empty-state" hidden>
                     <p data-i18n="week.emptyStateText">Noch keine Daten. Importiere eine CSV oder starte mit Beispieldaten.</p>
                     <div class="empty-state-actions">
-                        <button type="button" id="emptyWizardBtn" class="primary" data-i18n="wizard.startButton">🧙 Setup-Assistent starten</button>
+                        <button type="button" id="emptyWizardBtn" class="primary" data-i18n="wizard.startButton">Setup-Assistent starten</button>
                         <button type="button" id="emptyLoadSampleBtn" data-i18n="filters.loadSample">Beispieldaten laden</button>
                         <button type="button" id="emptyOpenSettingsBtn" data-i18n="week.emptyImportCsv">CSV importieren</button>
                     </div>
@@ -183,7 +196,7 @@
                 <span class="close" id="closeCategoryGrid">&times;</span>
             </div>
             <div class="modal-body">
-                <input type="text" id="categoryGridSearch" data-i18n-placeholder="quickEntry.searchCategories" placeholder="🔍 Kategorie suchen...">
+                <input type="text" id="categoryGridSearch" data-i18n-placeholder="quickEntry.searchCategories" placeholder="Kategorie suchen...">
                 <div class="category-grid" id="categoryGrid"></div>
             </div>
         </div>
@@ -198,17 +211,17 @@
             </div>
             <div class="modal-body">
                 <div class="settings-tabs">
-                    <button class="settings-tab-btn active" data-settings-tab="rules" data-i18n="settingsTabs.rules">⚙️ Allgemein</button>
-                    <button class="settings-tab-btn" data-settings-tab="income" data-i18n="settingsTabs.income">💵 Income</button>
-                    <button class="settings-tab-btn" data-settings-tab="fixexpense" data-i18n="settingsTabs.fixexpense">🔁 Fix Expense</button>
-                    <button class="settings-tab-btn" data-settings-tab="budgets" data-i18n="settingsTabs.budgets">💰 Budgets</button>
-                    <button class="settings-tab-btn" data-settings-tab="importexport" data-i18n="settingsTabs.importexport">📤 Export / Import</button>
-                    <button class="settings-tab-btn" data-settings-tab="sync" data-i18n="settingsTabs.sync">🔄 Sync</button>
+                    <button class="settings-tab-btn active" data-settings-tab="rules" data-i18n="settingsTabs.rules">Allgemein</button>
+                    <button class="settings-tab-btn" data-settings-tab="income" data-i18n="settingsTabs.income">Income</button>
+                    <button class="settings-tab-btn" data-settings-tab="fixexpense" data-i18n="settingsTabs.fixexpense">Fix Expense</button>
+                    <button class="settings-tab-btn" data-settings-tab="budgets" data-i18n="settingsTabs.budgets">Budgets</button>
+                    <button class="settings-tab-btn" data-settings-tab="importexport" data-i18n="settingsTabs.importexport">Export / Import</button>
+                    <button class="settings-tab-btn" data-settings-tab="sync" data-i18n="settingsTabs.sync">Sync</button>
                 </div>
 
                 <div id="settingsTab-rules" class="settings-tab-pane">
                     <section class="settings-section">
-                    <button type="button" id="rulesWizardBtn" class="primary" data-i18n="wizard.startButton">🧙 Setup-Assistent starten</button>
+                    <button type="button" id="rulesWizardBtn" class="primary" data-i18n="wizard.startButton">Setup-Assistent starten</button>
                     <p data-i18n="wizard.rulesTabHint">Erkennt automatisch wiederkehrendes Gehalt und Fixkosten aus deinen Buchungen und hilft beim Einrichten deiner Budgets.</p>
                     </section>
                     <section class="settings-section language-section">
@@ -235,7 +248,7 @@
                     </details>
                     </section>
                     <section class="settings-section gocardless-section" hidden>
-                    <h3 data-i18n="settingsTabs.bank">🏦 Bank</h3>
+                    <h3 data-i18n="settingsTabs.bank">Bank</h3>
                     <p data-i18n="bank.intro">Verbinde dein Bankkonto über GoCardless. Dafür brauchst du einen eigenen kleinen Proxy-Server (siehe gocardless-proxy/README.md im Repo) - trag hier dessen URL und App-Key ein.</p>
                     <div class="csv-field">
                         <label data-i18n="bank.proxyUrlLabel">Proxy-URL</label>
@@ -252,7 +265,7 @@
 
                     <h3 data-i18n="bank.connectedTitle">Verbundene Konten</h3>
                     <div id="gcConnectedList"></div>
-                    <button id="gcSyncNowBtn" data-i18n="bank.syncNow" hidden>🔄 Jetzt synchronisieren</button>
+                    <button id="gcSyncNowBtn" data-i18n="bank.syncNow" hidden>Jetzt synchronisieren</button>
 
                     <h3 data-i18n="bank.addBankTitle">Bank hinzufügen</h3>
                     <div class="csv-field">
@@ -273,32 +286,33 @@
                         </select>
                     </div>
                     <button id="gcLoadInstitutionsBtn" data-i18n="bank.loadBanks">Banken laden</button>
-                    <input type="text" id="gcInstitutionSearch" data-i18n-placeholder="bank.searchBanks" placeholder="🔍 Bank suchen..." hidden style="width:100%; box-sizing:border-box; margin-top:10px;">
+                    <input type="text" id="gcInstitutionSearch" data-i18n-placeholder="bank.searchBanks" placeholder="Bank suchen..." hidden style="width:100%; box-sizing:border-box; margin-top:10px;">
                     <div id="gcInstitutionsList"></div>
                     <p id="gcStatus" class="gc-status"></p>
                     </section>
                 </div>
 
                 <div id="settingsTab-budgets" class="settings-tab-pane" hidden>
+                    <div id="budgetRecommendation" class="settings-summary-sticky"></div>
                     <section class="settings-section">
                     <p data-i18n="budgets.intro">Setze ein wöchentliches Limit für Kategorien, die du im Blick behalten willst. Nur Kategorien mit Limit erscheinen als Sub-Budget auf der Wochenübersicht.</p>
-                    <div id="budgetRecommendation"></div><div id="mainCategoryEditor"></div><button type="button" id="addMainCategory">+ Budget</button><div id="categoryMappingEditor"></div>
+                    <div id="mainCategoryEditor"></div><button type="button" id="addMainCategory">+ Budget</button><div id="categoryMappingEditor"></div>
                     </section>
                 </div>
 
                 <div id="settingsTab-fixexpense" class="settings-tab-pane" hidden>
+                    <div id="fixExpenseOverview" class="recurring-overview settings-summary-sticky"></div>
                     <section class="settings-section recurring-settings-section">
                     <p data-i18n="fixExpense.intro">Fixkosten (Miete, Verträge, Abos, ...): eine Kategorie pro Zeile mit einem einfachen Suchmuster statt komplexer Regeln. Aufklappen zeigt das Muster und eine Vorschau der letzten 3 Monate.</p>
-                    <div id="fixExpenseOverview" class="recurring-overview"></div>
                     <div id="fixExpenseList"></div>
                     <button type="button" id="addFixExpenseBtn" data-i18n="fixExpense.addRow">+ Fixkosten-Kategorie</button>
                     </section>
                 </div>
 
                 <div id="settingsTab-income" class="settings-tab-pane" hidden>
+                    <div id="incomeOverview" class="recurring-overview settings-summary-sticky"></div>
                     <section class="settings-section recurring-settings-section">
                     <p data-i18n="incomeRules.intro">Einnahmen (Gehalt, Erstattungen, ...): eine Kategorie pro Zeile mit einem einfachen Suchmuster statt komplexer Regeln. Aufklappen zeigt das Muster und eine Vorschau der letzten 3 Monate.</p>
-                    <div id="incomeOverview" class="recurring-overview"></div>
                     <div id="incomeRulesList"></div>
                     <button type="button" id="addIncomeRuleBtn" data-i18n="incomeRules.addRow">+ Einnahmen-Kategorie</button>
                     </section>
@@ -371,16 +385,16 @@
 
                     </section><section class="settings-section">
                         <button id="loadDefaultRulesBtn" data-i18n="importexport.loadDefault">↺ Standardregeln laden</button>
-                        <button id="exportRulesBtn" data-i18n="importexport.export">📤 SETTING exportieren</button>
-                        <button id="importRulesBtn" data-i18n="importexport.import">📥 SETTING importieren</button>
+                        <button id="exportRulesBtn" data-i18n="importexport.export">SETTING exportieren</button>
+                        <button id="importRulesBtn" data-i18n="importexport.import">SETTING importieren</button>
                         <p><a href="./examples/five-budgets.setting.json" download>Beispiel: 5 Budgets importieren</a></p>
-                        <p>Transaktionskategorie wählen → Betrag eingeben → ✓. Die Zuordnung zum Hauptbudget erfolgt automatisch. Export / Import enthält auch Budgetnamen, Reihenfolge, Kategoriezuordnungen und Wochenlimits.</p>
+                        <p>Transaktionskategorie wählen → Betrag eingeben → bestätigen. Die Zuordnung zum Hauptbudget erfolgt automatisch. Export / Import enthält auch Budgetnamen, Reihenfolge, Kategoriezuordnungen und Wochenlimits.</p>
                         <input type="file" id="importRulesFile" accept=".json" style="display: none;">
                         <p id="settingsImportStatus" role="status" aria-live="polite"></p>
                         <div id="importPasteDetails">
-                            <h3 data-i18n="importexport.pasteToggle">📋 Oder SETTING-JSON einfügen</h3>
+                            <h3 data-i18n="importexport.pasteToggle">Oder SETTING-JSON einfügen</h3>
                             <textarea id="importPasteText" class="import-paste-text" data-i18n-placeholder="importexport.pastePlaceholder" placeholder="JSON hier einfügen ..."></textarea>
-                            <button type="button" id="importPasteBtn" class="primary" data-i18n="importexport.pasteImport">📥 Eingefügtes SETTING importieren</button>
+                            <button type="button" id="importPasteBtn" class="primary" data-i18n="importexport.pasteImport">Eingefügtes SETTING importieren</button>
                     </div>
                     </section><section class="settings-section">
                         <p style="margin: 0 0 10px 0; color: #555;" data-i18n="importexport.unclassifiedIntro">
@@ -389,14 +403,14 @@
                             exportieren — die Datei kann direkt einem LLM gegeben werden, das ein
                             erweitertes SETTING zurückgibt (oben importierbar).
                         </p>
-                        <button id="exportUnclassifiedBtn" data-i18n="importexport.exportUnclassified">🔍 Unklassifizierte Posten für LLM exportieren</button>
+                        <button id="exportUnclassifiedBtn" data-i18n="importexport.exportUnclassified">Unklassifizierte Posten für LLM exportieren</button>
                     <div style="margin-top: 20px;">
                         <p style="margin: 0 0 10px 0; color: #555;" data-i18n="importexport.llmPromptIntro">
                             Alternativ: Rohe CSV-Datei direkt an ein LLM anhängen. Dieser Beispiel-Prompt
                             bittet es, ein importierbares SETTING-JSON zurückzugeben.
                         </p>
                         <textarea id="llmPromptExample" readonly data-i18n="importexport.llmPromptExample" class="llm-prompt-example"></textarea>
-                        <button type="button" id="copyLlmPromptBtn" data-i18n="importexport.copyPrompt">📋 Prompt kopieren</button>
+                        <button type="button" id="copyLlmPromptBtn" data-i18n="importexport.copyPrompt">Prompt kopieren</button>
                     </div>
                     </section>
                 </div>
@@ -414,8 +428,8 @@
                     </div>
 
                     <div style="margin-top:15px;">
-                        <button id="syncUploadBtn" class="primary" data-i18n="sync.upload">☁️ Hochladen</button>
-                        <button id="syncDownloadBtn" data-i18n="sync.download">☁️ Herunterladen</button>
+                        <button id="syncUploadBtn" class="primary" data-i18n="sync.upload">Hochladen</button>
+                        <button id="syncDownloadBtn" data-i18n="sync.download">Herunterladen</button>
                     </div>
                     <p id="syncStatus" class="gc-status" role="status" aria-live="polite"></p>
                     </section>
@@ -476,7 +490,7 @@
     </dialog>
 
     <dialog id="setupWizardDialog" class="review-dialog setup-wizard" aria-labelledby="setupWizardTitle">
-        <div class="dialog-actions"><h2 id="setupWizardTitle" data-i18n="wizard.title">🧙 Setup-Assistent</h2><button type="button" id="closeSetupWizard" aria-label="Schließen">×</button></div>
+        <div class="dialog-actions"><h2 id="setupWizardTitle" data-i18n="wizard.title">Setup-Assistent</h2><button type="button" id="closeSetupWizard" aria-label="Schließen">×</button></div>
 
         <div class="wizard-progress" id="wizardProgress">
             <div class="wizard-progress-step" data-wizard-progress-step="upload"><span class="wizard-progress-dot">1</span><span class="wizard-progress-label" data-i18n="wizard.stepLabelUpload">Import</span></div>
@@ -505,7 +519,7 @@
                 <input type="text" id="wizardSalaryCustomName" data-i18n-placeholder="wizard.customNamePlaceholder" placeholder="Name (wie im Kontoauszug)">
                 <input type="number" id="wizardSalaryCustomAmount" min="0" step="1" data-i18n-placeholder="wizard.customAmountPlaceholder" placeholder="€ pro Monat">
                 <button type="button" id="wizardSalaryAddCustom" data-i18n="wizard.addCustom">+ Hinzufügen</button>
-                <button type="button" id="wizardSalaryBrowseBtn" data-i18n="wizard.browseTransactions">🔍 Buchungen durchsuchen</button>
+                <button type="button" id="wizardSalaryBrowseBtn" data-i18n="wizard.browseTransactions">Buchungen durchsuchen</button>
             </div>
         </div>
 
@@ -523,7 +537,7 @@
                 <input type="text" id="wizardExpenseCustomName" data-i18n-placeholder="wizard.customNamePlaceholder" placeholder="Name (wie im Kontoauszug)">
                 <input type="number" id="wizardExpenseCustomAmount" min="0" step="1" data-i18n-placeholder="wizard.customAmountPlaceholder" placeholder="€ pro Monat">
                 <button type="button" id="wizardExpenseAddCustom" data-i18n="wizard.addCustom">+ Hinzufügen</button>
-                <button type="button" id="wizardExpenseBrowseBtn" data-i18n="wizard.browseTransactions">🔍 Buchungen durchsuchen</button>
+                <button type="button" id="wizardExpenseBrowseBtn" data-i18n="wizard.browseTransactions">Buchungen durchsuchen</button>
             </div>
         </div>
 
@@ -547,7 +561,7 @@
     </dialog>
 
     <dialog id="wizardTransactionBrowserDialog" class="review-dialog rule-transaction-browser" aria-labelledby="wizardTransactionBrowserTitle">
-        <div class="dialog-actions"><h2 id="wizardTransactionBrowserTitle" data-i18n="wizard.browseTransactions">🔍 Buchungen durchsuchen</h2><button type="button" id="closeWizardTransactionBrowser" aria-label="Schließen">×</button></div>
+        <div class="dialog-actions"><h2 id="wizardTransactionBrowserTitle" data-i18n="wizard.browseTransactions">Buchungen durchsuchen</h2><button type="button" id="closeWizardTransactionBrowser" aria-label="Schließen">×</button></div>
         <div id="wizardTransactionBrowserMatchers" class="rule-matchers"></div>
         <button type="button" id="wizardTransactionBrowserAddMatcher" data-i18n="wizard.addMatcher">+ Suchmuster</button>
         <div class="transaction-browser-table"><table><thead><tr><th data-i18n="table.date">Datum</th><th data-i18n="table.name">Name</th><th data-i18n="table.betrag">Betrag</th></tr></thead><tbody id="wizardTransactionBrowserRows"></tbody></table></div>
@@ -2674,7 +2688,7 @@
                 // income" (e.g. a generic bank-category fallback) are two
                 // different things worth telling apart, not one vague badge.
                 if (c.latestIncomeType === 'salary') {
-                    const badge = document.createElement('span'); badge.className = 'wizard-candidate-badge'; badge.textContent = '✓ ' + t('wizard.alreadySalary'); info.append(badge);
+                    const badge = document.createElement('span'); badge.className = 'wizard-candidate-badge'; badge.textContent = t('wizard.alreadySalary'); info.append(badge);
                 } else if (c.latestGroup === 'income') {
                     const badge = document.createElement('span'); badge.className = 'wizard-candidate-badge muted'; badge.textContent = t('wizard.alreadyGenericIncome'); info.append(badge);
                 }
