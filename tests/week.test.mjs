@@ -26,6 +26,16 @@ test('rule_monthly_equivalent clusters by contractId (manual merge) instead of p
   assert.equal(merged.clusters[0].rows.length, 2);
 });
 
+test('a contract merge combines rows into one cluster even when amounts differ well beyond the normal tolerance', () => {
+  const a = tx('2026-09-01', -2716, 'Versicherung AG', 'fixed');
+  const b = tx('2026-08-01', -2122, 'Versicherung AG', 'fixed');
+  a._cls.contractId = 'merge_2'; a._cls.contractName = 'Versicherung AG';
+  b._cls.contractId = 'merge_2'; b._cls.contractName = 'Versicherung AG';
+  const merged = rule_monthly_equivalent([a, b]);
+  assert.equal(merged.clusters.length, 1, 'a manual merge must not be undone by the amount-tolerance split');
+  assert.equal(merged.clusters[0].rows.length, 2);
+});
+
 test('weeks start on Monday, Sunday belongs to the previous week', () => {
   assert.equal(week_start(new Date(2026, 8, 14)).getDate(), 14); // Mo
   assert.equal(week_start(new Date(2026, 8, 20)).getDate(), 14); // So

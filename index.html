@@ -1697,7 +1697,13 @@
                     <span>${t('wizard.mergeSelectionHint')}</span>
                     <button type="button" class="tx-merge-btn" data-rule="${escape_budget(ruleId)}" ${selected.size < 2 ? 'disabled' : ''}>${t('wizard.mergeSelected')}</button>
                 </div>` : '';
-            const rowsHtml = clusters.map(cluster => `
+            const rowsHtml = clusters.map(cluster => {
+                // A cluster is "merged" once any of its rows carries a
+                // contractId from rule.contractMerges - offer an inline
+                // "Trennen" (unmerge) action right there, not just a way to
+                // create MORE merges.
+                const mergedRow = cluster.rows.find(r => r._cls?.contractId);
+                return `
                 <tr class="tx-interval-header">
                     <td colspan="3">
                         ${ruleId ? `<input type="checkbox" class="tx-merge-checkbox" data-rule="${escape_budget(ruleId)}" data-key="${escape_budget(clusterKey(cluster))}" data-payee="${escape_budget(cluster.payee)}" data-name="${escape_budget(cluster.name)}" data-amount="${cluster.amountCents}" aria-label="${t('wizard.mergeSelectionHint')}: ${escape_budget(cluster.name)}" ${selected.has(clusterKey(cluster)) ? 'checked' : ''}>` : ''}
@@ -1709,10 +1715,12 @@
                             <option value="12" ${cluster.months === 12 ? 'selected' : ''}>${t('week.interval.12')}</option>
                         </select>
                         <span class="tx-interval-monthly">≈ ${fmt_eur(cluster.monthlyCents)} ${t('fixExpense.perMonth')}</span>
+                        ${ruleId && mergedRow ? `<button type="button" class="tx-unmerge-btn" data-rule="${escape_budget(ruleId)}" data-merge-id="${escape_budget(mergedRow._cls.contractId)}" title="${t('fixExpense.unmerge')}">${t('fixExpense.unmerge')}</button>` : ''}
                     </td>
                 </tr>
                 ${cluster.rows.map(r => tx_preview_row_html(r, amountValue)).join('')}
-            `).join('');
+            `;
+            }).join('');
             return `${mergeBar}<table class="transaction-preview">${rowsHtml}</table>`;
         }
 
@@ -1760,6 +1768,15 @@
                     rule.contractMerges = (rule.contractMerges || []).filter(merge => !payees.some(p => (merge.payees || []).includes(p)));
                     rule.contractMerges.push({ id: `merge_${Date.now()}`, name: displayName, payees, amountCents });
                     ruleMergeSelections.delete(ruleId);
+                    persist_budgets();
+                    if (onReassigned) onReassigned();
+                });
+            });
+            container.querySelectorAll('.tx-unmerge-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const rule = (ruleSet.rules || []).find(r => r.id === btn.dataset.rule);
+                    if (!rule) return;
+                    rule.contractMerges = (rule.contractMerges || []).filter(merge => merge.id !== btn.dataset.mergeId);
                     persist_budgets();
                     if (onReassigned) onReassigned();
                 });
@@ -2268,6 +2285,7 @@
                             <button type="button" class="group-toggle-btn" data-parent="${escape_budget(parent)}" title="${t('budgets.toggleCategories')}">${groupExpanded ? '▼' : '▶'}</button>
                             <input value="${escape_budget(parent)}" data-parent="${escape_budget(parent)}" data-kind="${kind}" data-field="parent-category" aria-label="Kategorie">
                             <span class="fixexpense-monthly" title="${t('fixExpense.monthlyHint')}">${fmt_eur(groupTotalCents)} ${t('fixExpense.perMonth')}</span>
+                            <span class="fixexpense-remove-placeholder" aria-hidden="true"></span>
                         </div>
                         <div class="fixexpense-group-body" ${groupExpanded ? '' : 'hidden'}>
                             ${rendered.map(r => r.html).join('')}

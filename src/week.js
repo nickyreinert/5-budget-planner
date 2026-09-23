@@ -107,13 +107,21 @@ export function active_contracts(rows, refDate) {
 // most-recent-first within each cluster - shared by active_contracts() above
 // and rule_monthly_equivalent() below. `keyFn` lets callers scope the
 // cluster key further (active_contracts also folds in the category, since
-// the same payee name could in theory recur under a different one).
+// the same payee name could in theory recur under a different one). A
+// "contract:" key (payee_key()'s contractId branch, i.e. a manual merge)
+// always joins the one existing cluster for that key regardless of amount -
+// the whole point of a manual merge is combining legs that may differ
+// somewhat in price (a settlement fee, a partial refund, ...), so the
+// normal amount-tolerance split must not undo it.
 export function cluster_by_payee(rows, keyFn = payee_key) {
   const byKey = {};
   [...rows].sort((a, b) => b.date - a.date).forEach(r => {
-    const clusters = byKey[keyFn(r)] = byKey[keyFn(r)] || [];
+    const key = keyFn(r);
+    const clusters = byKey[key] = byKey[key] || [];
     const amount = Math.abs(r.betrag_cents);
-    const cluster = clusters.find(c => Math.abs(amount - c.latestCents) <= c.latestCents * AMOUNT_TOLERANCE);
+    const cluster = key.startsWith('contract:')
+      ? clusters[0]
+      : clusters.find(c => Math.abs(amount - c.latestCents) <= c.latestCents * AMOUNT_TOLERANCE);
     if (cluster) cluster.rows.push(r);
     else clusters.push({ latestCents: amount, rows: [r] });
   });

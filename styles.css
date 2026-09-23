@@ -474,7 +474,9 @@ dialog.setup-wizard:not([open]) { display: none; }
 .recurring-overview .budget-totals-row { margin: 0; }
 .recurring-overview .budget-totals-cell { background: var(--surface); }
 .recurring-overview small { font-weight: 400; }
-.fixexpense-monthly { flex: 0 0 auto !important; font-weight: 600; font-size: 0.82em; color: var(--text-muted); white-space: nowrap; }
+/* Fixed width (not auto-sized to each row's own text) so this column
+   lines up across rows regardless of amount length. */
+.fixexpense-monthly { flex: 0 0 108px !important; text-align: right; font-weight: 600; font-size: 0.82em; color: var(--text-muted); white-space: nowrap; }
 /* Own background (was inheriting --surface-muted from the shared
    .main-budget-group-categories class) so it reads as neutral ground
    between the group header above it and the matchers/preview boxes below,
@@ -486,6 +488,7 @@ dialog.setup-wizard:not([open]) { display: none; }
    .wizard-candidate-merge-bar, reused here for an existing rule's preview. */
 .tx-merge-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 6px; color: var(--text-muted); font-size: 0.8em; }
 .tx-merge-btn { min-height: 30px; padding: 4px 8px; font-size: 0.9em; white-space: nowrap; }
+.tx-unmerge-btn { min-height: 26px; padding: 2px 8px; font-size: 0.78em; white-space: nowrap; margin-left: 8px; color: var(--danger); border-color: var(--danger); }
 .tx-merge-checkbox { margin-right: 6px; accent-color: var(--accent); }
 /* "Search settings" (matchers) and "results" (preview) need clearly
    different shades from each other AND from the neutral .fixexpense-body
@@ -506,6 +509,10 @@ dialog.setup-wizard:not([open]) { display: none; }
 .fixexpense-group { display: flex; flex-direction: column; }
 .fixexpense-group.drag-over { outline: 2px dashed var(--accent); outline-offset: 2px; }
 .fixexpense-group-row { background: var(--accent-soft); border-radius: var(--radius-sm); }
+/* Reserves the same column width as a real .remove-btn on rows that can't
+   show one (the group header) - invisible, not display:none, so it still
+   takes up space and keeps every row's columns aligned. */
+.fixexpense-remove-placeholder { flex: 0 0 auto; width: 36px; min-width: 36px; visibility: hidden; }
 .fixexpense-group-body { display: flex; flex-direction: column; gap: 4px; padding-left: 20px; border-left: 2px solid var(--border); margin: 2px 0 8px; }
 .fixexpense-group-body[hidden] { display: none; }
 .fixexpense-group-body .fixexpense-row { background: var(--surface); border-radius: var(--radius-sm); }
