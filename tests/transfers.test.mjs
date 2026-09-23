@@ -20,6 +20,14 @@ test('a settlement leg is recognized by PayPal\'s own 17-char transaction ID for
   reconcile_paypal([purchase,bank]);
   assert.equal(purchase._paypalLinked,true); assert.equal(bank._cls.excluded,true);
 });
+test('a settlement leg showing only the underlying MERCHANT name (not "PayPal") is still recognized via PayPal\'s official SEPA creditor ID', () => {
+  const purchase = row('1TW73003SD8960608 / Payment','-27.16','PayPal');
+  const bank = { ...enrich_row({ Datum: '16.09.2026', Name: '1053073282674/. Decathlon Deutschland', Betrag: '-27.16', Bank: 'DKB', Account: 'DKB', Konto: 'DKB',
+    Verwendungszweck: 'Ihr Einkauf bei Decathlon Deutschland, Umsatzart: Folgelastschrift, Referenz: 1053073282674, Mandat: 5B2J224N9V3LJ, Gl\u00e4ubiger-ID: LU96ZZZ0000000000000000058' }),
+    _cls: { category: 'Sport', group: 'essential', excluded: false } };
+  reconcile_paypal([purchase,bank]);
+  assert.equal(purchase._paypalLinked,true); assert.equal(bank._cls.excluded,true);
+});
 test('missing PayPal history never drops the bank expense', () => {
   const bank = row('PayPal Europe','-20','DKB','12.09.2026','internal_transfer');
   reconcile_paypal([bank]); assert.equal(bank._cls.excluded,false); assert.equal(bank._paypalUnmatched,true);

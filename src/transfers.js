@@ -79,18 +79,28 @@ export function account_key(row) {
 export function is_paypal_account(row) { return /paypal/i.test(account_key(row)); }
 const funding = row => is_paypal_account(row) && /bank account|bankkonto|guthaben.*(ein|aus)zahlung/i.test(row.name || row.Name || '');
 // Some banks never write the word "PayPal" anywhere on the settlement line -
-// it just shows PayPal's own generic label ("Payment"/"Zahlung") plus
-// PayPal's own documented 17-character transaction ID format (a digit
-// followed by 16 more upper-case letters/digits, e.g. "1TW73003SD8960608").
-// That ID format is structural, not a brand-name guess, and is only ever
-// used as a PRE-FILTER here - the actual pairing decision below still
-// requires an exact amount match via unique_bundle(), which is what
-// actually prevents false positives, not this text check alone.
+// it just shows the underlying MERCHANT's name (e.g. "Decathlon
+// Deutschland") because PayPal passes that through, with only two
+// PayPal-specific technical markers left to go on:
+// 1. PayPal (Europe) S.à r.l. et Cie, S.C.A.'s own, official, publicly
+//    documented SEPA direct-debit creditor ID for ALL its EU collections -
+//    "LU96ZZZ0000000000000000058" - unambiguous and never changes,
+//    regardless of which merchant the underlying purchase was with.
+// 2. PayPal's own documented 17-character transaction ID format (a digit
+//    followed by 16 more upper-case letters/digits, e.g.
+//    "1TW73003SD8960608"), which shows up on the OTHER (PayPal-account)
+//    leg rather than the bank leg, but is checked here too in case a bank
+//    passes it through instead of the Gläubiger-ID.
+// Both are structural/official identifiers, not brand-name guesses, and
+// are only ever used as a PRE-FILTER here - the actual pairing decision
+// below still requires an exact amount match via unique_bundle() within
+// maxDays, which is what actually prevents false positives.
+const PAYPAL_SEPA_CREDITOR_ID = /lu96zzz0000000000000000058/i;
 const PAYPAL_TX_ID = /\b\d[A-Z0-9]{16}\b/;
 const settlement = row => {
   if (is_paypal_account(row)) return false;
   const text = `${row.name || row.Name || ''} ${row.verwendungszweck || ''}`;
-  return /paypal/i.test(text) || PAYPAL_TX_ID.test(text);
+  return /paypal/i.test(text) || PAYPAL_TX_ID.test(text) || PAYPAL_SEPA_CREDITOR_ID.test(text);
 };
 
 // Find a unique exact combination, bounded to keep CSV imports responsive.
