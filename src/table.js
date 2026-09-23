@@ -163,6 +163,9 @@ function ensure_popover() {
   ['click', 'pointerdown', 'mousedown'].forEach(type => {
     popoverEl.addEventListener(type, event => event.stopPropagation());
   });
+  popoverEl.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') event.stopPropagation();
+  });
   // Deferred via setTimeout: this is the popover's first-ever use, called
   // from inside the very click handler that's about to open it. Registering
   // synchronously would let this same click event's bubble phase reach the
@@ -179,7 +182,12 @@ function ensure_popover() {
       }
     });
   }, 0);
-  window.addEventListener('scroll', () => { if (!justOpened) close_popover(); }, true);
+  window.addEventListener('scroll', event => {
+    if (justOpened || popoverEl.hidden) return;
+    const target = event.target;
+    if (target === popoverEl || popoverEl.contains(target)) return;
+    close_popover();
+  }, true);
   return popoverEl;
 }
 

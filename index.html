@@ -2381,7 +2381,8 @@
                         count: sortedByDate.length,
                         rows: sortedByDate,
                         latestGroup: sortedByDate[0]._cls?.group,
-                        latestIncomeType: sortedByDate[0]._cls?.incomeType
+                        latestIncomeType: sortedByDate[0]._cls?.incomeType,
+                        latestCategory: sortedByDate[0]._cls?.category
                     });
                 });
             });
@@ -2404,16 +2405,16 @@
                 .map(c => ({ ...c, ignored: false, expanded: false }));
         }
 
-        // Outgoing money over the last 12 months, not already classified as
-        // fixed/internal-transfer - any recurring interval counts (monthly,
-        // quarterly, ...).
+        // Outgoing money over the last 12 months. Already-classified fixed
+        // expenses stay in the review list with their existing category, so
+        // imported rules can be checked rather than silently disappearing.
         function detect_expense_candidates(tolerance = wizardState.amountTolerance) {
             const sinceDate = add_days(new Date(), -365);
-            const outgoing = module_data.filter(r => r.in_out === 'out' && r.date >= sinceDate && is_real_cashflow(r) && !['fixed', 'internal_transfer'].includes(r._cls?.group));
+            const outgoing = module_data.filter(r => r.in_out === 'out' && r.date >= sinceDate && is_real_cashflow(r) && r._cls?.group !== 'internal_transfer');
             return wizard_cluster_recurring(outgoing, tolerance)
-                .map(c => ({ ...c, monthlyCents: Math.round(c.amountCents / c.months), category: '', ignored: false, expanded: false }))
+                .map(c => ({ ...c, monthlyCents: Math.round(c.amountCents / c.months), category: c.latestGroup === 'fixed' ? (c.latestCategory || '') : '', ignored: false, expanded: false }))
                 .sort((a, b) => b.monthlyCents - a.monthlyCents)
-                .slice(0, 15);
+                ;
         }
 
         // Preserves per-candidate decisions (ignored/expanded/category)
@@ -2618,7 +2619,7 @@
                     buttons.push(expandBtn);
                 }
                 const ignoreBtn = wizard_ignore_button(c.ignored);
-                ignoreBtn.addEventListener('click', () => { c.ignored = !c.ignored; render_wizard_expenses_step(); update_wizard_expense_total(); });
+                ignoreBtn.addEventListener('click', () => { c.ignored = !c.ignored; if (c.ignored) c.expanded = false; render_wizard_expenses_step(); update_wizard_expense_total(); });
                 buttons.push(ignoreBtn);
                 row.append(info, categoryBtn, ...buttons);
                 // Same rationale as the salary step: the whole row (not just
