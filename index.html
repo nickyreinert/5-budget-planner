@@ -1706,8 +1706,10 @@
                 return `
                 <tr class="tx-interval-header">
                     <td colspan="3">
-                        ${ruleId ? `<input type="checkbox" class="tx-merge-checkbox" data-rule="${escape_budget(ruleId)}" data-key="${escape_budget(clusterKey(cluster))}" data-payee="${escape_budget(cluster.payee)}" data-name="${escape_budget(cluster.name)}" data-amount="${cluster.amountCents}" aria-label="${t('wizard.mergeSelectionHint')}: ${escape_budget(cluster.name)}" ${selected.has(clusterKey(cluster)) ? 'checked' : ''}>` : ''}
-                        <span class="tx-interval-payee">${escape_budget(cluster.name)}</span>
+                        <span class="tx-interval-header-label">
+                            ${ruleId ? `<input type="checkbox" class="tx-merge-checkbox" data-rule="${escape_budget(ruleId)}" data-key="${escape_budget(clusterKey(cluster))}" data-payee="${escape_budget(cluster.payee)}" data-name="${escape_budget(cluster.name)}" data-amount="${cluster.amountCents}" aria-label="${t('wizard.mergeSelectionHint')}: ${escape_budget(cluster.name)}" ${selected.has(clusterKey(cluster)) ? 'checked' : ''}>` : ''}
+                            <span class="tx-interval-payee">${escape_budget(cluster.name)}</span>
+                        </span>
                         <select class="tx-interval-select" data-rule="${escape_budget(opts.ruleId || '')}" data-payee="${escape_budget(cluster.payee)}" aria-label="${t('recurringExpense.interval')}: ${escape_budget(cluster.name)}">
                             <option value="1" ${cluster.months === 1 ? 'selected' : ''}>${t('week.interval.1')}</option>
                             <option value="3" ${cluster.months === 3 ? 'selected' : ''}>${t('week.interval.3')}</option>

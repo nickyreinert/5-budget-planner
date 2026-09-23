@@ -511,8 +511,14 @@ dialog.setup-wizard:not([open]) { display: none; }
 .fixexpense-group-row { background: var(--accent-soft); border-radius: var(--radius-sm); }
 /* Reserves the same column width as a real .remove-btn on rows that can't
    show one (the group header) - invisible, not display:none, so it still
-   takes up space and keeps every row's columns aligned. */
-.fixexpense-remove-placeholder { flex: 0 0 auto; width: 36px; min-width: 36px; visibility: hidden; }
+   takes up space and keeps every row's columns aligned. !important is
+   required: the generic ".main-budget-editor-row span { flex: 1; }" rule
+   has higher specificity (class+tag beats a single class) and was
+   silently overriding this to flex:1, splitting the remaining row width
+   between the placeholder and the category input instead of reserving a
+   fixed 36px - the actual cause of group rows rendering a visibly
+   narrower category label than flat rows. */
+.fixexpense-remove-placeholder { flex: 0 0 44px !important; width: 44px !important; min-width: 44px !important; visibility: hidden; }
 .fixexpense-group-body { display: flex; flex-direction: column; gap: 4px; padding-left: 20px; border-left: 2px solid var(--border); margin: 2px 0 8px; }
 .fixexpense-group-body[hidden] { display: none; }
 .fixexpense-group-body .fixexpense-row { background: var(--surface); border-radius: var(--radius-sm); }
@@ -564,7 +570,12 @@ dialog.rule-transaction-browser:not([open]) { display: none; }
 .tx-interval-header td { padding: 10px 4px 6px; border-top: 1px solid var(--border); }
 .tx-interval-header:first-child td { border-top: none; }
 .tx-interval-header { display: table-row; }
-.tx-interval-payee { display: block; font-size: 0.78em; font-weight: 700; color: var(--text); margin-bottom: 4px; overflow-wrap: anywhere; }
+/* Wraps the optional merge checkbox + payee name on one line - the cell
+   also holds an interval <select> and monthly amount after this, which
+   need to wrap onto their own line on narrow screens, so only these two
+   are grouped into their own flex row instead of the whole <td>. */
+.tx-interval-header-label { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.tx-interval-payee { font-size: 0.78em; font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
 .tx-interval-select { font-size: 0.82em; padding: 4px 6px; min-height: 30px; }
 .tx-interval-monthly { display: inline-block; margin-left: 8px; font-size: 0.8em; color: var(--text-muted); white-space: nowrap; }
 
