@@ -11,19 +11,18 @@
 // Required env vars (Netlify site settings, never committed):
 //   GOOGLE_CLIENT_ID - Google Cloud OAuth Client ID (Web application)
 //   NETLIFY_DB_URL   - auto-set once Netlify Database is enabled
-const postgres = require('postgres');
-const { OAuth2Client } = require('google-auth-library');
-
 const COLLECTIONS = ['setup', 'transactions'];
 
 let sql = null;
 function db() {
+  const postgres = require('postgres');
   if (!sql) sql = postgres(process.env.NETLIFY_DB_URL);
   return sql;
 }
 
 let oauthClient = null;
 async function verify_token(idToken) {
+  const { OAuth2Client } = require('google-auth-library');
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!oauthClient) oauthClient = new OAuth2Client(clientId);
   const ticket = await oauthClient.verifyIdToken({ idToken, audience: clientId });
