@@ -1669,6 +1669,14 @@
         // boundary (paid on the 1st one month, the 30th the next) otherwise
         // reads as a confusing flat repeat, or gets double-counted into one
         // calendar month.
+        //
+        // Per-rule checkbox selection for "these are actually the same
+        // expense" merging (e.g. a PayPal settlement leg + the merchant
+        // charge it pays for both showing up separately) - keyed by ruleId,
+        // survives re-renders but not page reloads (purely a transient
+        // selection, same tier as expandedCatChips/RULE_GROUP_EDITORS
+        // Sets elsewhere).
+        const ruleMergeSelections = new Map();
         function render_transaction_preview_table(rows, amountValue = (r => -r.betrag_cents), opts = {}) {
             if (!rows.length) return `<p>${t('fixExpense.noMatches')}</p>`;
             if (!opts.byBillingPeriod) {
@@ -1677,9 +1685,22 @@
                 return `<table class="transaction-preview">${rowsHtml}</table>`;
             }
             const { clusters } = rule_monthly_equivalent(rows, opts.overrides || {});
+            const ruleId = opts.ruleId || '';
+            const selected = ruleMergeSelections.get(ruleId) || new Set();
+            // Keyed by payee+amount, not payee alone - the same payee name
+            // (e.g. a PayPal collection account) commonly has several
+            // clusters at very different amounts, which would otherwise all
+            // show as selected/unselected together.
+            const clusterKey = cluster => `${cluster.payee}::${cluster.amountCents}`;
+            const mergeBar = (ruleId && clusters.length > 1) ? `
+                <div class="tx-merge-bar">
+                    <span>${t('wizard.mergeSelectionHint')}</span>
+                    <button type="button" class="tx-merge-btn" data-rule="${escape_budget(ruleId)}" ${selected.size < 2 ? 'disabled' : ''}>${t('wizard.mergeSelected')}</button>
+                </div>` : '';
             const rowsHtml = clusters.map(cluster => `
                 <tr class="tx-interval-header">
                     <td colspan="3">
+                        ${ruleId ? `<input type="checkbox" class="tx-merge-checkbox" data-rule="${escape_budget(ruleId)}" data-key="${escape_budget(clusterKey(cluster))}" data-payee="${escape_budget(cluster.payee)}" data-name="${escape_budget(cluster.name)}" data-amount="${cluster.amountCents}" aria-label="${t('wizard.mergeSelectionHint')}: ${escape_budget(cluster.name)}" ${selected.has(clusterKey(cluster)) ? 'checked' : ''}>` : ''}
                         <span class="tx-interval-payee">${escape_budget(cluster.name)}</span>
                         <select class="tx-interval-select" data-rule="${escape_budget(opts.ruleId || '')}" data-payee="${escape_budget(cluster.payee)}" aria-label="${t('recurringExpense.interval')}: ${escape_budget(cluster.name)}">
                             <option value="1" ${cluster.months === 1 ? 'selected' : ''}>${t('week.interval.1')}</option>
@@ -1692,7 +1713,7 @@
                 </tr>
                 ${cluster.rows.map(r => tx_preview_row_html(r, amountValue)).join('')}
             `).join('');
-            return `<table class="transaction-preview">${rowsHtml}</table>`;
+            return `${mergeBar}<table class="transaction-preview">${rowsHtml}</table>`;
         }
 
         function wire_transaction_preview(container, onReassigned) {
@@ -1702,6 +1723,45 @@
                         await assign_category([decodeURIComponent(btn.dataset.txId)], category);
                         if (onReassigned) onReassigned();
                     });
+                });
+            });
+
+            container.querySelectorAll('.tx-merge-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', () => {
+                    const ruleId = checkbox.dataset.rule;
+                    const set = ruleMergeSelections.get(ruleId) || new Set();
+                    if (checkbox.checked) set.add(checkbox.dataset.key); else set.delete(checkbox.dataset.key);
+                    ruleMergeSelections.set(ruleId, set);
+                    if (onReassigned) onReassigned();
+                });
+            });
+            container.querySelectorAll('.tx-merge-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const ruleId = btn.dataset.rule;
+                    const rule = (ruleSet.rules || []).find(r => r.id === ruleId);
+                    const selected = ruleMergeSelections.get(ruleId);
+                    if (!rule || !selected || selected.size < 2) return;
+                    const checkboxes = [...container.querySelectorAll(`.tx-merge-checkbox[data-rule="${CSS.escape(ruleId)}"]`)].filter(cb => selected.has(cb.dataset.key));
+                    const payees = [...new Set(checkboxes.map(cb => cb.dataset.payee))];
+                    const amounts = checkboxes.map(cb => Number(cb.dataset.amount)).filter(Number.isFinite);
+                    const amountCents = amounts.length ? Math.round(amounts.reduce((sum, a) => sum + a, 0) / amounts.length) : null;
+                    // Prefer whichever selected payee has the FEWEST distinct
+                    // amount-clusters under this rule overall as the display
+                    // name - a dedicated single merchant (one cluster) reads
+                    // better than a shared payment-processor umbrella that
+                    // routes many differently-priced purchases (many
+                    // clusters). Purely data-driven, no hardcoded processor
+                    // names (PayPal/Klarna/...) - see repo notes on why that
+                    // was explicitly rejected before.
+                    const allCheckboxesForRule = [...container.querySelectorAll(`.tx-merge-checkbox[data-rule="${CSS.escape(ruleId)}"]`)];
+                    const clusterCountByPayee = new Map();
+                    allCheckboxesForRule.forEach(cb => clusterCountByPayee.set(cb.dataset.payee, (clusterCountByPayee.get(cb.dataset.payee) || 0) + 1));
+                    const displayName = [...checkboxes].sort((a, b) => (clusterCountByPayee.get(a.dataset.payee) || 0) - (clusterCountByPayee.get(b.dataset.payee) || 0))[0].dataset.name;
+                    rule.contractMerges = (rule.contractMerges || []).filter(merge => !payees.some(p => (merge.payees || []).includes(p)));
+                    rule.contractMerges.push({ id: `merge_${Date.now()}`, name: displayName, payees, amountCents });
+                    ruleMergeSelections.delete(ruleId);
+                    persist_budgets();
+                    if (onReassigned) onReassigned();
                 });
             });
         }
@@ -1984,10 +2044,16 @@
 
         // Last-3-months transactions matching a rule's pattern - shared by
         // the Fix Expense/Income editors and the week-basis contracts list.
+        // Filters by the RESOLVED classification (row._cls.category), not a
+        // raw independent rule_matches() re-test - a transaction belongs to
+        // exactly one category (classify() already picked the highest-
+        // priority matching rule), so two categories whose patterns happen
+        // to overlap must never both claim/count the same booking.
         function rule_recent_matches(rule, amountFilter) {
             const now = module_data.length ? build_budget_basis(module_data).refDate : new Date();
             const windowStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-            return module_data.filter(r => r.date >= windowStart && r.date <= now && amountFilter(r) && rule_matches(r, rule));
+            const category = rule.category || rule.label;
+            return module_data.filter(r => r.date >= windowStart && r.date <= now && amountFilter(r) && r._cls?.category === category);
         }
 
         function rule_matchers(rule) {

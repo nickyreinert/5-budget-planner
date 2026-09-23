@@ -76,11 +76,25 @@ function matcher_matches(tx, matcher) {
   return regex ? regex.test(text) : false;
 }
 
+// A payee name alone (e.g. "PayPal Europe...") is too broad to safely merge
+// on its own - the SAME payee routes lots of unrelated purchases at very
+// different amounts, so name-only matching would sweep every one of them
+// into a single merged contract, not just the specific booking(s) picked
+// when the merge was created. When a merge carries an `amountCents`
+// reference (every merge created via the Settings > Fix Expense/Income
+// preview does; older wizard-created merges may not), also require the
+// transaction's amount to be close to it.
+const MERGE_AMOUNT_TOLERANCE = 0.15;
+
 function contract_merge_for(tx, rule) {
   const name = String(tx.name || tx.Name || '').trim().toLocaleLowerCase();
-  return (rule.contractMerges || []).find(merge =>
-    (merge.payees || []).some(payee => name.includes(String(payee).trim().toLocaleLowerCase()))
-  );
+  const amount = Math.abs(tx.betrag_cents || 0);
+  return (rule.contractMerges || []).find(merge => {
+    const nameMatches = (merge.payees || []).some(payee => name.includes(String(payee).trim().toLocaleLowerCase()));
+    if (!nameMatches) return false;
+    if (merge.amountCents == null) return true;
+    return Math.abs(amount - merge.amountCents) <= merge.amountCents * MERGE_AMOUNT_TOLERANCE;
+  });
 }
 
 // Returns true if `rule` matches transaction `tx`.

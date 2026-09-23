@@ -4,12 +4,26 @@ import assert from 'node:assert/strict';
 import {
   week_start, iso_week_number, interval_months, salary_monthly_cents,
   active_contracts, reserve_monthly_cents, build_week_report, top_categories,
-  build_budget_basis, build_sub_budget_report
+  build_budget_basis, build_sub_budget_report, rule_monthly_equivalent
 } from '../src/week.js';
 
 const tx = (date, cents, name, group, category = 'X') => ({
   date: new Date(date), betrag_cents: cents, in_out: cents > 0 ? 'in' : 'out', name,
   _cls: { group, category, excluded: false }
+});
+
+test('rule_monthly_equivalent clusters by contractId (manual merge) instead of payee name when set', () => {
+  const paypal = tx('2026-09-02', -27798, 'PayPal Europe S.a.r.l. et Cie S.C.A', 'fixed');
+  const arag = tx('2026-08-01', -27798, 'ARAG SE', 'fixed');
+  const noMerge = rule_monthly_equivalent([paypal, arag]);
+  assert.equal(noMerge.clusters.length, 2, 'unmerged rows still count as two separate expenses');
+
+  paypal._cls.contractId = 'merge_1'; paypal._cls.contractName = 'ARAG SE';
+  arag._cls.contractId = 'merge_1'; arag._cls.contractName = 'ARAG SE';
+  const merged = rule_monthly_equivalent([paypal, arag]);
+  assert.equal(merged.clusters.length, 1, 'merged rows count as one expense');
+  assert.equal(merged.clusters[0].name, 'ARAG SE');
+  assert.equal(merged.clusters[0].rows.length, 2);
 });
 
 test('weeks start on Monday, Sunday belongs to the previous week', () => {

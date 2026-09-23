@@ -127,9 +127,12 @@ export function cluster_by_payee(rows, keyFn = payee_key) {
 // own detected (or manually overridden) interval, then contributes
 // amount/interval, not a raw sum. `overrides` is an optional
 // { payeeName: intervalMonths } manual map (Settings > Fix Expense/Income)
-// that wins over auto-detection from the booking dates.
+// that wins over auto-detection from the booking dates. Rows already tied
+// together by a manual contract merge (rule.contractMerges, e.g. a PayPal
+// settlement leg + the actual merchant charge it pays for) cluster by that
+// shared contractId instead of by name, so they count as ONE expense.
 export function rule_monthly_equivalent(rows, overrides = {}) {
-  const clusters = cluster_by_payee(rows, r => (r.name || '').trim().toLowerCase());
+  const clusters = cluster_by_payee(rows, r => r._cls?.contractId ? `contract:${r._cls.contractId}` : (r.name || '').trim().toLowerCase());
   const items = clusters.map(c => {
     const latest = c.rows[0];
     const payee = (latest.name || '').trim().toLowerCase();
@@ -137,7 +140,7 @@ export function rule_monthly_equivalent(rows, overrides = {}) {
     const months = overrides[payee] || autoMonths;
     return {
       payee,
-      name: latest.name || '(ohne Namen)',
+      name: latest._cls?.contractName || latest.name || '(ohne Namen)',
       months,
       autoMonths,
       amountCents: c.latestCents,

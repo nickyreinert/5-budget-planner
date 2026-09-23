@@ -482,6 +482,11 @@ dialog.setup-wizard:not([open]) { display: none; }
 .fixexpense-body { gap: 8px; background: var(--surface); }
 .fixexpense-pattern-label { font-size: 0.8em; font-weight: 600; color: var(--text-muted); }
 .fixexpense-pattern { width: 100%; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+/* Same "these are actually one expense" merge affordance as the wizard's
+   .wizard-candidate-merge-bar, reused here for an existing rule's preview. */
+.tx-merge-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 6px; color: var(--text-muted); font-size: 0.8em; }
+.tx-merge-btn { min-height: 30px; padding: 4px 8px; font-size: 0.9em; white-space: nowrap; }
+.tx-merge-checkbox { margin-right: 6px; accent-color: var(--accent); }
 /* "Search settings" (matchers) and "results" (preview) need clearly
    different shades from each other AND from the neutral .fixexpense-body
    they sit on - both used to be the same gray, hard to tell apart once a

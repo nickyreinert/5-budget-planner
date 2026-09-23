@@ -81,6 +81,21 @@ test('merged contract aliases classify to the same persistent contract id', () =
   }
 });
 
+test('a contract merge with an amountCents reference only applies to transactions near that amount', () => {
+  const rules = [{
+    id: 'insurance', category: 'Versicherungen', group: 'fixed',
+    matchers: [{ field: 'name', operator: 'regex', value: '(?:PayPal Europe|ARAG SE)' }],
+    contractMerges: [{ id: 'merge-1', name: 'ARAG SE', payees: ['paypal europe', 'arag se'], amountCents: 27798 }]
+  }];
+  const setting = { rules };
+  // Same payee, close to the merge's amount - merges.
+  assert.equal(classify({ name: 'PayPal Europe', betrag_cents: -27798 }, setting).contractId, 'merge-1');
+  assert.equal(classify({ name: 'ARAG SE', betrag_cents: -27798 }, setting).contractId, 'merge-1');
+  // Same payee, unrelated small purchase routed through the same PayPal
+  // account - must NOT be swept into the merge just by name.
+  assert.equal(classify({ name: 'PayPal Europe', betrag_cents: -499 }, setting).contractId, undefined);
+});
+
 test('a recurring payee interval override is exposed to the budget calculation', () => {
   const result = classify({ name: 'Annual insurer', betrag_cents: -12000 }, {
     rules: [{ id: 'insurance', category: 'Insurance', group: 'fixed', namePattern: 'Annual insurer', recurringOverrides: { 'annual insurer': 12 } }]
