@@ -1,6 +1,5 @@
 {
-  "name": "sync-function",
-  "version": "1.0.0",
+  "name": "5ive-budgets",
   "private": true,
   "dependencies": {
     "google-auth-library": "^9.14.1",

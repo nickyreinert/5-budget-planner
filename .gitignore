@@ -3,4 +3,8 @@ copilot-instructions.md
 gocardless-proxy/node_modules/
 gocardless-proxy/.dev.vars
 gocardless-proxy/.wrangler/
+node_modules/
 .env
+
+# Local Netlify folder
+.netlify
