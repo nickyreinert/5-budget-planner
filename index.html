@@ -1186,7 +1186,7 @@
                 const card = document.createElement('div'); card.className = 'category-card';
                 const button = document.createElement('button');
                 button.type = 'button'; button.className = 'quickadd-tile';
-                const dot = document.createElement('span'); dot.className = 'quickadd-tile-dot'; dot.style.background = category_color(category);
+                const dot = document.createElement('span'); dot.className = 'quickadd-tile-dot'; dot.style.color = category_color(category);
                 const label = document.createElement('span'); label.className = 'quickadd-tile-label'; label.textContent = category;
                 button.append(dot, label);
                 button.addEventListener('click', () => open_keypad(category));

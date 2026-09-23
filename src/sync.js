@@ -22,6 +22,7 @@ let publicConfig = null;
 async function fetch_public_config() {
   if (publicConfig) return publicConfig;
   const res = await fetch(SYNC_ENDPOINT);
+  if (res.status === 404) throw new Error('not_configured');
   if (!res.ok) throw new Error(`config_failed_${res.status}`);
   publicConfig = await res.json();
   return publicConfig;
