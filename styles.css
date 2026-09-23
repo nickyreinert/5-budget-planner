@@ -380,7 +380,7 @@ dialog.setup-wizard:not([open]) { display: none; }
 #modalChartContainer { width: 100%; height: 100%; }
 
 /* ===== Settings sub-tabs ===== */
-.settings-tabs { display: flex; gap: 4px; margin: 0 -20px 20px; padding: 12px 20px 0; border-bottom: 1px solid var(--border); overflow-x: auto; position: sticky; top: 0; z-index: 20; background: var(--surface); box-shadow: 0 1px 0 var(--border); scrollbar-width: none; -ms-overflow-style: none; }
+.settings-tabs { display: flex; gap: 4px; margin: 0 -20px 20px; padding: 12px 20px 0; border-bottom: 1px solid var(--border); overflow-x: auto; position: sticky; top: 0; z-index: 20; background-color: var(--surface); box-shadow: 0 6px 8px -6px rgba(0,0,0,0.25); scrollbar-width: none; -ms-overflow-style: none; }
 .settings-tabs::-webkit-scrollbar { display: none; }
 .settings-tab-btn { background: none; border: none; padding: 10px 14px; cursor: pointer; font-size: 0.92em; border-bottom: 3px solid transparent; white-space: nowrap; color: var(--text-muted); }
 .settings-tab-btn.active { border-bottom-color: var(--accent); font-weight: 700; color: var(--accent); }
@@ -389,7 +389,9 @@ dialog.setup-wizard:not([open]) { display: none; }
 /* Mirrors the wizard's sticky summary card: sits right under the already-
    sticky .settings-tabs bar (53px measured height) so the totals stay in
    view while the intro text/editable list below scroll away underneath. */
-.settings-summary-sticky:not(:empty) { position: sticky; top: 53px; z-index: 15; background: var(--surface); padding: 10px 0 4px; margin: -16px 0 0; }
+/* Same explicit opaque background + drop-shadow treatment as the wizard's
+   sticky card above. */
+.settings-summary-sticky:not(:empty) { position: sticky; top: 53px; z-index: 15; background-color: var(--surface); padding: 10px 0 4px; margin: -16px 0 0; box-shadow: 0 6px 8px -6px rgba(0,0,0,0.25); }
 .settings-section { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 18px; background: var(--surface-muted); }
 .settings-section:nth-child(even) { background: var(--accent-soft); }
 .settings-section h3:first-child, .settings-section > p:first-child { margin-top: 0; }
@@ -417,7 +419,10 @@ dialog.setup-wizard:not([open]) { display: none; }
    step while the (often taller-than-the-viewport) intro text/candidate
    list scrolls away underneath it, instead of the card taking up its own
    permanent block of vertical space. */
-.wizard-step .budget-totals-row { position: sticky; top: 0; z-index: 1; background: var(--surface); padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
+/* Explicit opaque background-color (not just the shorthand) plus a drop
+   shadow, so scrolled content underneath never visually reads as bleeding
+   into the sticky card - a plain 1px border alone wasn't enough contrast. */
+.wizard-step .budget-totals-row { position: sticky; top: 0; z-index: 1; background-color: var(--surface); padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--border); box-shadow: 0 6px 8px -6px rgba(0,0,0,0.25); }
 /* `order` (not source order) pins the value to the top and the description
    to the bottom, with `justify-content: space-between` spreading them to
    the card's actual top/bottom edges when a row of cards stretches taller
@@ -691,7 +696,7 @@ th.select-col:hover { background: var(--surface-muted); }
 .transaction-source { display: block; color: var(--text-muted); font-size: 0.7rem; font-weight: normal; }
 
 /* Shared chart filters remain inside the scrolling overview pane. */
-.overview-filters { position: sticky; top: -16px; z-index: 12; background: var(--bg, #f5f6f8); padding: 10px 0; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+.overview-filters { position: sticky; top: -16px; z-index: 12; background-color: var(--bg, #f5f6f8); padding: 10px 0; margin-bottom: 12px; border-bottom: 1px solid var(--border); box-shadow: 0 6px 8px -6px rgba(0,0,0,0.25); }
 .overview-filters-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .overview-filters #yearButtons { display: flex; gap: 6px; overflow-x: auto; flex: 1 1 auto; min-width: 0; }
 .overview-filters #yearButtons button { white-space: nowrap; }
