@@ -19,7 +19,10 @@
     --shadow-md: 0 8px 24px rgba(16,24,40,0.14);
 }
 @media (prefers-color-scheme: dark) {
-    :root {
+    /* :not([data-theme="light"]) lets the explicit toggle force light mode
+       even when the OS is set to dark - see :root[data-theme="dark"] below
+       for the explicit-dark case (opted in regardless of the OS setting). */
+    :root:not([data-theme="light"]) {
         --accent-soft: #16324f;
         --bg: #17181a;
         --surface: #232428;
@@ -30,6 +33,17 @@
         --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
         --shadow-md: 0 8px 24px rgba(0,0,0,0.55);
     }
+}
+:root[data-theme="dark"] {
+    --accent-soft: #16324f;
+    --bg: #17181a;
+    --surface: #232428;
+    --surface-muted: #2b2d31;
+    --text: #f2f3f5;
+    --text-muted: #9aa0a6;
+    --border: #37383c;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+    --shadow-md: 0 8px 24px rgba(0,0,0,0.55);
 }
 
 /* ===== Base ===== */
@@ -66,6 +80,16 @@ button:disabled:hover { border-color: var(--border); }
 button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
 button.primary:hover { background: var(--accent-dark); }
 input, select { font-family: inherit; margin: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
+/* Custom file-picker look (default OS button is jarring next to the rest
+   of the UI) - restyles just the button part via ::file-selector-button,
+   applies everywhere (Settings > CSV-Import, the setup wizard, ...). */
+input[type="file"] { padding: 6px; cursor: pointer; min-height: 40px; }
+input[type="file"]::file-selector-button {
+    font-family: inherit; margin-right: 12px; padding: 8px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface-muted); color: var(--text); font-size: 0.9em; font-weight: 600; cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+input[type="file"]::file-selector-button:hover { background: var(--accent-soft); border-color: var(--accent); }
 
 /* ===== Header: title + main tabs + settings gear, all in one row ===== */
 .app-header { display: flex; align-items: center; gap: 12px; padding: max(14px, env(safe-area-inset-top)) 16px 8px; background: var(--surface); border-bottom: 1px solid var(--border); }
@@ -131,11 +155,15 @@ input, select { font-family: inherit; margin: 0; padding: 8px 10px; border: 1px 
    separate list of bars. ===== */
 .quickadd { margin: 24px 0 20px; padding-top: 16px; border-top: 1px solid var(--border); }
 .quickadd-tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 8px; }
+/* Flat modern card: no more left color bar (looked dated) - the category
+   color now lives in the small dot badge above the label instead. */
 .quickadd-tile {
-    aspect-ratio: 1.6 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    aspect-ratio: 1.6 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
     border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-sm); font-weight: 600; padding: 10px; white-space: normal; text-align: center;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
-.quickadd-tile:hover { border-color: var(--accent); }
+.quickadd-tile:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.quickadd-tile-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .quickadd-tile-remaining { font-size: 0.78em; font-weight: 400; color: var(--text-muted); }
 .quickadd-tile-bar { width: 80%; height: 4px; background: var(--surface-muted); border-radius: 2px; overflow: hidden; margin-top: 2px; }
 .quickadd-tile-bar-fill { display: block; height: 100%; border-radius: 2px; transition: width 0.2s; }
@@ -156,6 +184,9 @@ input, select { font-family: inherit; margin: 0; padding: 8px 10px; border: 1px 
 .week-basis > div { padding-bottom: 10px; }
 .week-basis table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
 .week-basis td { padding: 6px 10px; border-top: 1px solid var(--border); }
+.week-basis-settings-btn { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; margin-left: 4px; width: 22px; height: 22px; min-height: auto; padding: 0; border: none; background: none; color: var(--text-muted); }
+.week-basis-settings-btn:hover { color: var(--accent); border-color: transparent; }
+.week-basis-settings-btn .icon { width: 14px; height: 14px; }
 /* Superseded by the combined ".tx-actions-btn" ("...") trigger below - kept
    only so old cached markup/other call sites don't break, always hidden. */
 .quickentry-delete, .recurring-expense-btn { display: none; }
@@ -171,6 +202,70 @@ input, select { font-family: inherit; margin: 0; padding: 8px 10px; border: 1px 
 .dialog-hint { color: var(--text-muted); font-size: 0.9em; }
 .review-dialog select, .review-dialog input[type="text"] { width: 100%; box-sizing: border-box; }
 .num { text-align: right; white-space: nowrap; }
+
+/* ===== Setup wizard (onboarding: upload -> salary -> expenses -> budgets) ===== */
+.setup-wizard { width: min(640px, calc(100vw - 24px)); }
+.wizard-step { display: flex; flex-direction: column; gap: 14px; }
+.wizard-step[hidden] { display: none; }
+.wizard-step input[type="file"] { display: block; margin: 0; }
+/* Step-progress line with small numbered dots at the top of the dialog. */
+.wizard-progress { display: flex; position: relative; margin: 4px 0 4px; }
+.wizard-progress::before { content: ''; position: absolute; top: 11px; left: 10%; right: 10%; height: 2px; background: var(--border); z-index: 0; }
+.wizard-progress-step { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; position: relative; z-index: 1; }
+.wizard-progress-dot { width: 24px; height: 24px; border-radius: 50%; background: var(--surface); border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 0.75em; font-weight: 700; color: var(--text-muted); }
+.wizard-progress-label { font-size: 0.72em; color: var(--text-muted); }
+.wizard-progress-step.completed .wizard-progress-dot { background: var(--accent); border-color: var(--accent); color: #fff; }
+.wizard-progress-step.active .wizard-progress-dot { border-color: var(--accent); color: var(--accent); }
+.wizard-progress-step.active .wizard-progress-label { color: var(--text); font-weight: 600; }
+.wizard-candidate-list { display: flex; flex-direction: column; gap: 8px; max-height: 45vh; overflow-y: auto; padding: 2px; }
+.wizard-candidate-row { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-muted); cursor: pointer; }
+.wizard-candidate-row select { width: auto; flex-shrink: 0; cursor: auto; }
+.wizard-candidate-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.wizard-candidate-name { font-weight: 600; }
+.wizard-candidate-meta { color: var(--text-muted); font-size: 0.85em; }
+.wizard-candidate-badge { color: var(--accent); font-size: 0.8em; font-weight: 600; }
+.wizard-candidate-badge.muted { color: var(--text-muted); font-weight: 400; }
+/* Small "▸"/"▾" toggle that reveals the matched bookings behind a
+   candidate - a name + amount alone isn't always enough to tell what it
+   actually is. */
+.wizard-candidate-expand { flex: 0 0 auto; background: none; border: none; color: var(--text-muted); font-size: 0.9em; padding: 0 4px; min-height: auto; min-width: auto; }
+.wizard-candidate-expand:hover { color: var(--accent); }
+.wizard-candidate-detail { margin: -4px 0 0; padding: 8px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.85em; }
+.wizard-candidate-detail table { width: 100%; border-collapse: collapse; }
+.wizard-candidate-detail td { padding: 3px 4px; border-top: 1px solid var(--border); }
+.wizard-candidate-detail tr:first-child td { border-top: none; }
+.wizard-candidate-detail td.num { text-align: right; white-space: nowrap; }
+/* Small right-aligned "x" that dismisses a suggestion (grays it out and
+   sinks it to the bottom of the list) - a second, quicker way to opt out
+   besides picking "Ignorieren" in the category picker. */
+.wizard-candidate-remove { flex: 0 0 auto; background: none; border: none; color: var(--text-muted); font-size: 1.2em; line-height: 1; padding: 0 4px; min-height: auto; min-width: auto; }
+.wizard-candidate-remove:hover { color: var(--danger); }
+.wizard-candidate-row.ignored { opacity: 0.55; background: var(--surface); cursor: default; }
+.wizard-candidate-row.ignored .wizard-candidate-remove { color: var(--accent); }
+/* Once a category is picked, its candidates move into a group of their
+   own, outlined in that category's color instead of the flat gray card. */
+.wizard-candidate-group { border: 1px solid var(--group-color, var(--border)); border-radius: var(--radius-sm); padding: 8px; }
+.wizard-candidate-group-title { display: flex; align-items: center; gap: 6px; font-size: 0.8em; font-weight: 600; color: var(--text-muted); margin: 0 0 6px; }
+.wizard-candidate-group-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--group-color, var(--accent)); flex-shrink: 0; }
+.wizard-candidate-group .wizard-candidate-row { background: var(--surface); }
+.wizard-candidate-group .wizard-candidate-row + .wizard-candidate-row { margin-top: 8px; }
+/* On narrow screens a fixed-width category button vertically centered next
+   to a long, wrapped payee name visually overlapped the text. Forcing the
+   name/meta onto its own full-width line and the controls onto a second
+   line below fixes that without touching the desktop layout. */
+@media (max-width: 600px) {
+    .wizard-candidate-row { flex-wrap: wrap; }
+    .wizard-candidate-info { flex-basis: 100%; }
+}
+.wizard-budget-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.wizard-budget-row .wizard-candidate-name { flex: 1; font-weight: 400; }
+.wizard-budget-row input[type="number"] { width: 90px; box-sizing: border-box; }
+/* Manual fallback for both candidate steps (custom name entry + browse) -
+   wraps on narrow screens instead of squeezing 3 controls into one row. */
+.wizard-manual-add { display: flex; flex-wrap: wrap; gap: 8px; }
+.wizard-manual-add input[type="text"] { flex: 1 1 160px; }
+.wizard-manual-add input[type="number"] { flex: 0 1 110px; }
+.wizard-manual-add button { flex: 0 0 auto; }
 
 /* Editable transaction rows: click name to reassign category, click a
    manual entry's amount to edit it in place. */
@@ -227,6 +322,9 @@ input, select { font-family: inherit; margin: 0; padding: 8px 10px; border: 1px 
 .modal-header h2 { margin: 0; font-size: 1.2em; }
 .modal-body { padding: 0 20px 20px; max-height: 65vh; overflow-y: auto; }
 .modal-footer { padding: 14px 20px; background: var(--surface); border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; border-radius: 0 0 var(--radius-md) var(--radius-md); }
+/* Brief feedback since Speichern no longer closes the modal - flashes green
+   for a moment so clicking it still feels like it did something. */
+#saveRulesBtn.save-confirmed { background: var(--success); border-color: var(--success); }
 .modal-content:has(.settings-tabs) .modal-body { flex: 1; min-height: 0; max-height: none; }
 .close { color: var(--text-muted); font-size: 26px; font-weight: bold; cursor: pointer; line-height: 1; }
 .close:hover { color: var(--text); }
@@ -247,7 +345,7 @@ input, select { font-family: inherit; margin: 0; padding: 8px 10px; border: 1px 
 .settings-section:nth-child(even) { background: var(--accent-soft); }
 .settings-section h3:first-child, .settings-section > p:first-child { margin-top: 0; }
 .settings-section h3 { margin: 0 0 8px; font-size: 1em; }
-.settings-section p { margin: 0 0 14px; line-height: 1.5; }
+.settings-section p { margin: 10px 0 14px; line-height: 1.5; }
 .settings-section small { color: var(--text-muted); display: block; margin-top: 4px; line-height: 1.35; }
 .language-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .language-options label { display: flex; align-items: center; gap: 7px; padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
@@ -262,15 +360,27 @@ input, select { font-family: inherit; margin: 0; padding: 8px 10px; border: 1px 
 
 /* Settings > Budgets: totals row + merged budget-group editor rows */
 .budget-totals-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
-.budget-totals-cell { flex: 1 1 130px; background: var(--surface-muted); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; }
-.budget-totals-cell span { font-size: 0.78em; color: var(--text-muted); }
-.budget-totals-cell strong { font-size: 1.2em; }
+/* Keeps the wizard's running total/savings card in view while the (often
+   taller-than-the-viewport) candidate list above it scrolls, instead of it
+   scrolling out of sight along with everything else. */
+.wizard-step .budget-totals-row { position: sticky; bottom: 64px; z-index: 1; background: var(--surface); padding-top: 8px; margin-bottom: 0; }
+/* `order` (not source order) pins the value to the top and the description
+   to the bottom, with `justify-content: space-between` spreading them to
+   the card's actual top/bottom edges when a row of cards stretches taller
+   than its own content - some cells also have a trailing <small> hint,
+   which stays below both. */
+.budget-totals-cell { flex: 1 1 130px; background: var(--surface-muted); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; display: flex; flex-direction: column; justify-content: space-between; gap: 4px; }
+.budget-totals-cell span { font-size: 0.78em; color: var(--text-muted); order: 2; }
+.budget-totals-cell strong { font-size: 1.2em; order: 1; }
+.budget-totals-cell small { order: 3; }
 .budget-settings-preview { margin: 0 0 16px; }
 .budget-settings-preview .budget-totals-cell { background: var(--surface); }
 .budget-suggestion, .budget-warning { margin: -6px 0 14px; font-size: .9em; }
 .budget-warning { color: var(--danger); font-weight: 600; }
 .budgetcap-number { width: 80px; }
 .main-budget-editor-row .budgetcap-number { flex: 0 0 84px; min-width: 0; }
+#categoryMappingEditor { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
+#categoryMappingEditor summary { cursor: pointer; font-weight: 600; color: var(--accent); padding: 4px 0; }
 .group-toggle-btn { flex: 0 0 auto !important; width: 36px; min-width: 36px !important; padding: 0; }
 .main-budget-group-categories { margin: -2px 0 14px 0; padding: 12px; background: var(--surface-muted); border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: 8px; }
 .main-budget-group-categories[hidden] { display: none; }
@@ -327,7 +437,7 @@ input, select { font-family: inherit; margin: 0; padding: 8px 10px; border: 1px 
 .rule-transaction-browser > p { color: var(--text-muted); margin-top: 0; }
 .rule-transaction-browser .dialog-actions:first-child { justify-content: space-between; align-items: center; }
 .rule-transaction-browser h2 { margin: 0; }
-.transaction-browser-table { max-height: 310px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); margin-top: 14px; }
+.transaction-browser-table { height: 310px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); margin-top: 14px; }
 .transaction-browser-table th { white-space: nowrap; }
 @media (max-width: 600px) {
     .review-dialog { padding: 14px; width: 100vw; max-height: 100dvh; border-radius: 0; }
@@ -546,14 +656,17 @@ button.budget-totals-cell:hover { border-color: var(--accent); }
 .review-dialog::backdrop { background: #0008; }
 .review-dialog h2 { font-size: 1.2rem; margin-top: 0; }
 .review-dialog > label { display: flex; flex-direction: column; gap: 6px; margin: 16px 0 8px; }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; position: sticky; bottom: -24px; padding: 12px 0; background: var(--surface); }
+.dialog-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 16px; position: sticky; bottom: -24px; padding: 12px 0; background: var(--surface); }
+.dialog-actions h2 { flex: 1; margin: 0; text-align: left; }
 .setting-change { border-top: 1px solid var(--border); padding: 12px 0; }
+.setting-change-select-all { display: flex; align-items: center; gap: 8px; font-weight: 600; padding-bottom: 8px; }
 .setting-change label { display: flex; align-items: start; gap: 8px; }
 .setting-change input { width: 20px; flex-shrink: 0; }
 .setting-change pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; background: var(--surface-muted); padding: 10px; }
 .setting-change details { margin: 8px 0 0 28px; }
-.category-menu { position: absolute; top: 0; left: 5px; width: 32px; height: 30px; min-height: 30px; padding: 7px; background: none; border: none; color: var(--text-muted); z-index: 1; }
+.category-menu { position: absolute; top: 0; left: 5px; width: 32px; height: 30px; min-height: 30px; padding: 7px; background: none; border: none; color: var(--text-muted); z-index: 1; border-radius: 50%; }
 .category-menu svg { width: 18px; height: 18px; fill: currentColor; }
+.category-menu:hover { color: var(--accent); background: var(--accent-soft); }
 .category-card > .quickadd-tile, .category-card > .category-grid-tile { padding-top: 30px; }
 .main-budget-row strong { flex: 1; min-width: 0; overflow-wrap: break-word; }
 .main-budget-value { flex-shrink: 0; }
@@ -567,6 +680,7 @@ button.budget-totals-cell:hover { border-color: var(--accent); }
 .week-basis .main-budget { padding: 6px 10px; }
 .week-basis .main-budget summary { padding: 8px 0; }
 .icon { width: 20px; height: 20px; display: inline-block; vertical-align: middle; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.icon[hidden] { display: none; }
 @media (min-width: 900px) {
     #weekContent, #weekEmptyState { max-width: 560px; }
   #tab-overview { padding-left: max(24px, calc((100vw - 1200px) / 2)); padding-right: max(24px, calc((100vw - 1200px) / 2)); }

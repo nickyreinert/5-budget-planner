@@ -17,6 +17,14 @@
 </head>
 <body>
     <script>
+        // Applied synchronously, before first paint, to avoid a flash of the
+        // wrong theme - the actual toggle button/listener is wired later in
+        // the module script once the header markup exists.
+        try {
+            const storedTheme = localStorage.getItem('theme');
+            if (storedTheme === 'light' || storedTheme === 'dark') document.documentElement.dataset.theme = storedTheme;
+        } catch {}
+
         if ('serviceWorker' in navigator && !['localhost', '127.0.0.1'].includes(location.hostname)) {
             let refreshing = false;
             const hadController = !!navigator.serviceWorker.controller;
@@ -35,6 +43,7 @@
             <button class="main-tab-btn active" data-main-tab="week" data-i18n="mainTabs.week">📅 Woche</button>
             <button class="main-tab-btn" data-main-tab="overview" data-i18n="mainTabs.overview">📊 Übersicht</button>
         </div>
+        <button type="button" id="themeToggleBtn" class="settings-gear" title="Darstellung umschalten" aria-label="Darstellung umschalten"><svg class="icon icon-theme-dark" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12.5A8.5 8.5 0 1 1 11.5 4a7 7 0 0 0 8.5 8.5z"/></svg><svg class="icon icon-theme-light" viewBox="0 0 24 24" aria-hidden="true" hidden><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
         <button type="button" id="configRulesBtn" class="settings-gear" data-i18n-title="filters.settings" title="Einstellungen" aria-label="Einstellungen"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6l1 3 3 1v8l-3 1-1 3H9l-1-3-3-1V8l3-1z"/><circle cx="12" cy="12" r="3"/></svg></button>
     </header>
 
@@ -44,6 +53,7 @@
                 <div id="weekEmptyState" class="empty-state" hidden>
                     <p data-i18n="week.emptyStateText">Noch keine Daten. Importiere eine CSV oder starte mit Beispieldaten.</p>
                     <div class="empty-state-actions">
+                        <button type="button" id="emptyWizardBtn" class="primary" data-i18n="wizard.startButton">🧙 Setup-Assistent starten</button>
                         <button type="button" id="emptyLoadSampleBtn" data-i18n="filters.loadSample">Beispieldaten laden</button>
                         <button type="button" id="emptyOpenSettingsBtn" data-i18n="week.emptyImportCsv">CSV importieren</button>
                     </div>
@@ -183,6 +193,10 @@
                 </div>
 
                 <div id="settingsTab-rules" class="settings-tab-pane">
+                    <section class="settings-section">
+                    <button type="button" id="rulesWizardBtn" class="primary" data-i18n="wizard.startButton">🧙 Setup-Assistent starten</button>
+                    <p data-i18n="wizard.rulesTabHint">Erkennt automatisch wiederkehrendes Gehalt und Fixkosten aus deinen Buchungen und hilft beim Einrichten deiner Budgets.</p>
+                    </section>
                     <section class="settings-section language-section">
                     <h3 data-i18n="languages.title">App-Sprache</h3>
                     <p data-i18n="languages.intro">Wähle die Sprache der Benutzeroberfläche. Deine Regeln/Kategorien-Bezeichnungen ändern sich dadurch nicht.</p>
@@ -406,6 +420,7 @@
                 <button id="saveRulesBtn" class="primary" data-i18n="modal.save">Speichern</button>
                 <button id="undoRulesBtn" data-i18n="modal.undo" disabled>Rückgängig</button>
                 <button id="cancelRulesBtn" data-i18n="modal.cancel">Abbrechen</button>
+                <button id="closeRulesModalBtn" data-i18n="modal.close">Schließen</button>
             </div>
         </div>
     </div>
@@ -423,6 +438,7 @@
     <dialog id="settingsReviewDialog" class="review-dialog" aria-labelledby="settingsReviewTitle">
         <h2 id="settingsReviewTitle">SETTING-Änderungen prüfen</h2>
         <p>Markierte Änderungen werden übernommen. Eigene Anpassungen bleiben standardmäßig erhalten und haben Vorrang vor LLM-Regeln.</p>
+        <label class="setting-change-select-all"><input type="checkbox" id="settingsReviewSelectAll"> Alle auswählen</label>
         <div id="settingsReviewChanges"></div>
         <p id="settingsReviewError" role="alert"></p>
         <div class="dialog-actions"><button type="button" id="cancelSettingsReview">Abbrechen</button><button type="button" id="applySettingsReview">Auswahl importieren</button></div>
@@ -452,6 +468,67 @@
         <p class="dialog-hint" data-i18n="recurringExpense.ruleHint">Die Regel sucht nach diesem Namen in Zahlungsempfänger, Verwendungszweck oder Bankkategorie.</p>
         <p id="recurringExpenseError" role="alert"></p>
         <div class="dialog-actions"><button type="button" id="cancelRecurringExpense" data-i18n="modal.cancel">Abbrechen</button><button type="button" id="saveRecurringExpense" class="primary" data-i18n="recurringExpense.save">Als wiederkehrend speichern</button></div>
+    </dialog>
+
+    <dialog id="setupWizardDialog" class="review-dialog setup-wizard" aria-labelledby="setupWizardTitle">
+        <div class="dialog-actions"><h2 id="setupWizardTitle" data-i18n="wizard.title">🧙 Setup-Assistent</h2><button type="button" id="closeSetupWizard" aria-label="Schließen">×</button></div>
+
+        <div class="wizard-progress" id="wizardProgress">
+            <div class="wizard-progress-step" data-wizard-progress-step="upload"><span class="wizard-progress-dot">1</span><span class="wizard-progress-label" data-i18n="wizard.stepLabelUpload">Import</span></div>
+            <div class="wizard-progress-step" data-wizard-progress-step="salary"><span class="wizard-progress-dot">2</span><span class="wizard-progress-label" data-i18n="wizard.stepLabelSalary">Gehalt</span></div>
+            <div class="wizard-progress-step" data-wizard-progress-step="expenses"><span class="wizard-progress-dot">3</span><span class="wizard-progress-label" data-i18n="wizard.stepLabelExpenses">Ausgaben</span></div>
+            <div class="wizard-progress-step" data-wizard-progress-step="budgets"><span class="wizard-progress-dot">4</span><span class="wizard-progress-label" data-i18n="wizard.stepLabelBudgets">Budgets</span></div>
+        </div>
+
+        <div class="wizard-step" data-wizard-step="upload">
+            <p data-i18n="wizard.stepUploadIntro">Lade deinen Kontoauszug (CSV) hoch, damit wir automatisch wiederkehrendes Gehalt und Fixkosten erkennen können - optional, du kannst diesen Schritt auch überspringen und alles manuell eingeben.</p>
+            <p id="wizardExistingDataHint" hidden></p>
+            <input type="file" id="wizardCsvFile" accept=".csv">
+        </div>
+
+        <div class="wizard-step" data-wizard-step="salary" hidden>
+            <p data-i18n="wizard.stepSalaryIntro">Wir haben folgende regelmäßigen Zahlungseingänge des letzten Jahres gefunden. Markiere alle, die zu deinem Einkommen gehören (auch mehrere möglich).</p>
+            <div id="wizardSalaryCandidates" class="wizard-candidate-list"></div>
+            <div class="wizard-manual-add">
+                <input type="text" id="wizardSalaryCustomName" data-i18n-placeholder="wizard.customNamePlaceholder" placeholder="Name (wie im Kontoauszug)">
+                <input type="number" id="wizardSalaryCustomAmount" min="0" step="1" data-i18n-placeholder="wizard.customAmountPlaceholder" placeholder="€ pro Monat">
+                <button type="button" id="wizardSalaryAddCustom" data-i18n="wizard.addCustom">+ Hinzufügen</button>
+                <button type="button" id="wizardSalaryBrowseBtn" data-i18n="wizard.browseTransactions">🔍 Buchungen durchsuchen</button>
+            </div>
+        </div>
+
+        <div class="wizard-step" data-wizard-step="expenses" hidden>
+            <p data-i18n="wizard.stepExpensesIntro">Diese wiederkehrenden Ausgaben haben wir erkannt. Ordne jeder eine Kategorie zu, oder ignoriere sie.</p>
+            <div id="wizardExpenseCandidates" class="wizard-candidate-list"></div>
+            <div class="wizard-manual-add">
+                <input type="text" id="wizardExpenseCustomName" data-i18n-placeholder="wizard.customNamePlaceholder" placeholder="Name (wie im Kontoauszug)">
+                <input type="number" id="wizardExpenseCustomAmount" min="0" step="1" data-i18n-placeholder="wizard.customAmountPlaceholder" placeholder="€ pro Monat">
+                <button type="button" id="wizardExpenseAddCustom" data-i18n="wizard.addCustom">+ Hinzufügen</button>
+                <button type="button" id="wizardExpenseBrowseBtn" data-i18n="wizard.browseTransactions">🔍 Buchungen durchsuchen</button>
+            </div>
+            <div class="budget-totals-row"><div class="budget-totals-cell"><span data-i18n="wizard.expenseTotalLabel">Fixkosten gesamt pro Monat</span><strong id="wizardExpenseTotal"></strong></div></div>
+        </div>
+
+        <div class="wizard-step" data-wizard-step="budgets" hidden>
+            <p data-i18n="wizard.stepBudgetsIntro">Passe deine 5 Budgets an. Was übrig bleibt, kannst du sparen.</p>
+            <div id="wizardBudgetEditor" class="wizard-candidate-list"></div>
+            <div class="budget-totals-row"><div class="budget-totals-cell"><span data-i18n="wizard.savingsLabel">Ersparnis pro Monat</span><strong id="wizardSavingsPreview"></strong></div></div>
+        </div>
+
+        <p id="wizardError" role="alert"></p>
+        <div class="dialog-actions">
+            <button type="button" id="wizardBackBtn" data-i18n="wizard.back" hidden>Zurück</button>
+            <button type="button" id="wizardNextBtn" class="primary" data-i18n="wizard.next">Weiter</button>
+            <button type="button" id="wizardFinishBtn" class="primary" data-i18n="wizard.finish" hidden>Fertig</button>
+        </div>
+    </dialog>
+
+    <dialog id="wizardTransactionBrowserDialog" class="review-dialog rule-transaction-browser" aria-labelledby="wizardTransactionBrowserTitle">
+        <div class="dialog-actions"><h2 id="wizardTransactionBrowserTitle" data-i18n="wizard.browseTransactions">🔍 Buchungen durchsuchen</h2><button type="button" id="closeWizardTransactionBrowser" aria-label="Schließen">×</button></div>
+        <div id="wizardTransactionBrowserMatchers" class="rule-matchers"></div>
+        <button type="button" id="wizardTransactionBrowserAddMatcher" data-i18n="wizard.addMatcher">+ Suchmuster</button>
+        <div class="transaction-browser-table"><table><thead><tr><th data-i18n="table.date">Datum</th><th data-i18n="table.name">Name</th><th data-i18n="table.betrag">Betrag</th></tr></thead><tbody id="wizardTransactionBrowserRows"></tbody></table></div>
+        <p class="dialog-hint" data-i18n="wizard.browseHint">Buchung anklicken, um sie zu übernehmen.</p>
     </dialog>
 
     <dialog id="txEditDialog" class="review-dialog" aria-labelledby="txEditTitle">
@@ -484,11 +561,11 @@
         import { csv_records, reconcile_transactions, transaction_source_label } from './src/transactions.js';
         import { category_catalog, sort_categories, fixed_expense_categories, UNCATEGORIZED } from './src/categories.js';
         import { upsert_imported_entries, load_imported_entries } from './src/db.js';
-        import { apply_amount_overrides, apply_note_overrides, apply_date_overrides } from './src/data.js';
+        import { apply_amount_overrides, apply_note_overrides, apply_date_overrides, is_real_cashflow } from './src/data.js';
         import { load_amount_overrides, save_amount_override, load_all_overrides, save_overrides, add_manual_entry, load_manual_entries, delete_manual_entry, load_note_overrides, save_note_override, load_date_overrides, save_date_override } from './src/db.js';
         import {
             build_budget_basis, build_week_report, build_sub_budget_report, build_main_budget_report, category_color,
-            week_start, add_days, iso_week_number, top_categories, rule_monthly_equivalent
+            week_start, add_days, iso_week_number, top_categories, rule_monthly_equivalent, interval_months
         } from './src/week.js';
         import { get_sub_budgets, save_sub_budgets, budget_category, validate_budget_settings, ensure_budget_coverage } from './src/budgets.js';
         import { push_digit, pop_digit, buffer_to_cents } from './src/keypad.js';
@@ -601,6 +678,29 @@
             render_week();
         }
 
+        // ===== THEME TOGGLE (light/dark, next to the settings gear) =====
+        // The actual `data-theme` attribute is already applied synchronously
+        // in the tiny inline <script> at the top of <body> (avoids a flash
+        // of the wrong theme) - this just syncs the button icon and wires
+        // the click. With no stored preference yet, the toggle reflects
+        // (and next click overrides) the OS `prefers-color-scheme`.
+        const themeToggleBtn = document.getElementById('themeToggleBtn');
+        function effective_theme() {
+            return document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        }
+        function update_theme_toggle_icon() {
+            const isDark = effective_theme() === 'dark';
+            themeToggleBtn.querySelector('.icon-theme-dark').hidden = isDark;
+            themeToggleBtn.querySelector('.icon-theme-light').hidden = !isDark;
+        }
+        themeToggleBtn.addEventListener('click', () => {
+            const next = effective_theme() === 'dark' ? 'light' : 'dark';
+            document.documentElement.dataset.theme = next;
+            localStorage.setItem('theme', next);
+            update_theme_toggle_icon();
+        });
+        update_theme_toggle_icon();
+
         // ===== MAIN TAB NAVIGATION (Woche / Übersicht) + swipe pager =====
         // Both tab-panes sit side by side inside #pagerTrack (width 200%,
         // each pane 50%); switching tabs (by tap or drag) just moves a
@@ -630,7 +730,7 @@
 
         mainTabBtns.forEach((btn, i) => {
             btn.dataset.tabIndex = i;
-            btn.addEventListener('click', () => set_active_tab(i, true));
+            btn.addEventListener('click', () => { set_active_tab(i, true); sync_url_from_state(); });
         });
         set_active_tab(0, false, false);
 
@@ -665,6 +765,7 @@
                 if (dragState.dx < -threshold) next = 1;
                 else if (dragState.dx > threshold) next = 0;
                 set_active_tab(next, true);
+                sync_url_from_state();
             }
             dragState = null;
         }
@@ -923,6 +1024,14 @@
             return weeks;
         }
 
+        // Tiny gear-icon link next to a weekly-budget-breakdown row, jumping
+        // straight into the Settings sub-tab that row's number comes from
+        // (Income/Fix Expense/Budgets) - see open_settings_tab().
+        function settings_link_button(tabId) {
+            const label = t('settingsTabs.' + tabId);
+            return `<button type="button" class="week-basis-settings-btn" data-settings-tab="${tabId}" title="${label}" aria-label="${label}"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6l1 3 3 1v8l-3 1-1 3H9l-1-3-3-1V8l3-1z"/><circle cx="12" cy="12" r="3"/></svg></button>`;
+        }
+
         // Wochenansicht: prominent big number, curated sub-budgets, one-tap
         // quick-add tiles, and (collapsed) the full per-category breakdown.
         function render_week() {
@@ -976,15 +1085,15 @@
             `;
 
             const salaryLine = basis.salaryCents > 0
-                ? `<tr><td>${t('week.salary')}</td><td class="num">${fmt_eur(basis.salaryCents)}</td></tr>`
-                : `<tr><td colspan="2" style="color:var(--danger);">${t('week.noSalary')}</td></tr>`;
+                ? `<tr><td>${t('week.salary')} ${settings_link_button('income')}</td><td class="num">${fmt_eur(basis.salaryCents)}</td></tr>`
+                : `<tr><td colspan="2" style="color:var(--danger);">${t('week.noSalary')} ${settings_link_button('income')}</td></tr>`;
             const fixedRules = (ruleSet.rules || []).filter(r => r.group === 'fixed');
             document.getElementById('weekBasis').innerHTML = `
                 <table>
                     ${salaryLine}
-                    <tr><td>− ${t('week.fixed')}</td><td class="num">${fmt_eur(basis.fixedCents)}</td></tr>
+                    <tr><td>− ${t('week.fixed')} ${settings_link_button('fixexpense')}</td><td class="num">${fmt_eur(basis.fixedCents)}</td></tr>
                     <tr><td>= ${t('week.free')}</td><td class="num">${fmt_eur(basis.freeCents)}</td></tr>
-                    <tr><td><b>${t('week.weekly')}</b></td><td class="num"><b>${fmt_eur(basis.weeklyCents)}</b></td></tr>
+                    <tr><td><b>${t('week.weekly')}</b> ${settings_link_button('budgets')}</td><td class="num"><b>${fmt_eur(basis.weeklyCents)}</b></td></tr>
                 </table>
                 <h4>${t('week.contractsTitle')}</h4>
                 ${fixedRules.length ? fixedRules.map(rule => {
@@ -1005,6 +1114,9 @@
                 }).join('') : `<p>${t('fixExpense.noRows')}</p>`}
             `;
             wire_tx_rows(document.getElementById('weekBasis'));
+            document.getElementById('weekBasis').querySelectorAll('.week-basis-settings-btn').forEach(btn => {
+                btn.addEventListener('click', () => open_settings_tab(btn.dataset.settingsTab));
+            });
         }
 
         // ===== QUICK ADD: category tile -> straight into the keypad =====
@@ -1071,8 +1183,9 @@
                 const card = document.createElement('div'); card.className = 'category-card';
                 const button = document.createElement('button');
                 button.type = 'button'; button.className = 'quickadd-tile';
-                button.style.borderLeft = `5px solid ${category_color(category)}`;
-                button.textContent = category;
+                const dot = document.createElement('span'); dot.className = 'quickadd-tile-dot'; dot.style.background = category_color(category);
+                const label = document.createElement('span'); label.className = 'quickadd-tile-label'; label.textContent = category;
+                button.append(dot, label);
                 button.addEventListener('click', () => open_keypad(category));
                 wire_category_actions(card, category);
                 card.append(button, favorite_button(category));
@@ -1693,11 +1806,12 @@
             const total = Object.values(subBudgetCaps).reduce((sum,v) => sum + v,0);
             const basis = build_budget_basis(module_data);
             const monthlyTotal = Math.round(total * 52 / 12);
+            const savingsMonthly = basis.freeCents - monthlyTotal;
             panel.innerHTML = `<div class="budget-totals-row budget-settings-preview">
-                <div class="budget-totals-cell"><span>Budgetlimits pro Woche</span><strong>${fmt_eur(total)}</strong></div>
-                <div class="budget-totals-cell"><span>Budgetlimits pro Monat</span><strong>${fmt_eur(monthlyTotal)}</strong></div>
-                <div class="budget-totals-cell"><span>Verfügbar pro Woche</span><strong>${fmt_eur(basis.weeklyCents)}</strong></div>
-                <div class="budget-totals-cell"><span>Verfügbar pro Monat</span><strong>${fmt_eur(basis.freeCents)}</strong></div>
+                <div class="budget-totals-cell"><span>${t('budgets.availableMonthly')}</span><strong>${fmt_eur(basis.freeCents)}</strong></div>
+                <div class="budget-totals-cell"><span>${t('budgets.availableWeekly')}</span><strong>${fmt_eur(basis.weeklyCents)}</strong></div>
+                <div class="budget-totals-cell"><span>${t('budgets.limitWeekly')}</span><strong>${fmt_eur(total)}</strong></div>
+                <div class="budget-totals-cell"><span>${t('budgets.savingsMonthly')}</span><strong>${fmt_eur(savingsMonthly)}</strong></div>
             </div>
             ${suggestion ? `<p class="budget-suggestion">LLM-Vorschlag: ${fmt_eur(suggestion.weeklyLimitCents)} / Woche. ${escape_budget(suggestion.rationale || '')}</p>` : ''}
             ${total > Math.max(0,basis.weeklyCents) && module_data.length ? '<p class="budget-warning">Die Limits übersteigen das verfügbare Wochenbudget.</p>' : ''}`;
@@ -2165,6 +2279,596 @@
             document.querySelector('.settings-tab-btn[data-settings-tab="importexport"]').click();
         });
 
+        // ===== SETUP WIZARD =====
+        // Guided onboarding: upload data -> pick the recurring salary
+        // payment among detected candidates -> assign each detected
+        // recurring expense to an existing Fix-Expense category -> tweak
+        // the 5 main budgets with a live savings preview. Each step's pick
+        // is applied to `ruleSet` (as an extra matcher on an existing rule,
+        // or a new one) the moment you click "Weiter" past it, via
+        // `persist_budgets()` - same immediate-persist model as the rest of
+        // the Settings modal, so there is no separate wizard-only draft
+        // state to revert if it's closed early.
+        const wizardState = {
+            stepIndex: 0,
+            steps: ['upload', 'salary', 'expenses', 'budgets'],
+            salaryCandidates: [],
+            selectedSalaryPayees: new Set(),
+            expenseCandidates: [],
+            budgetCaps: {}
+        };
+
+        // Payee-name clusters with a detected recurring interval (>=2
+        // occurrences with a regular gap) - the raw building block for both
+        // the salary and the expense detection step below. `latestGroup` is
+        // the classification of the most recent booking in the cluster, so
+        // callers can tell an already-handled cluster apart from a genuine
+        // gap in the rules.
+        // Detection is entirely data-driven - no hardcoded bank/processor
+        // names (PayPal, Klarna, DKB, ...) anywhere. A generic payment
+        // intermediary's bank-visible name can cover many unrelated real
+        // purchases, but the fix isn't guessing brand names: it's requiring
+        // amounts to actually be similar. `WIZARD_AMOUNT_TOLERANCE` is
+        // deliberately tighter than week.js's cluster_by_payee() (used for
+        // already-confirmed contracts, where allowing more drift for e.g. a
+        // price increase is fine) - a fresh SUGGESTION needs to be trustworthy
+        // by itself, so amounts are grouped sequentially (each next amount
+        // within tolerance of the previous one, not all anchored to a single
+        // reference) and the whole group is rejected if its overall min/max
+        // spread is still too wide, or if fewer than two occurrences share a
+        // genuinely similar value - "at least two times of a similar value"
+        // is the actual signal, not a payee-name match by itself.
+        const WIZARD_AMOUNT_TOLERANCE = 0.12;
+        const WIZARD_MAX_SPREAD = 0.25;
+        function wizard_cluster_by_amount(rows) {
+            const sorted = [...rows].sort((a, b) => Math.abs(a.betrag_cents) - Math.abs(b.betrag_cents));
+            const clusters = [];
+            sorted.forEach(r => {
+                const amount = Math.abs(r.betrag_cents);
+                const last = clusters.at(-1);
+                const prevAmount = last ? Math.abs(last.rows.at(-1).betrag_cents) : null;
+                if (last && amount - prevAmount <= prevAmount * WIZARD_AMOUNT_TOLERANCE) last.rows.push(r);
+                else clusters.push({ rows: [r] });
+            });
+            return clusters.filter(c => {
+                if (c.rows.length < 2) return false;
+                const amounts = c.rows.map(r => Math.abs(r.betrag_cents));
+                return (Math.max(...amounts) - Math.min(...amounts)) <= Math.min(...amounts) * WIZARD_MAX_SPREAD;
+            });
+        }
+
+        function wizard_cluster_recurring(rows) {
+            const byName = new Map();
+            rows.forEach(r => {
+                const key = (r.name || '').trim().toLowerCase();
+                if (!key) return;
+                (byName.get(key) || byName.set(key, []).get(key)).push(r);
+            });
+            const results = [];
+            byName.forEach(nameRows => {
+                wizard_cluster_by_amount(nameRows).forEach(cluster => {
+                    const sortedByDate = [...cluster.rows].sort((a, b) => b.date - a.date);
+                    const months = interval_months(sortedByDate.map(r => r.date).reverse());
+                    if (months === null) return;
+                    results.push({
+                        payee: (sortedByDate[0].name || '').trim(),
+                        amountCents: Math.abs(sortedByDate[0].betrag_cents),
+                        months,
+                        count: sortedByDate.length,
+                        rows: sortedByDate,
+                        latestGroup: sortedByDate[0]._cls?.group,
+                        latestIncomeType: sortedByDate[0]._cls?.incomeType
+                    });
+                });
+            });
+            return results;
+        }
+
+        // Incoming money over the last 12 months, excluding internal
+        // transfers - monthly-interval clusters are salary candidates
+        // (largest first, so the real salary - typically by far the
+        // biggest recurring deposit - sorts to the top). Already-classified
+        // income is NOT excluded (many bank exports classify salary via a
+        // generic CSV-category fallback with no explicit incomeType, so
+        // excluding "income" outright hid the obvious candidate and left
+        // only unrelated leftovers) - it's badged/pre-selected instead of
+        // silently vanishing.
+        function detect_salary_candidates() {
+            const sinceDate = add_days(new Date(), -365);
+            const incoming = module_data.filter(r => r.in_out === 'in' && r.date >= sinceDate && is_real_cashflow(r) && r._cls?.group !== 'internal_transfer');
+            return wizard_cluster_recurring(incoming).filter(c => c.months === 1).sort((a, b) => b.amountCents - a.amountCents).slice(0, 6)
+                .map(c => ({ ...c, ignored: false, expanded: false }));
+        }
+
+        // Outgoing money over the last 12 months, not already classified as
+        // fixed/internal-transfer - any recurring interval counts (monthly,
+        // quarterly, ...).
+        function detect_expense_candidates() {
+            const sinceDate = add_days(new Date(), -365);
+            const outgoing = module_data.filter(r => r.in_out === 'out' && r.date >= sinceDate && is_real_cashflow(r) && !['fixed', 'internal_transfer'].includes(r._cls?.group));
+            return wizard_cluster_recurring(outgoing)
+                .map(c => ({ ...c, monthlyCents: Math.round(c.amountCents / c.months), category: '', ignored: false, expanded: false }))
+                .sort((a, b) => b.monthlyCents - a.monthlyCents)
+                .slice(0, 15);
+        }
+
+        function open_setup_wizard() {
+            wizardState.stepIndex = 0;
+            wizardState.selectedSalaryPayees = new Set();
+            wizardState.salaryCandidates = [];
+            wizardState.expenseCandidates = [];
+            wizardState.budgetCaps = { ...subBudgetCaps };
+            document.getElementById('wizardError').textContent = '';
+            const hint = document.getElementById('wizardExistingDataHint');
+            hint.hidden = !module_data.length;
+            if (module_data.length) hint.textContent = t('wizard.existingDataHint', { count: module_data.length });
+            render_wizard_step();
+            document.getElementById('setupWizardDialog').showModal();
+        }
+        document.getElementById('emptyWizardBtn').addEventListener('click', open_setup_wizard);
+        document.getElementById('rulesWizardBtn').addEventListener('click', open_setup_wizard);
+        document.getElementById('closeSetupWizard').addEventListener('click', () => document.getElementById('setupWizardDialog').close());
+
+        document.getElementById('wizardCsvFile').addEventListener('change', (e) => loadCsvFile(e.target.files[0], get_csv_config()));
+
+        function render_wizard_progress() {
+            document.querySelectorAll('.wizard-progress-step').forEach(el => {
+                const index = wizardState.steps.indexOf(el.dataset.wizardProgressStep);
+                el.classList.toggle('active', index === wizardState.stepIndex);
+                el.classList.toggle('completed', index < wizardState.stepIndex);
+            });
+        }
+
+        function render_wizard_step() {
+            const stepName = wizardState.steps[wizardState.stepIndex];
+            document.querySelectorAll('.wizard-step').forEach(el => { el.hidden = el.dataset.wizardStep !== stepName; });
+            render_wizard_progress();
+            document.getElementById('wizardBackBtn').hidden = wizardState.stepIndex === 0;
+            document.getElementById('wizardNextBtn').hidden = stepName === 'budgets';
+            document.getElementById('wizardFinishBtn').hidden = stepName !== 'budgets';
+            document.getElementById('wizardError').textContent = '';
+            if (stepName === 'salary') render_wizard_salary_step();
+            if (stepName === 'expenses') render_wizard_expenses_step();
+            if (stepName === 'budgets') render_wizard_budgets_step();
+        }
+
+        // Small right-aligned "x" shared by the salary/expense candidate
+        // rows: toggles `.ignored` (grays the row out, sinks it to the
+        // bottom) instead of removing it outright, so it's easy to undo.
+        function wizard_ignore_button(ignored) {
+            const button = document.createElement('button');
+            button.type = 'button'; button.className = 'wizard-candidate-remove';
+            button.textContent = ignored ? '↺' : '×';
+            const label = t(ignored ? 'wizard.restoreCandidate' : 'wizard.ignoreOption');
+            button.title = label; button.setAttribute('aria-label', label);
+            return button;
+        }
+
+        // Toggles `.expanded` on a candidate to reveal its matched
+        // transactions below the row - just a name/amount isn't always
+        // enough to tell what a payee actually is.
+        function wizard_expand_button(expanded) {
+            const button = document.createElement('button');
+            button.type = 'button'; button.className = 'wizard-candidate-expand';
+            button.textContent = expanded ? '▾' : '▸';
+            const label = t('wizard.expandDetails');
+            button.title = label; button.setAttribute('aria-label', label);
+            return button;
+        }
+
+        // Up to 5 most recent matched bookings (date/purpose/amount) for an
+        // expanded candidate - null (no detail block) for manual entries,
+        // which have no real transactions behind them.
+        function wizard_candidate_detail(c) {
+            if (!c.rows?.length) return null;
+            const detail = document.createElement('div'); detail.className = 'wizard-candidate-detail';
+            const recent = [...c.rows].sort((a, b) => b.date - a.date).slice(0, 5);
+            detail.innerHTML = `<table>${recent.map(r => `
+                <tr><td>${fmt_date(r.date)}</td><td>${escape_budget(r.verwendungszweck || r.name)}</td><td class="num">${fmt_eur(r.betrag_cents)}</td></tr>
+            `).join('')}</table>`;
+            return detail;
+        }
+
+        function render_wizard_salary_step() {
+            const container = document.getElementById('wizardSalaryCandidates');
+            container.replaceChildren();
+            if (!wizardState.salaryCandidates.length) {
+                const p = document.createElement('p'); p.textContent = t('wizard.noSalaryCandidates'); container.append(p);
+            }
+            const sorted = [...wizardState.salaryCandidates].sort((a, b) => Number(a.ignored) - Number(b.ignored));
+            sorted.forEach(c => {
+                const row = document.createElement('label'); row.className = 'wizard-candidate-row' + (c.ignored ? ' ignored' : '');
+                const checkbox = document.createElement('input'); checkbox.type = 'checkbox';
+                checkbox.checked = wizardState.selectedSalaryPayees.has(c.payee); checkbox.disabled = c.ignored;
+                checkbox.addEventListener('change', () => {
+                    if (checkbox.checked) wizardState.selectedSalaryPayees.add(c.payee); else wizardState.selectedSalaryPayees.delete(c.payee);
+                });
+                const info = document.createElement('span'); info.className = 'wizard-candidate-info';
+                const name = document.createElement('span'); name.className = 'wizard-candidate-name'; name.textContent = c.payee;
+                const meta = document.createElement('span'); meta.className = 'wizard-candidate-meta';
+                meta.textContent = c.manual ? t('wizard.manualEntry') : `${fmt_eur(c.amountCents)} · ${t('wizard.occurrences', { count: c.count })}`;
+                info.append(name, meta);
+                // "Already salary" (incomeType set) vs "already some other
+                // income" (e.g. a generic bank-category fallback) are two
+                // different things worth telling apart, not one vague badge.
+                if (c.latestIncomeType === 'salary') {
+                    const badge = document.createElement('span'); badge.className = 'wizard-candidate-badge'; badge.textContent = '✓ ' + t('wizard.alreadySalary'); info.append(badge);
+                } else if (c.latestGroup === 'income') {
+                    const badge = document.createElement('span'); badge.className = 'wizard-candidate-badge muted'; badge.textContent = t('wizard.alreadyGenericIncome'); info.append(badge);
+                }
+                const buttons = [];
+                if (c.rows?.length) {
+                    const expandBtn = wizard_expand_button(c.expanded);
+                    expandBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); c.expanded = !c.expanded; render_wizard_salary_step(); });
+                    buttons.push(expandBtn);
+                }
+                const ignoreBtn = wizard_ignore_button(c.ignored);
+                ignoreBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    c.ignored = !c.ignored;
+                    if (c.ignored) wizardState.selectedSalaryPayees.delete(c.payee);
+                    render_wizard_salary_step();
+                });
+                buttons.push(ignoreBtn);
+                row.append(checkbox, info, ...buttons);
+                // The row looks clickable (cursor:pointer) for more than
+                // just the checkbox - clicking anywhere except the checkbox
+                // itself or a button expands the detail view instead of
+                // silently doing nothing (or, via the <label>'s default
+                // behavior, toggling the checkbox from an unrelated spot).
+                if (c.rows?.length) {
+                    row.addEventListener('click', (e) => {
+                        if (e.target === checkbox || e.target.closest('button')) return;
+                        e.preventDefault();
+                        c.expanded = !c.expanded;
+                        render_wizard_salary_step();
+                    });
+                }
+                const fragment = document.createDocumentFragment();
+                fragment.append(row);
+                if (c.expanded) { const detail = wizard_candidate_detail(c); if (detail) fragment.append(detail); }
+                container.append(fragment);
+            });
+            document.getElementById('wizardSalaryBrowseBtn').hidden = !module_data.length;
+        }
+
+        function render_wizard_expenses_step() {
+            const container = document.getElementById('wizardExpenseCandidates');
+            container.replaceChildren();
+            document.getElementById('wizardExpenseBrowseBtn').hidden = !module_data.length;
+            if (!wizardState.expenseCandidates.length) {
+                const p = document.createElement('p'); p.textContent = t('wizard.noExpenseCandidates'); container.append(p);
+                update_wizard_expense_total();
+                return;
+            }
+
+            function make_row(c) {
+                const row = document.createElement('div'); row.className = 'wizard-candidate-row' + (c.ignored ? ' ignored' : '');
+                const info = document.createElement('span'); info.className = 'wizard-candidate-info';
+                const name = document.createElement('span'); name.className = 'wizard-candidate-name'; name.textContent = c.payee;
+                const meta = document.createElement('span'); meta.className = 'wizard-candidate-meta';
+                meta.textContent = c.manual ? t('wizard.manualEntry') : `${fmt_eur(c.monthlyCents)} ${t('fixExpense.perMonth')} · ${t('wizard.occurrences', { count: c.count })}`;
+                info.append(name, meta);
+                const categoryBtn = document.createElement('button');
+                categoryBtn.type = 'button'; categoryBtn.className = 'category-picker-btn';
+                categoryBtn.dataset.category = c.category; categoryBtn.disabled = c.ignored;
+                categoryBtn.textContent = c.category || t('recurringExpense.chooseCategory');
+                categoryBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    open_category_popover(categoryBtn, fixed_expense_categories(ruleSet, favoriteCategories), (category) => {
+                        c.category = category; render_wizard_expenses_step(); update_wizard_expense_total();
+                    }, { onCreate: (category) => { c.category = category; render_wizard_expenses_step(); update_wizard_expense_total(); } });
+                });
+                const buttons = [];
+                if (c.rows?.length) {
+                    const expandBtn = wizard_expand_button(c.expanded);
+                    expandBtn.addEventListener('click', () => { c.expanded = !c.expanded; render_wizard_expenses_step(); });
+                    buttons.push(expandBtn);
+                }
+                const ignoreBtn = wizard_ignore_button(c.ignored);
+                ignoreBtn.addEventListener('click', () => { c.ignored = !c.ignored; render_wizard_expenses_step(); update_wizard_expense_total(); });
+                buttons.push(ignoreBtn);
+                row.append(info, categoryBtn, ...buttons);
+                // Same rationale as the salary step: the whole row (not just
+                // the small arrow) expands the detail view.
+                if (c.rows?.length) {
+                    row.addEventListener('click', (e) => {
+                        if (e.target.closest('button')) return;
+                        c.expanded = !c.expanded;
+                        render_wizard_expenses_step();
+                    });
+                }
+                const fragment = document.createDocumentFragment();
+                fragment.append(row);
+                if (c.expanded) { const detail = wizard_candidate_detail(c); if (detail) fragment.append(detail); }
+                return fragment;
+            }
+
+            const pending = wizardState.expenseCandidates.filter(c => !c.ignored && !c.category);
+            const ignored = wizardState.expenseCandidates.filter(c => c.ignored);
+            const categorized = wizardState.expenseCandidates.filter(c => !c.ignored && c.category);
+            const groups = new Map();
+            categorized.forEach(c => { if (!groups.has(c.category)) groups.set(c.category, []); groups.get(c.category).push(c); });
+
+            // Categorized groups first (color-coded outline), then pending
+            // (undecided) rows, ignored ones sunk to the very bottom.
+            groups.forEach((rows, category) => {
+                const group = document.createElement('div'); group.className = 'wizard-candidate-group';
+                group.style.setProperty('--group-color', category_color(category));
+                const title = document.createElement('div'); title.className = 'wizard-candidate-group-title';
+                const dot = document.createElement('span'); dot.className = 'wizard-candidate-group-dot';
+                const label = document.createElement('span'); label.textContent = category;
+                title.append(dot, label); group.append(title);
+                rows.forEach(c => group.append(make_row(c)));
+                container.append(group);
+            });
+            pending.forEach(c => container.append(make_row(c)));
+            ignored.forEach(c => container.append(make_row(c)));
+
+            update_wizard_expense_total();
+        }
+
+        function update_wizard_expense_total() {
+            const totalCents = wizardState.expenseCandidates.filter(c => c.category && !c.ignored).reduce((sum, c) => sum + c.monthlyCents, 0);
+            document.getElementById('wizardExpenseTotal').textContent = fmt_eur(totalCents);
+        }
+
+        function render_wizard_budgets_step() {
+            const container = document.getElementById('wizardBudgetEditor');
+            container.innerHTML = (ruleSet.mainCategories || []).map(m => `
+                <div class="wizard-budget-row">
+                    <span class="wizard-candidate-name">${escape_budget(m.label)}</span>
+                    <input type="number" min="0" step="1" data-wizard-budget="${escape_budget(m.id)}" value="${((wizardState.budgetCaps[m.id] || 0) / 100).toFixed(0)}">
+                    <span>€ ${t('budgets.perWeek')}</span>
+                </div>
+            `).join('');
+            update_wizard_savings_preview();
+            container.querySelectorAll('input[data-wizard-budget]').forEach(input => {
+                input.addEventListener('input', () => {
+                    wizardState.budgetCaps[input.dataset.wizardBudget] = Math.max(0, Math.round((parseFloat(input.value) || 0) * 100));
+                    update_wizard_savings_preview();
+                });
+            });
+        }
+
+        function update_wizard_savings_preview() {
+            const basis = build_budget_basis(module_data);
+            const monthlyTotal = Math.round(Object.values(wizardState.budgetCaps).reduce((sum, v) => sum + v, 0) * 52 / 12);
+            document.getElementById('wizardSavingsPreview').textContent = fmt_eur(basis.freeCents - monthlyTotal);
+        }
+
+        // Appends a matcher for `payeeName` to an existing rule matching
+        // `predicate`, or creates a new one from `fallbackRule` - shared by
+        // the salary and expense-category wizard steps.
+        function wizard_add_payee_to_rule(predicate, payeeName, fallbackRule) {
+            const rule = (ruleSet.rules || []).find(predicate);
+            if (rule) {
+                rule.matchers = [...rule_matchers(rule), { field: 'name', operator: 'contains', value: payeeName, exclude: false }];
+                delete rule.namePattern; delete rule.verwendungPattern; delete rule.kategoriePattern; delete rule.matchType;
+            } else {
+                const maxPriority = (ruleSet.rules || []).reduce((m, r) => Math.max(m, r.priority || 0), 0);
+                ruleSet.rules ||= [];
+                ruleSet.rules.push({ ...fallbackRule, priority: maxPriority + 10, matchers: [{ field: 'name', operator: 'contains', value: payeeName, exclude: false }] });
+            }
+        }
+
+        // A purely custom candidate (typed name + amount, never backed by a
+        // real booking) needs more than a classification rule to actually
+        // change any number the app computes - build_budget_basis() only
+        // ever looks at real module_data rows. So besides the rule, this
+        // creates real (dated, but synthetic) "manual" transactions for it,
+        // same storage/shape the quick-entry keypad uses - one is already
+        // enough for salary_monthly_cents()'s median-of-months calc, fixed-
+        // expense detection needs >=2 dated occurrences to see a recurring
+        // interval, hence two (this month + last).
+        async function wizard_create_synthetic_manual_entries(payee, amountCents, direction) {
+            const today = new Date();
+            const dates = [today, new Date(today.getFullYear(), today.getMonth() - 1, today.getDate())];
+            for (const date of dates) {
+                const record = {
+                    id: crypto.randomUUID(), source: 'manual', Datum: datum_string(date),
+                    Name: payee, Verwendungszweck: '', Kategorie: '',
+                    Betrag: ((direction === 'in' ? amountCents : -amountCents) / 100).toFixed(2)
+                };
+                record._txId = 'manual:' + record.id;
+                await add_manual_entry(record);
+            }
+        }
+
+        async function apply_wizard_salary_pick() {
+            let createdManual = false;
+            for (const payee of wizardState.selectedSalaryPayees) {
+                const picked = wizardState.salaryCandidates.find(c => c.payee === payee);
+                // Skip only if this exact payee is already tagged incomeType
+                // 'salary' - a plain group==='income' classification (e.g. via
+                // a generic CSV-category fallback) is NOT enough on its own,
+                // build_budget_basis() only counts salary via incomeType or a
+                // literal "Gehalt/Lohn/Salary" match in the category text.
+                if (picked?.latestIncomeType === 'salary') continue;
+                wizard_add_payee_to_rule(
+                    r => r.group === 'income' && r.incomeType === 'salary',
+                    payee,
+                    { id: 'wizard_salary_' + Date.now() + '_' + Math.round(Math.random() * 1000), label: 'Gehalt', category: 'Gehalt', group: 'income', incomeType: 'salary' }
+                );
+                if (picked?.manual && !picked.fromRealTransaction && picked.amountCents > 0) {
+                    await wizard_create_synthetic_manual_entries(payee, picked.amountCents, 'in');
+                    createdManual = true;
+                }
+            }
+            if (createdManual) await merge_manual_entries();
+            if (wizardState.selectedSalaryPayees.size) persist_budgets();
+        }
+
+        async function apply_wizard_expense_picks() {
+            const picked = wizardState.expenseCandidates.filter(c => c.category && !c.ignored);
+            let createdManual = false;
+            for (const [index, c] of picked.entries()) {
+                wizard_add_payee_to_rule(
+                    r => r.group === 'fixed' && (r.category || r.label) === c.category,
+                    c.payee,
+                    { id: 'wizard_fixed_' + Date.now() + '_' + index, label: c.category, category: c.category, group: 'fixed' }
+                );
+                if (c.manual && !c.fromRealTransaction && c.monthlyCents > 0) {
+                    await wizard_create_synthetic_manual_entries(c.payee, c.monthlyCents, 'out');
+                    createdManual = true;
+                }
+            }
+            if (createdManual) await merge_manual_entries();
+            if (picked.length) persist_budgets();
+        }
+
+        // Manual fallback for both steps: works even with zero module_data
+        // (a user can walk the whole wizard without ever importing a CSV),
+        // and lets a user add a payee auto-detection missed - typing both a
+        // name AND a monthly amount here means "this isn't in my data, but
+        // count it anyway" (see wizard_create_synthetic_manual_entries()).
+        // `fromRealTransaction` is true only when picked via the browse
+        // dialog (a real booking already exists, so no synthetic entries
+        // are needed - the new rule alone is enough to classify it).
+        // Salary entries get checked-by-default (added straight to the
+        // selection); expense entries start uncategorized, same as a
+        // detected one.
+        function wizard_add_manual_candidate(step, payeeRaw, amountCents = 0, fromRealTransaction = false) {
+            const payee = payeeRaw.trim();
+            if (!payee) return;
+            if (step === 'salary') {
+                if (!wizardState.salaryCandidates.some(c => c.payee === payee)) {
+                    wizardState.salaryCandidates.push({ payee, amountCents, months: 1, count: 0, ignored: false, expanded: false, manual: true, fromRealTransaction });
+                }
+                wizardState.selectedSalaryPayees.add(payee);
+                render_wizard_salary_step();
+            } else {
+                if (!wizardState.expenseCandidates.some(c => c.payee === payee)) {
+                    wizardState.expenseCandidates.push({ payee, amountCents, monthlyCents: amountCents, months: 1, count: 0, category: '', ignored: false, expanded: false, manual: true, fromRealTransaction });
+                }
+                render_wizard_expenses_step();
+            }
+        }
+
+        function wire_wizard_manual_add(inputId, amountInputId, buttonId, step) {
+            const input = document.getElementById(inputId);
+            const amountInput = document.getElementById(amountInputId);
+            const add = () => {
+                const amountCents = Math.max(0, Math.round((parseFloat(amountInput.value) || 0) * 100));
+                wizard_add_manual_candidate(step, input.value, amountCents);
+                input.value = ''; amountInput.value = ''; input.focus();
+            };
+            document.getElementById(buttonId).addEventListener('click', add);
+            [input, amountInput].forEach(el => el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }));
+        }
+        wire_wizard_manual_add('wizardSalaryCustomName', 'wizardSalaryCustomAmount', 'wizardSalaryAddCustom', 'salary');
+        wire_wizard_manual_add('wizardExpenseCustomName', 'wizardExpenseCustomAmount', 'wizardExpenseAddCustom', 'expenses');
+
+        // ===== Wizard transaction browser =====
+        // A lighter, standalone sibling of #ruleTransactionBrowser: not tied
+        // to an existing rule/ruleId, just filters module_data by direction
+        // (in/out) through the same matcher UI, and picking a row hands its
+        // payee name straight back to the wizard step that opened it.
+        let wizardBrowserState = null;
+        function open_wizard_transaction_browser(direction, onPick) {
+            wizardBrowserState = { direction, onPick, matchers: [{ field: 'any', operator: 'contains', value: '', exclude: false }], sort: 'date', descending: true };
+            render_wizard_transaction_browser();
+            document.getElementById('wizardTransactionBrowserDialog').showModal();
+        }
+        document.getElementById('wizardSalaryBrowseBtn').addEventListener('click', () => {
+            open_wizard_transaction_browser('in', (payee, amountCents) => wizard_add_manual_candidate('salary', payee, amountCents, true));
+        });
+        document.getElementById('wizardExpenseBrowseBtn').addEventListener('click', () => {
+            open_wizard_transaction_browser('out', (payee, amountCents) => wizard_add_manual_candidate('expenses', payee, amountCents, true));
+        });
+
+        function wizard_browser_rows() {
+            const activeMatchers = wizardBrowserState.matchers.filter(m => m.value);
+            const base = module_data.filter(r => r.in_out === wizardBrowserState.direction && is_real_cashflow(r));
+            const rows = activeMatchers.length ? base.filter(r => rule_matches(r, { matchers: activeMatchers })) : base;
+            rows.sort((a, b) => {
+                const left = wizardBrowserState.sort === 'amount' ? a.betrag_cents : a.date.getTime();
+                const right = wizardBrowserState.sort === 'amount' ? b.betrag_cents : b.date.getTime();
+                const compare = left - right;
+                return wizardBrowserState.descending ? -compare : compare;
+            });
+            return rows;
+        }
+
+        function render_wizard_transaction_browser_rows() {
+            const rows = wizard_browser_rows().slice(0, 200);
+            document.getElementById('wizardTransactionBrowserRows').innerHTML = rows.length ? rows.map(row => `
+                <tr data-payee="${escape_budget(row.name)}" data-amount="${Math.abs(row.betrag_cents)}">
+                    <td>${fmt_date(row.date)}</td><td>${escape_budget(row.name)}</td><td class="num">${fmt_eur(row.betrag_cents)}</td>
+                </tr>
+            `).join('') : `<tr><td colspan="3">${t('wizard.noMatchingTransactions')}</td></tr>`;
+            document.querySelectorAll('#wizardTransactionBrowserRows tr[data-payee]').forEach(tr => {
+                tr.addEventListener('click', () => {
+                    wizardBrowserState.onPick(tr.dataset.payee, Number(tr.dataset.amount));
+                    document.getElementById('wizardTransactionBrowserDialog').close();
+                });
+            });
+        }
+
+        function render_wizard_transaction_browser() {
+            const container = document.getElementById('wizardTransactionBrowserMatchers');
+            container.innerHTML = matcher_editor_html(wizardBrowserState.matchers);
+            render_wizard_transaction_browser_rows();
+            container.querySelectorAll('.rule-matcher-row').forEach((element, index) => {
+                element.querySelector('[data-matcher-value]').addEventListener('input', () => {
+                    wizardBrowserState.matchers[index].value = element.querySelector('[data-matcher-value]').value.trim();
+                    render_wizard_transaction_browser_rows();
+                });
+                [element.querySelector('[data-matcher-field]'), element.querySelector('[data-matcher-operator]'), element.querySelector('[data-matcher-exclude]')].forEach(control => control.addEventListener('change', () => {
+                    wizardBrowserState.matchers[index] = {
+                        field: element.querySelector('[data-matcher-field]').value,
+                        operator: element.querySelector('[data-matcher-operator]').value,
+                        value: element.querySelector('[data-matcher-value]').value.trim(),
+                        exclude: element.querySelector('[data-matcher-exclude]').checked
+                    };
+                    render_wizard_transaction_browser();
+                }));
+                element.querySelector('.remove-matcher-btn').addEventListener('click', () => {
+                    if (wizardBrowserState.matchers.length < 2) return;
+                    wizardBrowserState.matchers.splice(index, 1); render_wizard_transaction_browser();
+                });
+            });
+        }
+        document.getElementById('wizardTransactionBrowserAddMatcher').addEventListener('click', () => {
+            wizardBrowserState.matchers.push({ field: 'any', operator: 'contains', value: '', exclude: false });
+            render_wizard_transaction_browser();
+        });
+        document.getElementById('closeWizardTransactionBrowser').addEventListener('click', () => document.getElementById('wizardTransactionBrowserDialog').close());
+
+        document.getElementById('wizardNextBtn').addEventListener('click', async () => {
+            const stepName = wizardState.steps[wizardState.stepIndex];
+            document.getElementById('wizardError').textContent = '';
+            if (stepName === 'upload') {
+                wizardState.salaryCandidates = detect_salary_candidates();
+                wizardState.expenseCandidates = detect_expense_candidates();
+                const defaultSalary = wizardState.salaryCandidates.find(c => c.latestIncomeType === 'salary')
+                    || wizardState.salaryCandidates.find(c => c.latestGroup === 'income');
+                wizardState.selectedSalaryPayees = new Set(defaultSalary ? [defaultSalary.payee] : []);
+            } else if (stepName === 'salary') {
+                await apply_wizard_salary_pick();
+            } else if (stepName === 'expenses') {
+                await apply_wizard_expense_picks();
+                wizardState.budgetCaps = { ...subBudgetCaps };
+            }
+            wizardState.stepIndex = Math.min(wizardState.steps.length - 1, wizardState.stepIndex + 1);
+            render_wizard_step();
+        });
+
+        document.getElementById('wizardBackBtn').addEventListener('click', () => {
+            wizardState.stepIndex = Math.max(0, wizardState.stepIndex - 1);
+            render_wizard_step();
+        });
+
+        document.getElementById('wizardFinishBtn').addEventListener('click', () => {
+            Object.entries(wizardState.budgetCaps).forEach(([id, capCents]) => {
+                if (capCents > 0) subBudgetCaps[id] = capCents; else delete subBudgetCaps[id];
+            });
+            save_sub_budgets(subBudgetCaps);
+            ruleSet.subBudgetCaps = { ...subBudgetCaps };
+            persist_budgets();
+            document.getElementById('setupWizardDialog').close();
+        });
+
         document.getElementById('resetDrillBtn').addEventListener('click', () => {
             chartDrill.budget = chartDrill.fixed = null; weekFilterMonday = null; monthFilter = null; render_all();
         });
@@ -2214,6 +2918,31 @@
         function filter_by_year(year) {
             currentYear = year; weekFilterMonday = null; monthFilter = null;
             localStorage.setItem('selectedYear', year); render_all();
+            sync_url_from_state();
+        }
+
+        // ===== URL STATE (deep-linkable view/year/settings-tab) =====
+        // Only ever replaceState (never pushState) - this is meant to survive
+        // a reload, not to pile up extra browser-history entries for every
+        // tab/filter click.
+        function sync_url_from_state() {
+            const params = new URLSearchParams();
+            if (activeTabIndex === 1) params.set('view', 'overview');
+            if (currentYear) params.set('year', String(currentYear));
+            if (modal.style.display === 'block') {
+                const activeSettingsTab = document.querySelector('.settings-tab-btn.active');
+                params.set('settings', activeSettingsTab ? activeSettingsTab.dataset.settingsTab : 'rules');
+            }
+            const query = params.toString();
+            history.replaceState(null, '', location.pathname + (query ? `?${query}` : ''));
+        }
+
+        // Opens the Settings modal directly on a given sub-tab - used by the
+        // small gear-icon deep links in the weekly budget breakdown and by
+        // restoring a `?settings=` URL param on reload.
+        function open_settings_tab(tabId) {
+            configBtn.click();
+            document.querySelector(`.settings-tab-btn[data-settings-tab="${tabId}"]`)?.click();
         }
 
         // ===== CLASSIFICATION RULES ("SETTING") LOGIC =====
@@ -2235,6 +2964,7 @@
             settingsUndoStack = [];
             update_undo_button();
             modal.style.display = 'block';
+            sync_url_from_state();
         });
 
         // Settings modal sub-tabs (Allgemein / Budgets / Fix Expense / Income / Export-Import / CSV-Import)
@@ -2251,6 +2981,7 @@
                 document.getElementById('settingsTab-sync').hidden = target !== 'sync';
                 render_active_settings_tab();
                 if (target === 'sync') subscribe_sync_auth();
+                sync_url_from_state();
             });
         });
 
@@ -2262,15 +2993,21 @@
         });
 
         // Every inline edit in this modal persists immediately (there is no
-        // separate draft state) - Abbrechen/X/backdrop-click must actively
-        // revert to how things were when the modal was opened, not just
-        // close the window and leave whatever was last persisted in place.
+        // separate draft state), so "revert" here means restoring the
+        // snapshot from when the modal opened (or the last explicit
+        // Speichern click, see saveBtn below) - X/Abbrechen/backdrop-click/
+        // Schließen all funnel through here and warn before discarding any
+        // changes made since that point.
         function close_settings_modal_and_revert() {
-            if (modalOpenSnapshot && modalOpenSnapshot !== settings_snapshot()) restore_settings_snapshot(modalOpenSnapshot);
+            const hasUnsaved = modalOpenSnapshot && modalOpenSnapshot !== settings_snapshot();
+            if (hasUnsaved && !confirm(t('modal.confirmDiscard'))) return;
+            if (hasUnsaved) restore_settings_snapshot(modalOpenSnapshot);
             modal.style.display = 'none';
+            sync_url_from_state();
         }
         closeBtn.addEventListener('click', close_settings_modal_and_revert);
         cancelBtn.addEventListener('click', close_settings_modal_and_revert);
+        document.getElementById('closeRulesModalBtn').addEventListener('click', close_settings_modal_and_revert);
 
         window.addEventListener('click', (e) => {
             if (e.target === modal) close_settings_modal_and_revert();
@@ -2292,16 +3029,23 @@
             render_transfer_preview();
         });
 
+        // Persists but deliberately does NOT close the modal anymore (per
+        // explicit user request) - closing is now the separate "Schließen"
+        // button's job. Updating modalOpenSnapshot here makes this the new
+        // baseline Close/Abbrechen compares against, so a fresh save is
+        // never flagged as an "unsaved change" a moment later.
         saveBtn.addEventListener('click', () => {
             ruleSet._manualRuleIds = manual_rule_ids(ruleSet, settingsBaseline);
             save_rule_set(ruleSet);
             render_quick_add_tiles();
-            modal.style.display = 'none';
+            modalOpenSnapshot = settings_snapshot();
             if (module_data.length > 0) {
                 reclassify();
                 render_all();
                 render_week();
             }
+            saveBtn.classList.add('save-confirmed');
+            setTimeout(() => saveBtn.classList.remove('save-confirmed'), 1200);
         });
 
         // Import/Export ("SETTING" file, see README for schema + LLM prompt template)
@@ -2332,10 +3076,18 @@
             const dialog = document.getElementById('settingsReviewDialog');
             const container = document.getElementById('settingsReviewChanges'); container.replaceChildren();
             document.getElementById('settingsReviewError').textContent = '';
+            const selectAllCheckbox = document.getElementById('settingsReviewSelectAll');
+            function sync_select_all_checkbox() {
+                const boxes = [...container.querySelectorAll('input[type="checkbox"]')];
+                const checkedCount = boxes.filter(b => b.checked).length;
+                selectAllCheckbox.checked = boxes.length > 0 && checkedCount === boxes.length;
+                selectAllCheckbox.indeterminate = checkedCount > 0 && checkedCount < boxes.length;
+            }
             changes.forEach((change,index) => {
                 const row = document.createElement('div'); row.className = 'setting-change';
                 const label = document.createElement('label');
                 const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.value = index; checkbox.checked = !change.protected;
+                checkbox.addEventListener('change', sync_select_all_checkbox);
                 const title = document.createElement('span'); title.textContent = `${change.field} · ${change.order ? 'Reihenfolge' : change.key || ''} ${change.protected ? '— eigene Anpassung bleibt erhalten' : ''}`;
                 label.append(checkbox,title);
                 const details = document.createElement('details');
@@ -2345,6 +3097,12 @@
 ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
                 details.append(summary,pre); row.append(label,details); container.append(row);
             });
+            document.querySelector('.setting-change-select-all').hidden = !changes.length;
+            selectAllCheckbox.onchange = () => {
+                container.querySelectorAll('input[type="checkbox"]').forEach(b => { b.checked = selectAllCheckbox.checked; });
+                selectAllCheckbox.indeterminate = false;
+            };
+            sync_select_all_checkbox();
             if (!changes.length) container.textContent = 'Keine Änderungen.';
             dialog.showModal();
             return new Promise(resolve => {
@@ -2902,12 +3660,23 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             const isEditable = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable;
             const categoryPopover = document.querySelector('.category-popover');
 
-            if (document.querySelector('dialog[open]')) return;
+            // Native <dialog> elements (setup wizard, its transaction
+            // browser, tx-edit, recurring-expense, ...) are supposed to
+            // close on Escape by themselves, but don't rely on that alone -
+            // close the topmost one explicitly so it's consistent across
+            // browsers/PWA contexts. Only the LAST one in DOM order is
+            // closed, so a dialog opened from within another (wizard ->
+            // its transaction browser) only dismisses the top one.
+            const openDialogs = [...document.querySelectorAll('dialog[open]')];
+            if (openDialogs.length) {
+                if (e.key === 'Escape') { openDialogs[openDialogs.length - 1].close(); e.preventDefault(); }
+                return;
+            }
             if (e.key === 'Escape') {
                 if (categoryPopover && !categoryPopover.hidden) { close_popover(); e.preventDefault(); return; }
                 if (document.getElementById('categoryGridModal').style.display === 'block') { close_category_grid(); e.preventDefault(); return; }
                 if (document.getElementById('keypadModal').style.display === 'block') { close_keypad(); e.preventDefault(); return; }
-                if (modal.style.display === 'block') { modal.style.display = 'none'; e.preventDefault(); return; }
+                if (modal.style.display === 'block') { close_settings_modal_and_revert(); e.preventDefault(); return; }
                 return;
             }
 
@@ -2926,8 +3695,8 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             if (isEditable) return;
 
             if (e.key === ',') { configBtn.click(); e.preventDefault(); }
-            else if (e.key === 'ArrowRight') { set_active_tab(Math.min(1, activeTabIndex + 1), true); e.preventDefault(); }
-            else if (e.key === 'ArrowLeft') { set_active_tab(Math.max(0, activeTabIndex - 1), true); e.preventDefault(); }
+            else if (e.key === 'ArrowRight') { set_active_tab(Math.min(1, activeTabIndex + 1), true); sync_url_from_state(); e.preventDefault(); }
+            else if (e.key === 'ArrowLeft') { set_active_tab(Math.max(0, activeTabIndex - 1), true); sync_url_from_state(); e.preventDefault(); }
         });
 
         // Restore from localStorage
@@ -2973,19 +3742,29 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             await merge_manual_entries();
             reclassify();
             populate_year_buttons();
+            // ?view=/?year= (see sync_url_from_state()) take priority over the
+            // plain last-selected-year fallback, so a reload keeps whichever
+            // view/filter was last reflected in the URL.
+            const urlParams = new URLSearchParams(location.search);
             if (module_data.length) {
-                const selectedYear = localStorage.getItem('selectedYear');
+                const selectedYear = urlParams.get('year') || localStorage.getItem('selectedYear');
                 currentYear = selectedYear || '';
             }
+            if (urlParams.get('view') === 'overview') set_active_tab(1, false, false);
             if (module_data.length > 0) render_all();
             render_week();
 
             // ?action=addExpense (see manifest.webmanifest shortcuts) jumps
             // straight into the category picker, e.g. from a long-press
             // home-screen icon - picking one goes straight into the keypad.
-            if (new URLSearchParams(location.search).get('action') === 'addExpense') {
+            if (urlParams.get('action') === 'addExpense') {
                 open_category_grid();
             }
+
+            // ?settings=<tabId> (set by the gear-icon deep links and kept in
+            // sync while the modal is open) reopens Settings on that tab.
+            const settingsParam = urlParams.get('settings');
+            if (settingsParam) open_settings_tab(settingsParam);
 
             handle_gc_return();
         });
