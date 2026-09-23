@@ -359,6 +359,7 @@ input[type="file"]::file-selector-button:hover { background: var(--accent-soft);
 .csv-field input, .csv-field select, .csv-field textarea { width: 100%; }
 .settings-action-row { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
 .gocardless-section { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 14px; }
+.gocardless-section[hidden] { display: none; }
 .gocardless-section > h3, .gocardless-section > p, .gocardless-section > .settings-action-row, .gocardless-section > #gcConnectedList, .gocardless-section > #gcSyncNowBtn, .gocardless-section > #gcStatus { grid-column: 1 / -1; }
 .gocardless-section > .csv-field { margin: 0 0 14px; }
 

@@ -217,11 +217,7 @@ const dict = {
     'settingsTabs.bank': '🏦 Bank',
     'settingsTabs.sync': '🔄 Synchronisierung',
 
-    'sync.intro': 'Sichere dein SETTING (und optional deine Transaktionsdaten) in einem eigenen, kostenlosen Firebase-Projekt und nutze es auf mehreren Geräten. Erstelle dazu ein Firebase-Projekt (Firestore + Google-Anmeldung aktivieren) und füge unten die Web-App-Konfiguration ein.',
-    'sync.firebaseConfigLabel': 'Firebase-Konfiguration (JSON)',
-    'sync.saveConfig': 'Speichern',
-    'sync.configSaved': 'Gespeichert.',
-    'sync.invalidConfig': 'Ungültiges JSON.',
+    'sync.intro': 'Sichere dein SETTING (und optional deine Transaktionsdaten) in der Cloud und nutze es auf mehreren Geräten - einfach mit deinem Google-Konto anmelden.',
     'sync.connect': 'Mit Google-Konto verbinden',
     'sync.disconnect': 'Trennen',
     'sync.connectedAs': 'Verbunden als {email}',
@@ -237,7 +233,7 @@ const dict = {
     'sync.downloadDone': 'Heruntergeladen und angewendet.',
     'sync.nothingToDownload': 'In der Cloud sind noch keine Daten gespeichert.',
     'sync.error': 'Fehler: {message}',
-    'sync.noConfigConfigured': 'Erst Firebase-Konfiguration eintragen und speichern.',
+    'sync.noConfigConfigured': 'Sync ist auf diesem Server noch nicht eingerichtet.',
     'sync.noAccountConnected': 'Erst mit Google-Konto verbinden.',
 
     'bank.intro': 'Verbinde dein Bankkonto über GoCardless. Dafür brauchst du einen eigenen kleinen Proxy-Server (siehe gocardless-proxy/README.md im Repo) - trag hier dessen URL und App-Key ein.',
@@ -562,11 +558,7 @@ const dict = {
     'settingsTabs.bank': '🏦 Bank',
     'settingsTabs.sync': '🔄 Sync',
 
-    'sync.intro': 'Back up your SETTING (and optionally your transaction data) to your own free Firebase project and use it across multiple devices. Create a Firebase project (enable Firestore + Google sign-in) and paste its web app configuration below.',
-    'sync.firebaseConfigLabel': 'Firebase configuration (JSON)',
-    'sync.saveConfig': 'Save',
-    'sync.configSaved': 'Saved.',
-    'sync.invalidConfig': 'Invalid JSON.',
+    'sync.intro': 'Back up your SETTING (and optionally your transaction data) to the cloud and use it across multiple devices - just sign in with your Google account.',
     'sync.connect': 'Connect Google account',
     'sync.disconnect': 'Disconnect',
     'sync.connectedAs': 'Connected as {email}',
@@ -582,7 +574,7 @@ const dict = {
     'sync.downloadDone': 'Downloaded and applied.',
     'sync.nothingToDownload': 'No data stored in the cloud yet.',
     'sync.error': 'Error: {message}',
-    'sync.noConfigConfigured': 'Enter and save the Firebase configuration first.',
+    'sync.noConfigConfigured': 'Sync is not set up on this server yet.',
     'sync.noAccountConnected': 'Connect a Google account first.',
 
     'bank.intro': 'Connect your bank account via GoCardless. This needs your own small proxy server (see gocardless-proxy/README.md in the repo) - enter its URL and app key here.',

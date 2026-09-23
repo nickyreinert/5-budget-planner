@@ -1,0 +1,9 @@
+{
+  "name": "sync-function",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "google-auth-library": "^9.14.1",
+    "postgres": "^3.4.4"
+  }
+}
