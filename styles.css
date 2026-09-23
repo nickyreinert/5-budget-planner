@@ -98,6 +98,7 @@ input[type="file"]::file-selector-button:hover { background: var(--accent-soft);
 .main-tab-btn { flex: 1; background: none; border: none; padding: 10px 12px; cursor: pointer; font-size: 0.95em; border-radius: var(--radius-sm); color: var(--text-muted); font-weight: 600; white-space: nowrap; }
 .main-tab-btn.active { background: var(--accent-soft); color: var(--accent); }
 .chart-view-controls { display: flex; gap: 4px; flex-shrink: 0; }
+.chart-view-controls[hidden] { display: none; }
 .chart-view-controls select { width: auto; min-height: 34px; max-width: 116px; padding: 4px 22px 4px 8px; font-size: 0.78em; background-color: var(--surface-muted); border-color: transparent; }
 
 /* ===== Pager: swipe between Woche / Übersicht ===== */
