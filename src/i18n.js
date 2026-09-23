@@ -22,6 +22,8 @@ const dict = {
     'filters.line': 'Linie',
     'filters.bar': 'Balken',
     'filters.settings': '⚙️ EINSTELLUNGEN',
+    'language.toggle': 'Sprache wechseln',
+    'theme.toggle': 'Darstellung umschalten',
 
     'mainTabs.overview': '📊 Übersicht',
     'mainTabs.week': '📅 Woche',
@@ -371,6 +373,8 @@ const dict = {
     'filters.line': 'Line',
     'filters.bar': 'Bar',
     'filters.settings': '⚙️ SETTINGS',
+    'language.toggle': 'Switch language',
+    'theme.toggle': 'Toggle appearance',
 
     'mainTabs.overview': '📊 Overview',
     'mainTabs.week': '📅 Week',

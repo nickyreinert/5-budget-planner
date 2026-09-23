@@ -43,6 +43,7 @@
             <button class="main-tab-btn active" data-main-tab="week" data-i18n="mainTabs.week">📅 Woche</button>
             <button class="main-tab-btn" data-main-tab="overview" data-i18n="mainTabs.overview">📊 Übersicht</button>
         </div>
+        <button type="button" id="languageToggleBtn" class="settings-gear" data-i18n-title="language.toggle" data-i18n-aria-label="language.toggle" title="Sprache wechseln" aria-label="Sprache wechseln"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3z"/></svg></button>
         <button type="button" id="themeToggleBtn" class="settings-gear" title="Darstellung umschalten" aria-label="Darstellung umschalten"><svg class="icon icon-theme-dark" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12.5A8.5 8.5 0 1 1 11.5 4a7 7 0 0 0 8.5 8.5z"/></svg><svg class="icon icon-theme-light" viewBox="0 0 24 24" aria-hidden="true" hidden><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
         <button type="button" id="configRulesBtn" class="settings-gear" data-i18n-title="filters.settings" title="Einstellungen" aria-label="Einstellungen"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6l1 3 3 1v8l-3 1-1 3H9l-1-3-3-1V8l3-1z"/><circle cx="12" cy="12" r="3"/></svg></button>
     </header>
@@ -703,6 +704,17 @@
             update_theme_toggle_icon();
         });
         update_theme_toggle_icon();
+
+        const languageToggleBtn = document.getElementById('languageToggleBtn');
+        languageToggleBtn.addEventListener('click', () => {
+            set_language(get_language() === 'de' ? 'en' : 'de');
+            apply_static_i18n();
+            document.querySelectorAll('input[name="appLanguage"]').forEach(radio => { radio.checked = radio.value === get_language(); });
+            refresh_footer();
+            if (modal.style.display === 'block') render_transfer_preview();
+            render_week();
+            if (module_data.length > 0) render_all();
+        });
 
         // ===== MAIN TAB NAVIGATION (Woche / Übersicht) + swipe pager =====
         // Both tab-panes sit side by side inside #pagerTrack (width 200%,
