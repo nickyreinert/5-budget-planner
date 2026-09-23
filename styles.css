@@ -203,9 +203,10 @@ input[type="file"]::file-selector-button:hover { background: var(--accent-soft);
 .num { text-align: right; white-space: nowrap; }
 
 /* ===== Setup wizard (onboarding: upload -> salary -> expenses -> budgets) ===== */
-.setup-wizard { width: min(640px, calc(100vw - 24px)); }
-.wizard-step { display: flex; flex-direction: column; gap: 14px; }
+.setup-wizard { width: min(640px, calc(100vw - 24px)); height: min(900px, calc(100dvh - 24px)); max-height: calc(100dvh - 24px); display: flex; flex-direction: column; overflow: hidden; }
+.wizard-step { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; gap: 14px; overflow-y: auto; padding: 2px; }
 .wizard-step[hidden] { display: none; }
+.setup-wizard > .dialog-actions:last-child { flex: 0 0 auto; margin-top: 12px; }
 .wizard-step input[type="file"] { display: block; margin: 0; }
 /* Step-progress line with small numbered dots at the top of the dialog. */
 .wizard-progress { display: flex; position: relative; margin: 4px 0 4px; }
@@ -251,6 +252,8 @@ input[type="file"]::file-selector-button:hover { background: var(--accent-soft);
 .wizard-candidate-group-title { width: 100%; display: flex; align-items: center; gap: 6px; font-size: 0.8em; font-weight: 600; color: var(--text-muted); margin: 0 0 6px; padding: 2px 0; border: 0; border-radius: 0; background: transparent; text-align: left; min-height: 24px; }
 .wizard-candidate-group-title:hover { color: var(--text); border-color: transparent; }
 .wizard-candidate-group-title .wizard-candidate-group-count { margin-left: auto; font-weight: 400; opacity: 0.75; }
+.wizard-candidate-group-total { margin-left: auto; color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; }
+.wizard-candidate-group-total + .wizard-candidate-group-count { margin-left: 4px; }
 .wizard-candidate-group-chevron { width: 1em; text-align: center; color: var(--accent); }
 .wizard-candidate-group-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--group-color, var(--accent)); flex-shrink: 0; }
 .wizard-candidate-group .wizard-candidate-row { background: var(--surface); }
@@ -258,13 +261,19 @@ input[type="file"]::file-selector-button:hover { background: var(--accent-soft);
 .wizard-candidate-select { flex: 0 0 auto; width: 16px; height: 16px; accent-color: var(--accent); }
 .wizard-candidate-merge-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 8px; padding: 6px 0; color: var(--text-muted); font-size: 0.8em; }
 .wizard-candidate-merge { min-height: 30px; padding: 4px 8px; font-size: 0.9em; white-space: nowrap; }
+.wizard-candidate-interval { width: auto; flex: 0 0 auto; min-width: 7.5em; font-size: 0.85em; }
+.wizard-summary-cards { margin-top: auto; }
 /* On narrow screens a fixed-width category button vertically centered next
    to a long, wrapped payee name visually overlapped the text. Forcing the
    name/meta onto its own full-width line and the controls onto a second
    line below fixes that without touching the desktop layout. */
 @media (max-width: 600px) {
+    .setup-wizard { width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; }
     .wizard-candidate-row { flex-wrap: wrap; }
     .wizard-candidate-info { flex-basis: 100%; }
+    .wizard-candidate-interval { min-width: 0; flex: 1 1 auto; }
+    .wizard-candidate-group-title { flex-wrap: wrap; }
+    .wizard-candidate-group-total { margin-left: 14px; }
 }
 .wizard-budget-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
 .wizard-budget-row .wizard-budget-name { flex: 1; min-width: 0; font-weight: 400; }

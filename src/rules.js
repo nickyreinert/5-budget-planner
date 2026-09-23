@@ -120,12 +120,14 @@ export function classify(tx, ruleSet) {
     if (rule.group === 'income' && tx.betrag_cents < 0) continue;
     if (rule_matches(tx, rule)) {
       const contractMerge = contract_merge_for(tx, rule);
+      const payee = String(tx.name || tx.Name || '').trim().toLocaleLowerCase();
+      const intervalMonths = rule.recurringOverrides?.[payee];
       return {
         ruleId: rule.id,
         contractId: contractMerge?.id,
         contractName: contractMerge?.name,
         incomeType: rule.incomeType,
-        recurring: rule.recurring,
+        recurring: intervalMonths ? { ...(rule.recurring || {}), intervalMonths } : rule.recurring,
         label: rule.label,
         category: rule.category || rule.label,
         group: rule.group || FALLBACK_GROUP,

@@ -80,3 +80,10 @@ test('merged contract aliases classify to the same persistent contract id', () =
     assert.equal(result.contractName, 'Streaming · Google Play');
   }
 });
+
+test('a recurring payee interval override is exposed to the budget calculation', () => {
+  const result = classify({ name: 'Annual insurer', betrag_cents: -12000 }, {
+    rules: [{ id: 'insurance', category: 'Insurance', group: 'fixed', namePattern: 'Annual insurer', recurringOverrides: { 'annual insurer': 12 } }]
+  });
+  assert.deepEqual(result.recurring, { intervalMonths: 12 });
+});

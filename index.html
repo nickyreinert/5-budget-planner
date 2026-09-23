@@ -493,6 +493,7 @@
                 <button type="button" id="wizardSalaryAddCustom" data-i18n="wizard.addCustom">+ Hinzufügen</button>
                 <button type="button" id="wizardSalaryBrowseBtn" data-i18n="wizard.browseTransactions">🔍 Buchungen durchsuchen</button>
             </div>
+            <div class="budget-totals-row wizard-summary-cards"><div class="budget-totals-cell"><span data-i18n="wizard.incomeTotalLabel">Einnahmen gesamt pro Monat</span><strong id="wizardIncomeTotal"></strong></div></div>
         </div>
 
         <div class="wizard-step" data-wizard-step="expenses" hidden>
@@ -510,13 +511,18 @@
                 <button type="button" id="wizardExpenseAddCustom" data-i18n="wizard.addCustom">+ Hinzufügen</button>
                 <button type="button" id="wizardExpenseBrowseBtn" data-i18n="wizard.browseTransactions">🔍 Buchungen durchsuchen</button>
             </div>
-            <div class="budget-totals-row"><div class="budget-totals-cell"><span data-i18n="wizard.expenseTotalLabel">Fixkosten gesamt pro Monat</span><strong id="wizardExpenseTotal"></strong></div></div>
+            <div class="budget-totals-row wizard-summary-cards"><div class="budget-totals-cell"><span data-i18n="wizard.expenseTotalLabel">Fixkosten gesamt pro Monat</span><strong id="wizardExpenseTotal"></strong></div></div>
         </div>
 
         <div class="wizard-step" data-wizard-step="budgets" hidden>
-            <p data-i18n="wizard.stepBudgetsIntro">Passe deine 5 Budgets an. Was übrig bleibt, kannst du sparen.</p>
+            <p data-i18n="wizard.stepBudgetsIntro">Passe deine Budgets an. Was übrig bleibt, kannst du sparen.</p>
             <div id="wizardBudgetEditor" class="wizard-candidate-list"></div>
-            <div class="budget-totals-row"><div class="budget-totals-cell"><span data-i18n="wizard.savingsLabel">Ersparnis pro Monat</span><strong id="wizardSavingsPreview"></strong></div></div>
+            <div class="budget-totals-row wizard-summary-cards">
+                <div class="budget-totals-cell"><span data-i18n="wizard.availableWeeklyLabel">Verfügbar pro Woche</span><strong id="wizardBudgetAvailableWeekly"></strong></div>
+                <div class="budget-totals-cell"><span data-i18n="wizard.plannedWeeklyLabel">Für Budgets pro Woche</span><strong id="wizardBudgetPlannedWeekly"></strong></div>
+                <div class="budget-totals-cell"><span data-i18n="wizard.savingsWeeklyLabel">Ersparnis pro Woche</span><strong id="wizardBudgetSavingsWeekly"></strong></div>
+                <div class="budget-totals-cell"><span data-i18n="wizard.savingsLabel">Ersparnis pro Monat</span><strong id="wizardSavingsPreview"></strong></div>
+            </div>
         </div>
 
         <p id="wizardError" role="alert"></p>
@@ -2425,7 +2431,7 @@
         function wizard_merge_candidate_state(oldCandidates, freshCandidates) {
             return freshCandidates.map(c => {
                 const prev = oldCandidates.find(p => !p.manual && p.payee === c.payee);
-                return prev ? { ...c, ignored: prev.ignored, expanded: prev.expanded, category: prev.category ?? c.category } : c;
+                return prev ? { ...c, ignored: prev.ignored, expanded: prev.expanded, category: prev.category ?? c.category, months: prev.months || c.months, monthlyCents: Math.round(c.amountCents / (prev.months || c.months)) } : c;
             });
         }
 
@@ -2583,6 +2589,7 @@
                 checkbox.checked = wizardState.selectedSalaryPayees.has(c.payee); checkbox.disabled = c.ignored;
                 checkbox.addEventListener('change', () => {
                     if (checkbox.checked) wizardState.selectedSalaryPayees.add(c.payee); else wizardState.selectedSalaryPayees.delete(c.payee);
+                    update_wizard_income_total();
                 });
                 const info = document.createElement('span'); info.className = 'wizard-candidate-info';
                 const name = document.createElement('span'); name.className = 'wizard-candidate-name'; name.textContent = c.payee;
@@ -2631,6 +2638,14 @@
                 container.append(fragment);
             });
             document.getElementById('wizardSalaryBrowseBtn').hidden = !module_data.length;
+            update_wizard_income_total();
+        }
+
+        function update_wizard_income_total() {
+            const totalCents = wizardState.salaryCandidates
+                .filter(c => !c.ignored && wizardState.selectedSalaryPayees.has(c.payee))
+                .reduce((sum, c) => sum + Math.round(c.amountCents / (c.months || 1)), 0);
+            document.getElementById('wizardIncomeTotal').textContent = fmt_eur(totalCents);
         }
 
         function render_wizard_expenses_step() {
@@ -2678,6 +2693,19 @@
                         c.category = category; render_wizard_expenses_step(); update_wizard_expense_total();
                     }, { onCreate: (category) => { c.category = category; render_wizard_expenses_step(); update_wizard_expense_total(); } });
                 });
+                const intervalSelect = document.createElement('select');
+                intervalSelect.className = 'wizard-candidate-interval'; intervalSelect.disabled = c.ignored;
+                intervalSelect.setAttribute('aria-label', `${t('recurringExpense.interval')}: ${c.payee}`);
+                [1, 3, 6, 12].forEach(months => {
+                    const option = document.createElement('option'); option.value = String(months); option.textContent = t(`week.interval.${months}`);
+                    option.selected = c.months === months; intervalSelect.append(option);
+                });
+                intervalSelect.addEventListener('click', e => e.stopPropagation());
+                intervalSelect.addEventListener('change', () => {
+                    c.months = Number(intervalSelect.value);
+                    c.monthlyCents = Math.round(c.amountCents / c.months);
+                    render_wizard_expenses_step(); update_wizard_expense_total();
+                });
                 const buttons = [];
                 if (c.rows?.length) {
                     const expandBtn = wizard_expand_button(c.expanded);
@@ -2687,7 +2715,7 @@
                 const ignoreBtn = wizard_ignore_button(c.ignored);
                 ignoreBtn.addEventListener('click', () => { c.ignored = !c.ignored; if (c.ignored) c.expanded = false; render_wizard_expenses_step(); update_wizard_expense_total(); });
                 buttons.push(ignoreBtn);
-                row.append(info, categoryBtn, ...buttons);
+                row.append(info, categoryBtn, intervalSelect, ...buttons);
                 // Same rationale as the salary step: the whole row (not just
                 // the small arrow) expands the detail view.
                 if (c.rows?.length) {
@@ -2719,9 +2747,11 @@
                 title.setAttribute('aria-expanded', String(expanded));
                 const dot = document.createElement('span'); dot.className = 'wizard-candidate-group-dot';
                 const label = document.createElement('span'); label.textContent = category;
+                const total = document.createElement('span'); total.className = 'wizard-candidate-group-total';
+                total.textContent = `${fmt_eur(rows.reduce((sum, c) => sum + c.monthlyCents, 0))} ${t('fixExpense.perMonth')}`;
                 const count = document.createElement('span'); count.className = 'wizard-candidate-group-count'; count.textContent = String(rows.length);
                 const chevron = document.createElement('span'); chevron.className = 'wizard-candidate-group-chevron'; chevron.textContent = expanded ? '▾' : '▸';
-                title.append(dot, label, count, chevron); group.append(title);
+                title.append(dot, label, total, count, chevron); group.append(title);
                 title.addEventListener('click', () => {
                     if (expanded) wizardState.expandedExpenseCategories.delete(category); else wizardState.expandedExpenseCategories.add(category);
                     render_wizard_expenses_step();
@@ -2765,7 +2795,7 @@
                     <span>€ ${t('budgets.perWeek')}</span>
                     ${budgets.length > 4 ? `<button type="button" class="wizard-budget-remove" data-wizard-remove-budget="${escape_budget(m.id)}" aria-label="${t('wizard.removeBudget')}">×</button>` : ''}
                 </div>
-            `).join('') + (budgets.length < 5 ? `<button type="button" class="wizard-budget-add" id="wizardAddBudget">+ ${t('wizard.addBudget')}</button>` : '');
+            `).join('') + `<button type="button" class="wizard-budget-add" id="wizardAddBudget">+ ${t('wizard.addBudget')}</button>`;
             update_wizard_savings_preview();
             container.querySelectorAll('input[data-wizard-budget-name]').forEach(input => {
                 input.addEventListener('change', () => {
@@ -2810,8 +2840,13 @@
 
         function update_wizard_savings_preview() {
             const basis = build_budget_basis(module_data);
-            const monthlyTotal = Math.round(Object.values(wizardState.budgetCaps).reduce((sum, v) => sum + v, 0) * 52 / 12);
-            document.getElementById('wizardSavingsPreview').textContent = fmt_eur(basis.freeCents - monthlyTotal);
+            const plannedWeeklyCents = Object.values(wizardState.budgetCaps).reduce((sum, v) => sum + v, 0);
+            const savingsWeeklyCents = basis.weeklyCents - plannedWeeklyCents;
+            const savingsMonthlyCents = Math.round(savingsWeeklyCents * 52 / 12);
+            document.getElementById('wizardBudgetAvailableWeekly').textContent = fmt_eur(basis.weeklyCents);
+            document.getElementById('wizardBudgetPlannedWeekly').textContent = fmt_eur(plannedWeeklyCents);
+            document.getElementById('wizardBudgetSavingsWeekly').textContent = fmt_eur(savingsWeeklyCents);
+            document.getElementById('wizardSavingsPreview').textContent = fmt_eur(savingsMonthlyCents);
         }
 
         // Adds one or more bank-visible names to a rule. A single regex
@@ -2891,12 +2926,16 @@
             const picked = wizardState.expenseCandidates.filter(c => c.category && !c.ignored);
             let createdManual = false;
             for (const [index, c] of picked.entries()) {
-                wizard_add_payee_to_rule(
+                const rule = wizard_add_payee_to_rule(
                     r => r.group === 'fixed' && (r.category || r.label) === c.category,
                     wizard_candidate_payees(c),
                     { id: 'wizard_fixed_' + Date.now() + '_' + index, label: c.category, category: c.category, group: 'fixed' },
                     c.merged ? { id: c.contractId, name: c.contractName, payees: wizard_candidate_payees(c) } : null
                 );
+                if (rule) {
+                    rule.recurringOverrides ||= {};
+                    wizard_candidate_payees(c).forEach(payee => { rule.recurringOverrides[payee.trim().toLocaleLowerCase()] = c.months; });
+                }
                 if (c.manual && !c.fromRealTransaction && c.monthlyCents > 0) {
                     await wizard_create_synthetic_manual_entries(c.payee, c.monthlyCents, 'out');
                     createdManual = true;
