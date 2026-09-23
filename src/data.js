@@ -1,5 +1,6 @@
 // --- data.js ---
 import { parse_csv_rows, default_csv_config } from './csv_config.js';
+import { reporting_date } from './recurrence.js';
 
 export let data = [];
 export let filtered_data = [];
@@ -94,7 +95,8 @@ export function group_data(rows, currentPath) {
   }
 
   filteredOut.forEach(r => {
-    const key = `${r.date.getFullYear()}-${String(r.date.getMonth()+1).padStart(2,'0')}`;
+    const d = reporting_date(r);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
     const cat = expense_child_key(r, currentPath);
     out[key] = out[key] || {};
     out[key][cat] = (out[key][cat] || 0) + Math.abs(r.betrag_cents);
@@ -103,7 +105,8 @@ export function group_data(rows, currentPath) {
   // For income (in) always aggregate from all rows provided (year-filtered), ignore current_path
   rows.forEach(r => {
     if (r.in_out === 'in' && is_real_cashflow(r)) {
-      const key = `${r.date.getFullYear()}-${String(r.date.getMonth()+1).padStart(2,'0')}`;
+      const d = reporting_date(r);
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
       inData[key] = (inData[key] || 0) + r.betrag_cents;
     }
   });
@@ -120,9 +123,9 @@ export function calculate_monthly_averages(rows) {
   if (rows.length === 0) return { monthlyAverages: [], globalAverage: { in: 0, out: 0 } };
 
   // Sort by date to find min/max
-  const sorted = [...rows].sort((a,b) => a.date - b.date);
-  const minDate = sorted[0].date;
-  const maxDate = sorted[sorted.length - 1].date;
+  const sorted = [...rows].sort((a,b) => reporting_date(a) - reporting_date(b));
+  const minDate = reporting_date(sorted[0]);
+  const maxDate = reporting_date(sorted[sorted.length - 1]);
 
   // Count how many times each month index actually occurred in the timespan
   const monthCounts = Array(12).fill(0);
@@ -138,7 +141,7 @@ export function calculate_monthly_averages(rows) {
 
   rows.forEach(r => {
     if (!is_real_cashflow(r)) return;
-    const m = r.date.getMonth();
+    const m = reporting_date(r).getMonth();
     if (r.in_out === 'in') {
       monthStats[m].in += r.betrag_cents;
       totalIn += r.betrag_cents;
@@ -175,7 +178,8 @@ export function calculate_classified_average(rows, matchGroupOrCategory) {
 
   const allMonths = new Set();
   rows.forEach(r => {
-    const key = `${r.date.getFullYear()}-${String(r.date.getMonth()+1).padStart(2,'0')}`;
+    const d = reporting_date(r);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
     allMonths.add(key);
   });
 

@@ -98,7 +98,6 @@ input[type="file"]::file-selector-button:hover { background: var(--accent-soft);
 .main-tab-btn { flex: 1; background: none; border: none; padding: 10px 12px; cursor: pointer; font-size: 0.95em; border-radius: var(--radius-sm); color: var(--text-muted); font-weight: 600; white-space: nowrap; }
 .main-tab-btn.active { background: var(--accent-soft); color: var(--accent); }
 .chart-view-controls { display: flex; gap: 4px; flex-shrink: 0; }
-.chart-view-controls[hidden] { display: none; }
 .chart-view-controls select { width: auto; min-height: 34px; max-width: 116px; padding: 4px 22px 4px 8px; font-size: 0.78em; background-color: var(--surface-muted); border-color: transparent; }
 
 /* ===== Pager: swipe between Woche / Übersicht ===== */
@@ -268,7 +267,6 @@ dialog.setup-wizard:not([open]) { display: none; }
 .wizard-candidate-merge-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 8px; padding: 6px 0; color: var(--text-muted); font-size: 0.8em; }
 .wizard-candidate-merge { min-height: 30px; padding: 4px 8px; font-size: 0.9em; white-space: nowrap; }
 .wizard-candidate-interval { width: auto; flex: 0 0 auto; min-width: 7.5em; font-size: 0.85em; }
-.wizard-summary-cards { margin-top: auto; }
 /* On narrow screens a fixed-width category button vertically centered next
    to a long, wrapped payee name visually overlapped the text. Forcing the
    name/meta onto its own full-width line and the controls onto a second
@@ -344,7 +342,13 @@ dialog.setup-wizard:not([open]) { display: none; }
 /* ===== Modals (shared) ===== */
 .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.45); }
 .modal-content { background-color: var(--surface); margin: 5% auto; padding: 0; border: none; width: 90%; max-width: 700px; border-radius: var(--radius-md); box-shadow: var(--shadow-md); }
-.modal-content:has(.settings-tabs) { display: flex; flex-direction: column; max-height: 90dvh; }
+.modal-content:has(.settings-tabs) { display: flex; flex-direction: column; max-height: 100dvh; }
+/* Same full-height treatment as .setup-wizard - a fixed header/footer and a
+   scrolling middle beat wasting 10% of the viewport as top/bottom margin.
+   Scoped above the mobile breakpoint, which already goes edge-to-edge. */
+@media (min-width: 601px) {
+  .modal-content:has(.settings-tabs) { margin: 12px auto; height: min(900px, calc(100dvh - 24px)); max-height: calc(100dvh - 24px); }
+}
 .modal-header { padding: 16px 20px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; border-radius: var(--radius-md) var(--radius-md) 0 0; }
 .modal-header h2 { margin: 0; font-size: 1.2em; }
 .modal-body { padding: 0 20px 20px; max-height: 65vh; overflow-y: auto; }
@@ -391,10 +395,11 @@ dialog.setup-wizard:not([open]) { display: none; }
 
 /* Settings > Budgets: totals row + merged budget-group editor rows */
 .budget-totals-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
-/* Keeps the wizard's running total/savings card in view while the (often
-   taller-than-the-viewport) candidate list above it scrolls, instead of it
-   scrolling out of sight along with everything else. */
-.wizard-step .budget-totals-row { position: sticky; bottom: 64px; z-index: 1; background: var(--surface); padding-top: 8px; margin-bottom: 0; }
+/* Keeps the wizard's running total/savings card visible at the top of the
+   step while the (often taller-than-the-viewport) intro text/candidate
+   list scrolls away underneath it, instead of the card taking up its own
+   permanent block of vertical space. */
+.wizard-step .budget-totals-row { position: sticky; top: 0; z-index: 1; background: var(--surface); padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
 /* `order` (not source order) pins the value to the top and the description
    to the bottom, with `justify-content: space-between` spreading them to
    the card's actual top/bottom edges when a row of cards stretches taller
@@ -659,8 +664,10 @@ th.select-col:hover { background: var(--surface-muted); }
 
 /* Shared chart filters remain inside the scrolling overview pane. */
 .overview-filters { position: sticky; top: -16px; z-index: 12; background: var(--bg, #f5f6f8); padding: 10px 0; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
-.overview-filters #yearButtons { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 8px; }
+.overview-filters-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.overview-filters #yearButtons { display: flex; gap: 6px; overflow-x: auto; flex: 1 1 auto; min-width: 0; }
 .overview-filters #yearButtons button { white-space: nowrap; }
+.overview-filters .chart-view-controls { flex: 0 0 auto; }
 .overview-filters button.active { background: var(--accent); color: white; }
 .filter-controls { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
 .filter-controls label { display: flex; flex-direction: column; gap: 3px; font-size: .75rem; color: var(--text-muted); min-width: 0; flex: 1; }
@@ -718,8 +725,9 @@ button.budget-totals-cell:hover { border-color: var(--accent); }
 }
 @media (max-width: 540px) {
   .app-header { gap: 6px; flex-wrap: wrap; }
-  .chart-view-controls { order: 4; width: 100%; }
-  .chart-view-controls select { flex: 1; max-width: none; }
+  .overview-filters-top { flex-wrap: wrap; }
+  .overview-filters .chart-view-controls { flex-basis: 100%; }
+  .overview-filters .chart-view-controls select { flex: 1; max-width: none; }
   .tab-pane { padding: 8px 6px calc(8px + env(safe-area-inset-bottom)); }
   .overview-filters { top: -12px; }
   .stats-bar { grid-template-columns: repeat(2,1fr); gap: 10px; }

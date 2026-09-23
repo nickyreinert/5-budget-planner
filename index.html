@@ -43,17 +43,6 @@
             <button class="main-tab-btn active" data-main-tab="week" data-i18n="mainTabs.week">📅 Woche</button>
             <button class="main-tab-btn" data-main-tab="overview" data-i18n="mainTabs.overview">📊 Übersicht</button>
         </div>
-        <div id="chartViewControls" class="chart-view-controls" hidden>
-            <select id="chartLayoutSelect" data-i18n-aria-label="charts.layout" aria-label="Diagrammtyp">
-                <option value="stacked" data-i18n="charts.stacked">Gestapelt</option>
-                <option value="grouped" data-i18n="charts.grouped">Gruppiert</option>
-            </select>
-            <select id="chartDeviationSelect" data-i18n-aria-label="charts.comparison" aria-label="Vergleich">
-                <option value="none" data-i18n="charts.absolute">Absolut</option>
-                <option value="average" data-i18n="charts.averageDeviation">Δ Ø</option>
-                <option value="median" data-i18n="charts.medianDeviation">Δ Median</option>
-            </select>
-        </div>
         <button type="button" id="languageToggleBtn" class="settings-gear" data-i18n-title="language.toggle" data-i18n-aria-label="language.toggle" title="Sprache wechseln" aria-label="Sprache wechseln"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3z"/></svg></button>
         <button type="button" id="themeToggleBtn" class="settings-gear" title="Darstellung umschalten" aria-label="Darstellung umschalten"><svg class="icon icon-theme-dark" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12.5A8.5 8.5 0 1 1 11.5 4a7 7 0 0 0 8.5 8.5z"/></svg><svg class="icon icon-theme-light" viewBox="0 0 24 24" aria-hidden="true" hidden><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
         <button type="button" id="configRulesBtn" class="settings-gear" data-i18n-title="filters.settings" title="Einstellungen" aria-label="Einstellungen"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6l1 3 3 1v8l-3 1-1 3H9l-1-3-3-1V8l3-1z"/><circle cx="12" cy="12" r="3"/></svg></button>
@@ -106,7 +95,20 @@
             <div id="tab-overview" class="tab-pane">
                 <div class="stats-bar" id="statsBar"></div>
                 <div class="overview-filters" id="overviewFilters">
-                    <div id="yearButtons" aria-label="Jahr"></div>
+                    <div class="overview-filters-top">
+                        <div id="yearButtons" aria-label="Jahr"></div>
+                        <div id="chartViewControls" class="chart-view-controls">
+                            <select id="chartLayoutSelect" data-i18n-aria-label="charts.layout" aria-label="Diagrammtyp">
+                                <option value="stacked" data-i18n="charts.stacked">Gestapelt</option>
+                                <option value="grouped" data-i18n="charts.grouped">Gruppiert</option>
+                            </select>
+                            <select id="chartDeviationSelect" data-i18n-aria-label="charts.comparison" aria-label="Vergleich">
+                                <option value="none" data-i18n="charts.absolute">Absolut</option>
+                                <option value="average" data-i18n="charts.averageDeviation">Δ Ø</option>
+                                <option value="median" data-i18n="charts.medianDeviation">Δ Median</option>
+                            </select>
+                        </div>
+                    </div>
                     <div class="filter-controls">
                         <label>Zeitraum<select id="weekFilterSelect" aria-label="Kalenderwoche"></select></label>
                         <label>Ansicht<select id="granularitySelect"><option value="week">Woche</option><option value="month" selected>Monat</option><option value="year">Jahr</option></select></label>
@@ -490,6 +492,7 @@
         </div>
 
         <div class="wizard-step" data-wizard-step="salary" hidden>
+            <div class="budget-totals-row wizard-summary-cards"><div class="budget-totals-cell"><span data-i18n="wizard.incomeTotalLabel">Einnahmen gesamt pro Monat</span><strong id="wizardIncomeTotal"></strong></div></div>
             <p data-i18n="wizard.stepSalaryIntro">Wir haben folgende regelmäßigen Zahlungseingänge des letzten Jahres gefunden. Markiere alle, die zu deinem Einkommen gehören (auch mehrere möglich).</p>
             <label class="wizard-tolerance-control">
                 <span data-i18n="wizard.toleranceLabel">Toleranz für ähnliche Beträge</span>
@@ -504,10 +507,10 @@
                 <button type="button" id="wizardSalaryAddCustom" data-i18n="wizard.addCustom">+ Hinzufügen</button>
                 <button type="button" id="wizardSalaryBrowseBtn" data-i18n="wizard.browseTransactions">🔍 Buchungen durchsuchen</button>
             </div>
-            <div class="budget-totals-row wizard-summary-cards"><div class="budget-totals-cell"><span data-i18n="wizard.incomeTotalLabel">Einnahmen gesamt pro Monat</span><strong id="wizardIncomeTotal"></strong></div></div>
         </div>
 
         <div class="wizard-step" data-wizard-step="expenses" hidden>
+            <div class="budget-totals-row wizard-summary-cards"><div class="budget-totals-cell"><span data-i18n="wizard.expenseTotalLabel">Fixkosten gesamt pro Monat</span><strong id="wizardExpenseTotal"></strong></div></div>
             <p data-i18n="wizard.stepExpensesIntro">Diese wiederkehrenden Ausgaben haben wir erkannt. Ordne jeder eine Kategorie zu, oder ignoriere sie.</p>
             <label class="wizard-tolerance-control">
                 <span data-i18n="wizard.toleranceLabel">Toleranz für ähnliche Beträge</span>
@@ -522,18 +525,17 @@
                 <button type="button" id="wizardExpenseAddCustom" data-i18n="wizard.addCustom">+ Hinzufügen</button>
                 <button type="button" id="wizardExpenseBrowseBtn" data-i18n="wizard.browseTransactions">🔍 Buchungen durchsuchen</button>
             </div>
-            <div class="budget-totals-row wizard-summary-cards"><div class="budget-totals-cell"><span data-i18n="wizard.expenseTotalLabel">Fixkosten gesamt pro Monat</span><strong id="wizardExpenseTotal"></strong></div></div>
         </div>
 
         <div class="wizard-step" data-wizard-step="budgets" hidden>
-            <p data-i18n="wizard.stepBudgetsIntro">Passe deine Budgets an. Was übrig bleibt, kannst du sparen.</p>
-            <div id="wizardBudgetEditor" class="wizard-candidate-list"></div>
             <div class="budget-totals-row wizard-summary-cards">
                 <div class="budget-totals-cell"><span data-i18n="wizard.availableWeeklyLabel">Verfügbar pro Woche</span><strong id="wizardBudgetAvailableWeekly"></strong></div>
                 <div class="budget-totals-cell"><span data-i18n="wizard.plannedWeeklyLabel">Für Budgets pro Woche</span><strong id="wizardBudgetPlannedWeekly"></strong></div>
                 <div class="budget-totals-cell"><span data-i18n="wizard.savingsWeeklyLabel">Ersparnis pro Woche</span><strong id="wizardBudgetSavingsWeekly"></strong></div>
                 <div class="budget-totals-cell"><span data-i18n="wizard.savingsLabel">Ersparnis pro Monat</span><strong id="wizardSavingsPreview"></strong></div>
             </div>
+            <p data-i18n="wizard.stepBudgetsIntro">Passe deine Budgets an. Was übrig bleibt, kannst du sparen.</p>
+            <div id="wizardBudgetEditor" class="wizard-candidate-list"></div>
         </div>
 
         <p id="wizardError" role="alert"></p>
@@ -750,7 +752,6 @@
         const pagerEl = document.getElementById('pager');
         const trackEl = document.getElementById('pagerTrack');
         const mainTabBtns = document.querySelectorAll('.main-tab-btn');
-        const chartViewControls = document.getElementById('chartViewControls');
         let activeTabIndex = 0; // 0 = week, 1 = overview
 
         // `render` is false only for the initial setup call below, made
@@ -763,7 +764,6 @@
             trackEl.classList.toggle('dragging', !animate);
             trackEl.style.transform = `translateX(-${index * 50}%)`;
             mainTabBtns.forEach(b => b.classList.toggle('active', parseInt(b.dataset.tabIndex, 10) === index));
-            chartViewControls.hidden = index !== 1;
             if (!render) return;
             if (index === 1) render_all();
             if (index === 0) render_week();
