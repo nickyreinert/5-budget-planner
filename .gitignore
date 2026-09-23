@@ -3,3 +3,4 @@ copilot-instructions.md
 gocardless-proxy/node_modules/
 gocardless-proxy/.dev.vars
 gocardless-proxy/.wrangler/
+.env

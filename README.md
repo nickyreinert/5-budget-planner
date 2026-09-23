@@ -33,6 +33,22 @@ Open <http://localhost:3000>. The app stores transactions and manual entries
 in IndexedDB and settings in localStorage. Bank data stays in the browser; the
 app does not send it to an LLM. You decide what to share with an external LLM.
 
+## Deploy manually from your PC
+
+Automatic Netlify builds can stay disabled. To publish the current working tree
+from your computer, install/link the site once and then run:
+
+```sh
+npx netlify-cli login
+npx netlify-cli link
+./deploy.sh
+```
+
+`deploy.sh` publishes the static site and the optional Netlify Functions to the
+production site. This keeps the public domain and cloud-sync backend while
+avoiding a build on every Git push. Function environment variables such as
+`GOOGLE_CLIENT_ID` and `NETLIFY_DB_URL` remain managed in Netlify site settings.
+
 ## A simple workflow
 
 1. Import CSV files from your accounts.
