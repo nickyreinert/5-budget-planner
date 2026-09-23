@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { budget_category, validate_budget_settings } from '../src/budgets.js';
 import { build_main_budget_report, category_color } from '../src/week.js';
 import { enrich_row, tx_id, apply_amount_overrides } from '../src/data.js';
-import { apply_manual_overrides, classify_all, rule_matches } from '../src/rules.js';
+import { apply_manual_overrides, classify, classify_all, rule_matches } from '../src/rules.js';
 const setting = () => JSON.parse(readFileSync(new URL('../examples/five-budgets.setting.json', import.meta.url)));
 
 test('example settings round-trip five budgets with an unassigned fallback, mappings and limits', () => {
@@ -65,4 +65,18 @@ test('multi-condition income rules exclude travel reimbursements by text and amo
   assert.equal(rule_matches({ name: 'Firma GmbH', verwendungszweck: 'Gehalt', betrag_cents: 350000 }, rule), true);
   assert.equal(rule_matches({ name: 'Firma GmbH', verwendungszweck: 'Reise Spesen', betrag_cents: 350000 }, rule), false);
   assert.equal(rule_matches({ name: 'Firma GmbH', verwendungszweck: 'Gehalt', betrag_cents: 50000 }, rule), false);
+});
+
+test('merged contract aliases classify to the same persistent contract id', () => {
+  const rules = [{
+    id: 'streaming', category: 'Streaming', group: 'fixed',
+    matchers: [{ field: 'name', operator: 'regex', value: '(?:Google Play Ireland|Google Play HelpPay)' }],
+    contractMerges: [{ id: 'google-play', name: 'Streaming · Google Play', payees: ['Google Play Ireland', 'Google Play HelpPay'] }]
+  }];
+  const setting = { rules };
+  for (const name of ['Google Play Ireland', 'Google Play HelpPay']) {
+    const result = classify({ name, betrag_cents: -1799 }, setting);
+    assert.equal(result.contractId, 'google-play');
+    assert.equal(result.contractName, 'Streaming · Google Play');
+  }
 });

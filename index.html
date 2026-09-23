@@ -2311,6 +2311,7 @@
             expenseCandidates: [],
             budgetCaps: {},
             expandedExpenseCategories: new Set(),
+            selectedExpenseCandidatesByCategory: new Map(),
             // Step tolerance for "is this the same recurring amount", as a
             // fraction (0.05 = 5%) - user-adjustable via the slider in the
             // salary/expenses steps, since what counts as "similar enough"
@@ -2449,6 +2450,7 @@
             wizardState.salaryCandidates = [];
             wizardState.expenseCandidates = [];
             wizardState.expandedExpenseCategories = new Set();
+            wizardState.selectedExpenseCandidatesByCategory = new Map();
             wizardState.budgetCaps = { ...subBudgetCaps };
             wizard_set_amount_tolerance(5);
             document.getElementById('wizardError').textContent = '';
@@ -2520,6 +2522,52 @@
                 <tr><td>${fmt_date(r.date)}</td><td>${escape_budget(r.verwendungszweck || r.name)}</td><td class="num">${fmt_eur(r.betrag_cents)}</td></tr>
             `).join('')}</table>`;
             return detail;
+        }
+
+        // A candidate normally represents one bank-visible payee. When a
+        // merchant changes the descriptor it sends to the bank, several of
+        // those candidates can actually be one contract. Keep that explicit
+        // in the wizard state instead of guessing from a similar name.
+        function wizard_expense_candidate_id(c) {
+            if (!c.wizardCandidateId) {
+                const rowIds = (c.rows || []).map(r => r._txId || r.id || `${r.date?.getTime()}-${r.betrag_cents}`).join('|');
+                c.wizardCandidateId = `${c.payee}|${c.amountCents}|${rowIds}`;
+            }
+            return c.wizardCandidateId;
+        }
+
+        function wizard_candidate_payees(c) {
+            return [...new Set((c.payees?.length ? c.payees : [c.payee]).filter(Boolean))];
+        }
+
+        function merge_wizard_expense_candidates(category, candidates) {
+            if (candidates.length < 2) return;
+            const mergedRows = candidates.flatMap(c => c.rows || []).sort((a, b) => b.date - a.date);
+            const payees = [...new Set(candidates.flatMap(wizard_candidate_payees))];
+            const latest = mergedRows[0];
+            const months = mergedRows.length ? (interval_months([...mergedRows].reverse().map(r => r.date)) || 1) : 1;
+            const firstIndex = wizardState.expenseCandidates.findIndex(c => c === candidates[0]);
+            const merged = {
+                ...candidates[0],
+                payee: latest?.name || candidates[0].payee,
+                payees,
+                rows: mergedRows,
+                amountCents: latest ? Math.abs(latest.betrag_cents) : candidates[0].amountCents,
+                monthlyCents: latest ? Math.round(Math.abs(latest.betrag_cents) / months) : candidates[0].monthlyCents,
+                months,
+                count: mergedRows.length || candidates.reduce((sum, c) => sum + c.count, 0),
+                category,
+                merged: true,
+                contractId: `wizard_contract_${crypto.randomUUID()}`,
+                contractName: `${category} · ${payees[0]}${payees.length > 1 ? ` +${payees.length - 1}` : ''}`
+            };
+            const selected = new Set(candidates);
+            const remaining = wizardState.expenseCandidates.filter(c => !selected.has(c));
+            remaining.splice(Math.max(0, firstIndex), 0, merged);
+            wizardState.expenseCandidates = remaining;
+            wizardState.selectedExpenseCandidatesByCategory.delete(category);
+            render_wizard_expenses_step();
+            update_wizard_expense_total();
         }
 
         function render_wizard_salary_step() {
@@ -2595,13 +2643,31 @@
                 return;
             }
 
-            function make_row(c) {
+            function make_row(c, selection = null) {
                 const row = document.createElement('div'); row.className = 'wizard-candidate-row' + (c.ignored ? ' ignored' : '');
+                if (selection) {
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox'; checkbox.className = 'wizard-candidate-select';
+                    checkbox.checked = selection.has(wizard_expense_candidate_id(c));
+                    checkbox.setAttribute('aria-label', c.payee);
+                    checkbox.addEventListener('click', e => e.stopPropagation());
+                    checkbox.addEventListener('change', () => {
+                        const id = wizard_expense_candidate_id(c);
+                        if (checkbox.checked) selection.add(id); else selection.delete(id);
+                        render_wizard_expenses_step();
+                    });
+                    row.append(checkbox);
+                }
                 const info = document.createElement('span'); info.className = 'wizard-candidate-info';
                 const name = document.createElement('span'); name.className = 'wizard-candidate-name'; name.textContent = c.payee;
                 const meta = document.createElement('span'); meta.className = 'wizard-candidate-meta';
                 meta.textContent = c.manual ? t('wizard.manualEntry') : `${fmt_eur(c.monthlyCents)} ${t('fixExpense.perMonth')} · ${t('wizard.occurrences', { count: c.count })}`;
                 info.append(name, meta);
+                if (c.merged) {
+                    const mergedMeta = document.createElement('span'); mergedMeta.className = 'wizard-candidate-badge muted';
+                    mergedMeta.textContent = t('wizard.mergedPayees', { count: wizard_candidate_payees(c).length });
+                    info.append(mergedMeta);
+                }
                 const categoryBtn = document.createElement('button');
                 categoryBtn.type = 'button'; categoryBtn.className = 'category-picker-btn';
                 categoryBtn.dataset.category = c.category; categoryBtn.disabled = c.ignored;
@@ -2660,7 +2726,22 @@
                     if (expanded) wizardState.expandedExpenseCategories.delete(category); else wizardState.expandedExpenseCategories.add(category);
                     render_wizard_expenses_step();
                 });
-                if (expanded) rows.forEach(c => group.append(make_row(c)));
+                if (expanded) {
+                    const selection = wizardState.selectedExpenseCandidatesByCategory.get(category) || new Set();
+                    wizardState.selectedExpenseCandidatesByCategory.set(category, selection);
+                    if (rows.length > 1) {
+                        const mergeBar = document.createElement('div'); mergeBar.className = 'wizard-candidate-merge-bar';
+                        const hint = document.createElement('span'); hint.textContent = t('wizard.mergeSelectionHint');
+                        const mergeButton = document.createElement('button'); mergeButton.type = 'button'; mergeButton.className = 'wizard-candidate-merge';
+                        mergeButton.textContent = t('wizard.mergeSelected'); mergeButton.disabled = selection.size < 2;
+                        mergeButton.addEventListener('click', () => {
+                            const selectedCandidates = rows.filter(c => selection.has(wizard_expense_candidate_id(c)));
+                            merge_wizard_expense_candidates(category, selectedCandidates);
+                        });
+                        mergeBar.append(hint, mergeButton); group.append(mergeBar);
+                    }
+                    rows.forEach(c => group.append(make_row(c, selection)));
+                }
                 container.append(group);
             });
             pending.forEach(c => container.append(make_row(c)));
@@ -2733,19 +2814,30 @@
             document.getElementById('wizardSavingsPreview').textContent = fmt_eur(basis.freeCents - monthlyTotal);
         }
 
-        // Appends a matcher for `payeeName` to an existing rule matching
-        // `predicate`, or creates a new one from `fallbackRule` - shared by
-        // the salary and expense-category wizard steps.
-        function wizard_add_payee_to_rule(predicate, payeeName, fallbackRule) {
-            const rule = (ruleSet.rules || []).find(predicate);
-            if (rule) {
-                rule.matchers = [...rule_matchers(rule), { field: 'name', operator: 'contains', value: payeeName, exclude: false }];
-                delete rule.namePattern; delete rule.verwendungPattern; delete rule.kategoriePattern; delete rule.matchType;
-            } else {
+        // Adds one or more bank-visible names to a rule. A single regex
+        // matcher gives those names OR semantics; separate include matchers
+        // would mean "must contain every recipient", which can never match
+        // a renamed merchant entry.
+        function wizard_add_payee_to_rule(predicate, payeeNames, fallbackRule, contractMerge = null) {
+            const names = [...new Set((Array.isArray(payeeNames) ? payeeNames : [payeeNames]).map(name => String(name || '').trim()).filter(Boolean))];
+            if (!names.length) return null;
+            let rule = (ruleSet.rules || []).find(predicate);
+            if (!rule) {
                 const maxPriority = (ruleSet.rules || []).reduce((m, r) => Math.max(m, r.priority || 0), 0);
                 ruleSet.rules ||= [];
-                ruleSet.rules.push({ ...fallbackRule, priority: maxPriority + 10, matchers: [{ field: 'name', operator: 'contains', value: payeeName, exclude: false }] });
+                rule = { ...fallbackRule, priority: maxPriority + 10 };
+                ruleSet.rules.push(rule);
             }
+            const allPayees = [...new Set([...(rule.wizardPayees || []), ...names])];
+            rule.wizardPayees = allPayees;
+            const escaped = allPayees.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+            rule.matchers = [{ field: 'name', operator: 'regex', value: `(?:${escaped})`, exclude: false }];
+            delete rule.namePattern; delete rule.verwendungPattern; delete rule.kategoriePattern; delete rule.matchType;
+            if (contractMerge) {
+                rule.contractMerges = (rule.contractMerges || []).filter(merge => merge.id !== contractMerge.id);
+                rule.contractMerges.push(contractMerge);
+            }
+            return rule;
         }
 
         // A purely custom candidate (typed name + amount, never backed by a
@@ -2801,8 +2893,9 @@
             for (const [index, c] of picked.entries()) {
                 wizard_add_payee_to_rule(
                     r => r.group === 'fixed' && (r.category || r.label) === c.category,
-                    c.payee,
-                    { id: 'wizard_fixed_' + Date.now() + '_' + index, label: c.category, category: c.category, group: 'fixed' }
+                    wizard_candidate_payees(c),
+                    { id: 'wizard_fixed_' + Date.now() + '_' + index, label: c.category, category: c.category, group: 'fixed' },
+                    c.merged ? { id: c.contractId, name: c.contractName, payees: wizard_candidate_payees(c) } : null
                 );
                 if (c.manual && !c.fromRealTransaction && c.monthlyCents > 0) {
                     await wizard_create_synthetic_manual_entries(c.payee, c.monthlyCents, 'out');

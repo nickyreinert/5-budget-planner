@@ -72,6 +72,13 @@ function matcher_matches(tx, matcher) {
   return regex ? regex.test(text) : false;
 }
 
+function contract_merge_for(tx, rule) {
+  const name = String(tx.name || tx.Name || '').trim().toLocaleLowerCase();
+  return (rule.contractMerges || []).find(merge =>
+    (merge.payees || []).some(payee => name.includes(String(payee).trim().toLocaleLowerCase()))
+  );
+}
+
 // Returns true if `rule` matches transaction `tx`.
 // Each of namePattern / verwendungPattern / kategoriePattern is optional;
 // non-empty patterns present must satisfy matchType ('and' = all present
@@ -112,8 +119,11 @@ export function classify(tx, ruleSet) {
   for (const rule of rules) {
     if (rule.group === 'income' && tx.betrag_cents < 0) continue;
     if (rule_matches(tx, rule)) {
+      const contractMerge = contract_merge_for(tx, rule);
       return {
         ruleId: rule.id,
+        contractId: contractMerge?.id,
+        contractName: contractMerge?.name,
         incomeType: rule.incomeType,
         recurring: rule.recurring,
         label: rule.label,

@@ -57,6 +57,7 @@ export function salary_monthly_cents(rows) {
 }
 
 function payee_key(r) {
+  if (r._cls?.contractId) return `contract:${r._cls.contractId}`;
   return `${r._cls?.category || ''}|${(r.name || '').trim().toLowerCase()}`;
 }
 
@@ -88,7 +89,7 @@ export function active_contracts(rows, refDate) {
       const months = latest._cls?.recurring?.intervalMonths || interval_months(c.rows.map(r => r.date).reverse());
       if (months === null) return null;
       return {
-        name: latest.name || '(ohne Namen)',
+        name: latest._cls?.contractName || latest.name || '(ohne Namen)',
         category: latest._cls.category,
         months,
         amountCents: c.latestCents,

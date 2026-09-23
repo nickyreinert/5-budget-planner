@@ -66,6 +66,17 @@ test('contracts: latest price counts, one-offs and ended contracts do not', () =
   assert.deepEqual(monthly, [['Berlin Towers', 121005], ['ARAG SE', 2317], ['Google', 2200], ['Google', 1799]]);
 });
 
+test('contracts: explicitly merged payee aliases count as one contract', () => {
+  const ref = new Date('2026-09-19');
+  const rows = [
+    tx('2026-06-29', -1799, 'Google Play Ireland', 'fixed', 'Streaming'),
+    tx('2026-07-29', -1799, 'Google Play Ireland', 'fixed', 'Streaming'),
+    tx('2026-08-29', -1799, 'Google Play HelpPay', 'fixed', 'Streaming')
+  ];
+  rows.forEach(row => { row._cls.contractId = 'google-play'; row._cls.contractName = 'Streaming · Google Play'; });
+  assert.deepEqual(active_contracts(rows, ref).map(c => [c.name, c.monthlyCents]), [['Streaming · Google Play', 1799]]);
+});
+
 test('reserve: net 12-month average', () => {
   const ref = new Date('2026-09-01');
   const rows = [
