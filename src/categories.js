@@ -25,3 +25,19 @@ export function fixed_expense_categories(settings, favorites = []) {
     .filter(Boolean);
   return sort_categories([...new Set(categories)], favorites);
 }
+
+// Fix Expense/Income category strings support one optional subcategory
+// level via dot notation ("Versicherungen.HDI Lebensversicherung") - kept
+// as a single string (not a nested object) so every existing category
+// picker/search input keeps working unchanged, dot and all. `sub` is null
+// when the category has no dot (the common, non-split case).
+export function split_category(category) {
+  const value = String(category || '');
+  const dotIndex = value.indexOf('.');
+  if (dotIndex === -1) return { parent: value, sub: null };
+  return { parent: value.slice(0, dotIndex), sub: value.slice(dotIndex + 1) };
+}
+
+export function join_category(parent, sub) {
+  return sub ? `${parent}.${sub}` : parent;
+}

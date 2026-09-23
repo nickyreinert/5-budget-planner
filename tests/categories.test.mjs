@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { category_catalog, fixed_expense_categories, sort_categories } from '../src/categories.js';
+import { category_catalog, fixed_expense_categories, sort_categories, split_category, join_category } from '../src/categories.js';
 import { classify, classify_all, apply_manual_overrides } from '../src/rules.js';
 import { enrich_row, tx_id } from '../src/data.js';
 import { default_csv_config, get_csv_config } from '../src/csv_config.js';
@@ -56,4 +56,13 @@ test('uncategorized is always a quick-entry option and clears a previous fixed c
  const r=enrich_row({Datum:'20.09.2026',Name:'Unknown',Betrag:'-20'});r._cls={group:'fixed',category:'Rent',excluded:false};
  apply_manual_overrides([r],{[tx_id(r)]:'Unkategorisiert'},{rules:[]});
  assert.equal(r._cls.group,'unclassified');assert.equal(r._cls.excluded,false);
+});
+
+test('split_category splits on the first dot only, join_category is its inverse', () => {
+  assert.deepEqual(split_category('Versicherungen.HDI Leben'), { parent: 'Versicherungen', sub: 'HDI Leben' });
+  assert.deepEqual(split_category('Versicherungen'), { parent: 'Versicherungen', sub: null });
+  assert.deepEqual(split_category('A.B.C'), { parent: 'A', sub: 'B.C' });
+  assert.deepEqual(split_category(''), { parent: '', sub: null });
+  assert.equal(join_category('Versicherungen', 'HDI Leben'), 'Versicherungen.HDI Leben');
+  assert.equal(join_category('Versicherungen', null), 'Versicherungen');
 });

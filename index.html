@@ -600,7 +600,7 @@
         import { get_csv_config, save_csv_config, default_csv_config } from './src/csv_config.js';
         import { load_footer } from './src/footer.js';
         import { csv_records, reconcile_transactions, transaction_source_label } from './src/transactions.js';
-        import { category_catalog, sort_categories, fixed_expense_categories, UNCATEGORIZED } from './src/categories.js';
+        import { category_catalog, sort_categories, fixed_expense_categories, UNCATEGORIZED, split_category, join_category } from './src/categories.js';
         import { upsert_imported_entries, load_imported_entries } from './src/db.js';
         import { apply_amount_overrides, apply_note_overrides, apply_date_overrides, is_real_cashflow } from './src/data.js';
         import { load_amount_overrides, save_amount_override, load_all_overrides, save_overrides, add_manual_entry, load_manual_entries, delete_manual_entry, load_note_overrides, save_note_override, load_date_overrides, save_date_override, load_effective_period_overrides, save_effective_period_override, clear_effective_period_override } from './src/db.js';
@@ -1969,13 +1969,13 @@
         // plus a live "per month" preview computed from the last 3 months.
         const RULE_GROUP_EDITORS = {
             fixed: {
-                containerId: 'fixExpenseList', addBtnId: 'addFixExpenseBtn', expanded: new Set(),
+                containerId: 'fixExpenseList', addBtnId: 'addFixExpenseBtn', expandedRules: new Set(), expandedGroups: new Set(),
                 idPrefix: 'fixed_', newLabelKey: 'fixExpense.newCategoryLabel',
                 amountFilter: r => r.betrag_cents < 0, amountValue: r => -r.betrag_cents,
                 showUnassigned: true
             },
             income: {
-                containerId: 'incomeRulesList', addBtnId: 'addIncomeRuleBtn', expanded: new Set(),
+                containerId: 'incomeRulesList', addBtnId: 'addIncomeRuleBtn', expandedRules: new Set(), expandedGroups: new Set(),
                 idPrefix: 'income_', newLabelKey: 'incomeRules.newCategoryLabel',
                 amountFilter: r => r.betrag_cents > 0, amountValue: r => r.betrag_cents,
                 showUnassigned: false
@@ -2139,17 +2139,28 @@
             const matches_for = rule => rule_recent_matches(rule, cfg.amountFilter);
             let overviewTotalCents = 0;
 
-            const rowsHtml = rules.map(rule => {
+            // One category can now be split into subcategories via dot
+            // notation ("Versicherungen.HDI Leben") - grouped here by the
+            // part before the first dot. A parent with only one, dot-less
+            // rule renders exactly as the old flat single row (the "sum
+            // everything in one category" case); 2+ rules sharing a parent
+            // render as an expandable group instead.
+            const groups = new Map();
+            rules.forEach(rule => {
+                const { parent } = split_category(rule.category || rule.label || '');
+                if (!groups.has(parent)) groups.set(parent, []);
+                groups.get(parent).push(rule);
+            });
+
+            function rule_row_html(rule, displayName) {
                 const matches = matches_for(rule);
                 const totalCents = rule_monthly_equivalent(matches, rule.recurringOverrides || {}).totalCents;
-                overviewTotalCents += totalCents;
-                const expanded = cfg.expanded.has(rule.id);
+                const expanded = cfg.expandedRules.has(rule.id);
                 const matchers = rule_matchers(rule);
-
-                return `
-                    <div class="main-budget-editor-row fixexpense-row" data-rule="${escape_budget(rule.id)}" data-kind="${kind}">
+                const html = `
+                    <div class="main-budget-editor-row fixexpense-row" draggable="true" data-rule="${escape_budget(rule.id)}" data-kind="${kind}">
                         <button type="button" class="group-toggle-btn" data-rule="${escape_budget(rule.id)}" title="${t('budgets.toggleCategories')}">${expanded ? '▼' : '▶'}</button>
-                        <input value="${escape_budget(rule.category || rule.label || '')}" data-rule="${escape_budget(rule.id)}" data-field="category" aria-label="Kategorie">
+                        <input value="${escape_budget(displayName)}" data-rule="${escape_budget(rule.id)}" data-field="category" aria-label="Kategorie">
                         <span class="fixexpense-monthly" title="${t('fixExpense.monthlyHint')}">${fmt_eur(totalCents)} ${t('fixExpense.perMonth')}</span>
                         <button type="button" class="remove-btn" data-rule="${escape_budget(rule.id)}" title="${t('fixExpense.removeRow')}">×</button>
                     </div>
@@ -2160,6 +2171,38 @@
                             <summary>${t('fixExpense.previewToggle', { count: matches.length })}</summary>
                             ${render_transaction_preview_table(matches, cfg.amountValue, { byBillingPeriod: true, overrides: rule.recurringOverrides || {}, ruleId: rule.id })}
                         </details>
+                    </div>
+                `;
+                return { html, totalCents };
+            }
+
+            const rowsHtml = [...groups.entries()].map(([parent, groupRules]) => {
+                const addBtnHtml = `<button type="button" class="fixexpense-add-sub-btn" data-parent="${escape_budget(parent)}" data-kind="${kind}">+ ${t('fixExpense.addSubcategory')}</button>`;
+                if (groupRules.length === 1) {
+                    const rule = groupRules[0];
+                    const { html, totalCents } = rule_row_html(rule, rule.category || rule.label || '');
+                    overviewTotalCents += totalCents;
+                    return `<div class="fixexpense-group" data-parent="${escape_budget(parent)}" data-kind="${kind}">${html}${addBtnHtml}</div>`;
+                }
+                const groupExpanded = cfg.expandedGroups.has(parent);
+                const sortedRules = [...groupRules].sort((a, b) => (a.priority || 0) - (b.priority || 0));
+                const rendered = sortedRules.map(rule => {
+                    const { sub } = split_category(rule.category || rule.label || '');
+                    return rule_row_html(rule, sub === null ? t('fixExpense.generalSubcategory') : sub);
+                });
+                const groupTotalCents = rendered.reduce((sum, r) => sum + r.totalCents, 0);
+                overviewTotalCents += groupTotalCents;
+                return `
+                    <div class="fixexpense-group" data-parent="${escape_budget(parent)}" data-kind="${kind}">
+                        <div class="main-budget-editor-row fixexpense-group-row" data-parent="${escape_budget(parent)}" data-kind="${kind}">
+                            <button type="button" class="group-toggle-btn" data-parent="${escape_budget(parent)}" title="${t('budgets.toggleCategories')}">${groupExpanded ? '▼' : '▶'}</button>
+                            <input value="${escape_budget(parent)}" data-parent="${escape_budget(parent)}" data-kind="${kind}" data-field="parent-category" aria-label="Kategorie">
+                            <span class="fixexpense-monthly" title="${t('fixExpense.monthlyHint')}">${fmt_eur(groupTotalCents)} ${t('fixExpense.perMonth')}</span>
+                        </div>
+                        ${addBtnHtml}
+                        <div class="fixexpense-group-body" ${groupExpanded ? '' : 'hidden'}>
+                            ${rendered.map(r => r.html).join('')}
+                        </div>
                     </div>
                 `;
             }).join('');
@@ -2188,12 +2231,35 @@
             container.querySelectorAll('.fixexpense-row .group-toggle-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const id = btn.dataset.rule;
-                    if (cfg.expanded.has(id)) cfg.expanded.delete(id); else cfg.expanded.add(id);
+                    if (cfg.expandedRules.has(id)) cfg.expandedRules.delete(id); else cfg.expandedRules.add(id);
                     render_rule_group_list(kind);
                 });
             });
 
-            container.querySelectorAll('.fixexpense-row input[data-field="category"]:not([disabled])').forEach(input => {
+            container.querySelectorAll('.fixexpense-group-row .group-toggle-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const parent = btn.dataset.parent;
+                    if (cfg.expandedGroups.has(parent)) cfg.expandedGroups.delete(parent); else cfg.expandedGroups.add(parent);
+                    render_rule_group_list(kind);
+                });
+            });
+
+            // A row inside an expanded group only shows/edits its OWN
+            // subcategory name - reconstruct the full "parent.sub" string
+            // from whatever the group's current parent name is.
+            container.querySelectorAll('.fixexpense-group-body .fixexpense-row input[data-field="category"]').forEach(input => {
+                input.onchange = () => {
+                    const rule = (ruleSet.rules || []).find(r => r.id === input.dataset.rule);
+                    if (!rule) return;
+                    const { parent } = split_category(rule.category || rule.label || '');
+                    if (!input.value.trim()) { input.value = t('fixExpense.generalSubcategory'); }
+                    rule.category = join_category(parent, input.value.trim() || t('fixExpense.generalSubcategory'));
+                    rule.label ||= rule.category;
+                    persist_budgets(); render_rule_group_list(kind);
+                };
+            });
+            // A flat (non-grouped) row's input still edits the whole category.
+            container.querySelectorAll('.fixexpense-group > .fixexpense-row input[data-field="category"]').forEach(input => {
                 input.onchange = () => {
                     const rule = (ruleSet.rules || []).find(r => r.id === input.dataset.rule);
                     if (!rule) return;
@@ -2202,6 +2268,39 @@
                     rule.label ||= rule.category;
                     persist_budgets(); render_rule_group_list(kind);
                 };
+            });
+            // Renaming a group's parent header renames every rule in it.
+            container.querySelectorAll('.fixexpense-group-row input[data-field="parent-category"]').forEach(input => {
+                input.onchange = () => {
+                    const oldParent = input.dataset.parent;
+                    const newParent = input.value.trim();
+                    if (!newParent) { input.value = oldParent; return; }
+                    (ruleSet.rules || []).filter(r => r.group === kind && split_category(r.category || r.label || '').parent === oldParent).forEach(r => {
+                        const { sub } = split_category(r.category || r.label || '');
+                        r.category = join_category(newParent, sub === null ? t('fixExpense.generalSubcategory') : sub);
+                        r.label ||= r.category;
+                    });
+                    if (cfg.expandedGroups.has(oldParent)) { cfg.expandedGroups.delete(oldParent); cfg.expandedGroups.add(newParent); }
+                    persist_budgets(); render_rule_group_list(kind);
+                };
+            });
+
+            container.querySelectorAll('.fixexpense-add-sub-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const parent = btn.dataset.parent;
+                    const maxPriority = (ruleSet.rules || []).reduce((m, r) => Math.max(m, r.priority || 0), 0);
+                    const id = cfg.idPrefix + Date.now();
+                    const category = join_category(parent, t('fixExpense.newSubcategoryLabel'));
+                    ruleSet.rules ||= [];
+                    ruleSet.rules.push({
+                        id, group: kind, category, label: category,
+                        matchers: [{ field: 'any', operator: 'contains', value: '', exclude: false }],
+                        priority: maxPriority + 10
+                    });
+                    cfg.expandedGroups.add(parent);
+                    cfg.expandedRules.add(id);
+                    persist_budgets(); render_rule_group_list(kind);
+                });
             });
 
             function save_matchers(ruleId, matcherContainer) {
@@ -2239,6 +2338,51 @@
                     persist_budgets(); render_rule_group_list(kind);
                 });
             });
+
+            // Drag & drop, mirroring the Budgets tab's category chips: drag
+            // a row onto another row to reorder within/insert just before
+            // it, or onto a group's empty space to append it at the end of
+            // that group (re-parenting it - i.e. moving it into a different
+            // category/subcategory - if it came from elsewhere).
+            function reparent_and_reorder(draggedId, targetParent, beforePriority) {
+                const dragged = (ruleSet.rules || []).find(r => r.id === draggedId);
+                if (!dragged) return;
+                const { sub } = split_category(dragged.category || dragged.label || '');
+                dragged.category = join_category(targetParent, sub || t('fixExpense.generalSubcategory'));
+                dragged.label ||= dragged.category;
+                dragged.priority = beforePriority;
+                cfg.expandedGroups.add(targetParent);
+                persist_budgets(); render_rule_group_list(kind);
+            }
+            container.querySelectorAll('.fixexpense-row[draggable="true"]').forEach(row => {
+                row.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', row.dataset.rule);
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+                row.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); row.classList.add('drag-over'); });
+                row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+                row.addEventListener('drop', (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    row.classList.remove('drag-over');
+                    const draggedId = e.dataTransfer.getData('text/plain');
+                    const target = (ruleSet.rules || []).find(r => r.id === row.dataset.rule);
+                    if (!draggedId || !target || draggedId === target.id) return;
+                    reparent_and_reorder(draggedId, split_category(target.category || target.label || '').parent, (target.priority || 0) - 1);
+                });
+            });
+            container.querySelectorAll('.fixexpense-group').forEach(dropzone => {
+                dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+                dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+                dropzone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    dropzone.classList.remove('drag-over');
+                    const draggedId = e.dataTransfer.getData('text/plain');
+                    if (!draggedId) return;
+                    const targetParent = dropzone.dataset.parent;
+                    const siblings = (ruleSet.rules || []).filter(r => r.group === kind && r.id !== draggedId && split_category(r.category || r.label || '').parent === targetParent);
+                    reparent_and_reorder(draggedId, targetParent, siblings.reduce((m, r) => Math.max(m, r.priority || 0), 0) + 10);
+                });
+            });
         }
 
         function add_rule_group_row(kind) {
@@ -2251,7 +2395,7 @@
                 group: kind, matchers: [{ field: 'any', operator: 'contains', value: '', exclude: false }],
                 priority: maxPriority + 10
             });
-            cfg.expanded.add(id);
+            cfg.expandedRules.add(id);
             persist_budgets();
             render_rule_group_list(kind);
         }
