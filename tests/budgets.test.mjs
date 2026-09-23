@@ -96,6 +96,32 @@ test('a contract merge with an amountCents reference only applies to transaction
   assert.equal(classify({ name: 'PayPal Europe', betrag_cents: -499 }, setting).contractId, undefined);
 });
 
+test('a contract merge of two clusters keeps BOTH original reference amounts, not their average', () => {
+  // Merging a ~139,05€ cluster with a ~111,23€ one must not collapse to a
+  // single averaged ~125,14€ reference - a real booking that varies
+  // slightly around 139,05€ (e.g. 150,00€) is within tolerance of the real
+  // 139,05€ reference but would fall OUTSIDE a ±15% band centered on the
+  // average, silently un-merging a genuine member of the original cluster.
+  const rules = [{
+    id: 'insurance', category: 'Versicherungen', group: 'fixed',
+    matchers: [{ field: 'name', operator: 'regex', value: 'HDI Lebensversicherung AG' }],
+    contractMerges: [{ id: 'merge-1', name: 'HDI Lebensversicherung AG', payees: ['hdi lebensversicherung ag'], amountCents: [13905, 11123] }]
+  }];
+  const setting = { rules };
+  assert.equal(classify({ name: 'HDI Lebensversicherung AG', betrag_cents: -13905 }, setting).contractId, 'merge-1');
+  assert.equal(classify({ name: 'HDI Lebensversicherung AG', betrag_cents: -11123 }, setting).contractId, 'merge-1');
+  // Within 15% of 13905 (up to 15990,75) but OUTSIDE 15% of the old
+  // averaged 12514 (up to 14391,1) - must still merge. This is the exact
+  // real-world case reported: merging a 139,05€ cluster with a 111,23€ one
+  // caused a real 152,96€ booking (part of the original 139,05€ cluster's
+  // natural variance) to reappear as its own separate "orphan" cluster
+  // under the old averaging logic - it must now merge correctly instead.
+  assert.equal(classify({ name: 'HDI Lebensversicherung AG', betrag_cents: -15000 }, setting).contractId, 'merge-1');
+  assert.equal(classify({ name: 'HDI Lebensversicherung AG', betrag_cents: -15296 }, setting).contractId, 'merge-1');
+  // Genuinely unrelated amount, far from either reference - must not merge.
+  assert.equal(classify({ name: 'HDI Lebensversicherung AG', betrag_cents: -30000 }, setting).contractId, undefined);
+});
+
 test('a recurring payee interval override is exposed to the budget calculation', () => {
   const result = classify({ name: 'Annual insurer', betrag_cents: -12000 }, {
     rules: [{ id: 'insurance', category: 'Insurance', group: 'fixed', namePattern: 'Annual insurer', recurringOverrides: { 'annual insurer': 12 } }]

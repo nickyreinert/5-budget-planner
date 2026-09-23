@@ -563,6 +563,7 @@ dialog.rule-transaction-browser:not([open]) { display: none; }
 .tx-month-header:first-child td { padding-top: 0; }
 .tx-preview-name-btn { background: none; border: none; color: inherit; font: inherit; cursor: pointer; padding: 0; text-align: left; }
 .tx-preview-name-btn:hover { color: var(--accent); }
+.tx-more-rows td { padding: 2px 4px 8px; font-size: 0.78em; color: var(--text-muted); font-style: italic; border-top: none; }
 
 /* Fix Expense/Income rule preview grouped by payee instead of calendar
    month - each payee gets its own interval control + resulting monthly

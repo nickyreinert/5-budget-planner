@@ -84,6 +84,18 @@ function matcher_matches(tx, matcher) {
 // reference (every merge created via the Settings > Fix Expense/Income
 // preview does; older wizard-created merges may not), also require the
 // transaction's amount to be close to it.
+//
+// `amountCents` can be a single number (legacy/older merges) or an array of
+// numbers - one reference per originally-selected cluster. A single
+// AVERAGED reference used to be computed across all selected clusters, but
+// that shifts the tolerance window away from each individual cluster's real
+// amount and can silently exclude genuine members of the ORIGINAL clusters
+// after the merge (e.g. merging a ~139€ cluster with a ~111€ one produces an
+// average of ~125€ - real-world bookings that varied slightly around 139€
+// could then fall outside a ±15% band centered on 125€, get kicked out of
+// the merge, and re-form their own unrelated-looking auto-cluster). Matching
+// against ANY of the original reference amounts instead keeps every
+// genuinely-merged cluster's members merged.
 const MERGE_AMOUNT_TOLERANCE = 0.15;
 
 function contract_merge_for(tx, rule) {
@@ -93,7 +105,8 @@ function contract_merge_for(tx, rule) {
     const nameMatches = (merge.payees || []).some(payee => name.includes(String(payee).trim().toLocaleLowerCase()));
     if (!nameMatches) return false;
     if (merge.amountCents == null) return true;
-    return Math.abs(amount - merge.amountCents) <= merge.amountCents * MERGE_AMOUNT_TOLERANCE;
+    const references = Array.isArray(merge.amountCents) ? merge.amountCents : [merge.amountCents];
+    return references.some(ref => Math.abs(amount - ref) <= ref * MERGE_AMOUNT_TOLERANCE);
   });
 }
 

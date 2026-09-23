@@ -1677,8 +1677,13 @@
         // selection, same tier as expandedCatChips/RULE_GROUP_EDITORS
         // Sets elsewhere).
         const ruleMergeSelections = new Map();
+        // Detection window is 12 months (see rule_recent_matches) so annual
+        // bills show up, but a monthly bill would then dump 12 rows into the
+        // preview - cap the DISPLAYED rows per cluster to the most recent
+        // few, the collapsed rest is summarized by a single count line.
+        const RECURRING_PREVIEW_ROW_LIMIT = 5;
         function render_transaction_preview_table(rows, amountValue = (r => -r.betrag_cents), opts = {}) {
-            if (!rows.length) return `<p>${t('fixExpense.noMatches')}</p>`;
+            if (!rows.length) return `<p>${t(opts.byBillingPeriod ? 'fixExpense.recurringNoMatches' : 'fixExpense.noMatches')}</p>`;
             if (!opts.byBillingPeriod) {
                 const sorted = rows.slice().sort((a, b) => b.date - a.date);
                 const rowsHtml = group_rows_by_month(sorted, r => tx_preview_row_html(r, amountValue), 3);
@@ -1720,7 +1725,8 @@
                         ${ruleId && mergedRow ? `<button type="button" class="tx-unmerge-btn" data-rule="${escape_budget(ruleId)}" data-merge-id="${escape_budget(mergedRow._cls.contractId)}" title="${t('fixExpense.unmerge')}">${t('fixExpense.unmerge')}</button>` : ''}
                     </td>
                 </tr>
-                ${cluster.rows.map(r => tx_preview_row_html(r, amountValue)).join('')}
+                ${cluster.rows.slice(0, RECURRING_PREVIEW_ROW_LIMIT).map(r => tx_preview_row_html(r, amountValue)).join('')}
+                ${cluster.rows.length > RECURRING_PREVIEW_ROW_LIMIT ? `<tr class="tx-more-rows"><td colspan="3">${t('fixExpense.moreRows', { count: cluster.rows.length - RECURRING_PREVIEW_ROW_LIMIT })}</td></tr>` : ''}
             `;
             }).join('');
             return `${mergeBar}<table class="transaction-preview">${rowsHtml}</table>`;
@@ -1753,8 +1759,21 @@
                     if (!rule || !selected || selected.size < 2) return;
                     const checkboxes = [...container.querySelectorAll(`.tx-merge-checkbox[data-rule="${CSS.escape(ruleId)}"]`)].filter(cb => selected.has(cb.dataset.key));
                     const payees = [...new Set(checkboxes.map(cb => cb.dataset.payee))];
-                    const amounts = checkboxes.map(cb => Number(cb.dataset.amount)).filter(Number.isFinite);
-                    const amountCents = amounts.length ? Math.round(amounts.reduce((sum, a) => sum + a, 0) / amounts.length) : null;
+                    // One reference amount per selected cluster (not their
+                    // average - see MERGE_AMOUNT_TOLERANCE comment in
+                    // rules.js for why an averaged center can silently
+                    // orphan real members of the original clusters).
+                    const distinctAmounts = checkboxes.map(cb => Number(cb.dataset.amount)).filter(Number.isFinite);
+                    // Extending an already-merged group (selecting its row
+                    // again alongside a new cluster) must not forget the
+                    // reference amounts the earlier merge already carried -
+                    // otherwise replacing that merge below would silently
+                    // drop them and un-merge those originally-included
+                    // bookings again.
+                    const existingMerges = (rule.contractMerges || []).filter(merge => payees.some(p => (merge.payees || []).includes(p)));
+                    const carriedAmounts = existingMerges.flatMap(merge => merge.amountCents == null ? [] : (Array.isArray(merge.amountCents) ? merge.amountCents : [merge.amountCents]));
+                    const combinedAmounts = [...new Set([...distinctAmounts, ...carriedAmounts])];
+                    const amountCents = combinedAmounts.length ? combinedAmounts : null;
                     // Prefer whichever selected payee has the FEWEST distinct
                     // amount-clusters under this rule overall as the display
                     // name - a dedicated single merchant (one cluster) reads
@@ -2070,7 +2089,7 @@
         // to overlap must never both claim/count the same booking.
         function rule_recent_matches(rule, amountFilter) {
             const now = module_data.length ? build_budget_basis(module_data).refDate : new Date();
-            const windowStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+            const windowStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
             const category = rule.category || rule.label;
             return module_data.filter(r => r.date >= windowStart && r.date <= now && amountFilter(r) && r._cls?.category === category);
         }
@@ -2253,7 +2272,7 @@
                         <div class="rule-matchers" data-rule="${escape_budget(rule.id)}">${matcher_editor_html(matchers)}</div>
                         <div class="rule-matcher-actions"><button type="button" class="add-matcher-btn" data-rule="${escape_budget(rule.id)}">+ Suchmuster</button><button type="button" class="browse-rule-btn" data-rule="${escape_budget(rule.id)}">Buchungen durchsuchen</button></div>
                         <details class="fixexpense-preview" data-rule="${escape_budget(rule.id)}" ${openPreviews.has(rule.id) ? 'open' : ''}>
-                            <summary>${t('fixExpense.previewToggle', { count: matches.length })}</summary>
+                            <summary>${t('fixExpense.recurringPreviewToggle', { count: matches.length })}</summary>
                             ${render_transaction_preview_table(matches, cfg.amountValue, { byBillingPeriod: true, overrides: rule.recurringOverrides || {}, ruleId: rule.id })}
                         </details>
                         ${extraBodyHtml}
