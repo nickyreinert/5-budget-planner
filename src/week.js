@@ -3,6 +3,7 @@
 // Legacy reserve_monthly_cents remains available for historical reporting.
 
 import { is_real_cashflow } from './data.js';
+import { reporting_date } from './recurrence.js';
 
 const DAY_MS = 86400000;
 // Exported so the Settings > Budgets cap editor can offer only categories
@@ -49,7 +50,8 @@ export function salary_monthly_cents(rows) {
   const months = new Map();
   rows.filter(r => r.in_out === 'in' && is_real_cashflow(r) && r._cls?.group === 'income' &&
     (r._cls.incomeType === 'salary' || (!r._cls.incomeType && SALARY_PATTERN.test(r._cls.category)))).forEach(r => {
-      const key = `${r.date.getFullYear()}-${String(r.date.getMonth()+1).padStart(2, '0')}`;
+      const date = reporting_date(r);
+      const key = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2, '0')}`;
       months.set(key, (months.get(key) || 0) + r.betrag_cents);
     });
   const last3 = [...months.entries()].sort(([a],[b]) => b.localeCompare(a)).slice(0,3).map(([,v]) => v).sort((a,b) => a-b);

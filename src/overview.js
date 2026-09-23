@@ -3,11 +3,15 @@ import { budget_category } from './budgets.js';
 import { week_start, add_days, iso_week_number, category_color } from './week.js';
 import { account_key, is_paypal_account } from './transfers.js';
 import { t, locale } from './i18n.js';
+import { reporting_date } from './recurrence.js';
 
 export const is_salary = row => row._cls?.group === 'income' && (row._cls.incomeType === 'salary' || (!row._cls.incomeType && /gehalt|\blohn\b|salary/i.test(row._cls.category)));
 export function filter_overview_rows(rows, { year = '', from = null, to = null, account = '' } = {}) {
-  return rows.filter(r => is_real_cashflow(r) && (!year || r.date.getFullYear() === Number(year)) &&
-    (!from || r.date >= from) && (!to || r.date < to) && (!account || ((r._effectiveAccount || account_key(r)) === account || (is_paypal_account(r) && account_key(r) === account))));
+  return rows.filter(r => {
+    const date = reporting_date(r);
+    return is_real_cashflow(r) && (!year || date.getFullYear() === Number(year)) &&
+      (!from || date >= from) && (!to || date < to) && (!account || ((r._effectiveAccount || account_key(r)) === account || (is_paypal_account(r) && account_key(r) === account)));
+  });
 }
 export function period_start(date, granularity) {
   if (granularity === 'week') return week_start(date);
@@ -21,8 +25,8 @@ export function period_label(date, granularity) {
 export function build_timeline(rows, settings, kind, granularity = 'month', drill = null) {
   const periods = new Map(), series = new Map();
   if (rows.length) {
-    let cursor = period_start(new Date(Math.min(...rows.map(r => +r.date))), granularity);
-    const end = period_start(new Date(Math.max(...rows.map(r => +r.date))), granularity);
+    let cursor = period_start(new Date(Math.min(...rows.map(r => +reporting_date(r)))), granularity);
+    const end = period_start(new Date(Math.max(...rows.map(r => +reporting_date(r)))), granularity);
     while (cursor <= end) {
       periods.set(+cursor, period_label(cursor, granularity));
       cursor = granularity === 'week' ? add_days(cursor, 7) : new Date(cursor.getFullYear() + (granularity === 'year' ? 1 : 0), cursor.getMonth() + (granularity === 'month' ? 1 : 0), 1);
@@ -48,7 +52,7 @@ export function build_timeline(rows, settings, kind, granularity = 'month', dril
       color = key === 'Ausgaben' ? '#db6671' : key === 'Gehalt' ? '#35a880' : '#679ce4';
     }
     if (!series.has(key)) series.set(key, { key, label, color, values: new Map() });
-    const stamp = +period_start(row.date, granularity), s = series.get(key);
+    const stamp = +period_start(reporting_date(row), granularity), s = series.get(key);
     s.values.set(stamp, (s.values.get(stamp) || 0) + cents);
   }
   const stamps = [...periods.keys()].sort((a,b) => a-b);

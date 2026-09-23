@@ -557,6 +557,9 @@
         <label><span data-i18n="table.kategorie">Kategorie</span><button type="button" id="txEditCategory" class="category-picker-btn" data-category=""></button></label>
         <label><span data-i18n="txEdit.note">Notiz / Verwendungszweck</span><input type="text" id="txEditNote"></label>
         <label><span data-i18n="txEdit.date">Datum</span><input type="date" id="txEditDate"></label>
+        <label><span data-i18n="txEdit.reportingDate">Budget-/Auswertungsdatum für wiederkehrende Buchungen</span><input type="date" id="txEditEffectiveDate"></label>
+        <p class="dialog-hint" id="txEditEffectiveDateHint"></p>
+        <button type="button" id="txEditRestoreEffectiveDate" data-i18n="txEdit.restoreAutomaticPeriod">Automatische Zuordnung wiederherstellen</button>
         <p id="txEditError" role="alert"></p>
         <div class="dialog-actions"><button type="button" id="cancelTxEdit" data-i18n="modal.cancel">Abbrechen</button><button type="button" id="saveTxEdit" class="primary" data-i18n="modal.save">Speichern</button></div>
     </dialog>
@@ -573,6 +576,7 @@
     <script type="module">
         import { parse_csv, data as module_data, build_group_summary, build_unclassified_report, enrich_row, tx_id } from './src/data.js';
         import { filter_overview_rows, build_timeline, render_timeline } from './src/overview.js';
+        import { apply_effective_periods, reporting_date } from './src/recurrence.js';
         import { settings_changes, apply_settings_changes, manual_rule_ids } from './src/settings.js';
         import { open_category_popover, close_popover } from './src/table.js';
         import { load_default_rule_set, get_stored_rule_set, save_rule_set, classify_all, apply_manual_overrides, rule_matches } from './src/rules.js';
@@ -583,7 +587,7 @@
         import { category_catalog, sort_categories, fixed_expense_categories, UNCATEGORIZED } from './src/categories.js';
         import { upsert_imported_entries, load_imported_entries } from './src/db.js';
         import { apply_amount_overrides, apply_note_overrides, apply_date_overrides, is_real_cashflow } from './src/data.js';
-        import { load_amount_overrides, save_amount_override, load_all_overrides, save_overrides, add_manual_entry, load_manual_entries, delete_manual_entry, load_note_overrides, save_note_override, load_date_overrides, save_date_override } from './src/db.js';
+        import { load_amount_overrides, save_amount_override, load_all_overrides, save_overrides, add_manual_entry, load_manual_entries, delete_manual_entry, load_note_overrides, save_note_override, load_date_overrides, save_date_override, load_effective_period_overrides, save_effective_period_override, clear_effective_period_override } from './src/db.js';
         import {
             build_budget_basis, build_week_report, build_sub_budget_report, build_main_budget_report, category_color,
             week_start, add_days, iso_week_number, top_categories, rule_monthly_equivalent, interval_months
@@ -608,6 +612,7 @@
         let amountOverrides = {};
         let noteOverrides = {};
         let dateOverrides = {};
+        let effectivePeriodOverrides = {};
         let subBudgetCaps = {};
         // Which budget groups have their assigned-categories list expanded in
         // Settings > Budgets - purely a UI state, not persisted.
@@ -652,6 +657,7 @@
             apply_manual_overrides(module_data, overridesById, ruleSet);
             reconcile_paypal(module_data, Math.max(7, get_transfer_max_days()));
             ensure_budget_coverage(ruleSet, module_data);
+            apply_effective_periods(module_data, effectivePeriodOverrides);
         }
 
         // Rebuild from the two durable sources, matching date + signed cents.
@@ -849,7 +855,7 @@
                 ? `<button type="button" class="tx-actions-btn" data-tx-id="${txId}" data-manual-id="${r._manualId || ''}" data-recurring="${canMarkRecurring ? '1' : ''}" title="${t('txActions.title')}" aria-label="${t('txActions.title')}">⋮</button>`
                 : '';
             return `<tr>
-                <td>${fmt_date(r.date)}<small class="transaction-source">${transaction_source_label(r)}</small></td>
+                <td>${fmt_date(r.date)}${+reporting_date(r) !== +r.date ? `<small class="transaction-source">${t('txEdit.reportingDate')}: ${fmt_date(reporting_date(r))}</small>` : ''}<small class="transaction-source">${transaction_source_label(r)}</small></td>
                 <td class="tx-description"><button type="button" class="tx-name-btn" data-tx-id="${txId}">${escape_budget(r.name)}<span class="tx-category-label" style="border-left:4px solid ${category_color(r._cls.category)}">${escape_budget(r._cls.category)}</span></button></td>
                 <td class="num">${amountCell}</td>
                 <td class="delete-col">${actionsCell}</td>
@@ -863,6 +869,7 @@
             delete amountOverrides[txId];
             delete noteOverrides[txId];
             delete dateOverrides[txId];
+            delete effectivePeriodOverrides[txId];
             const idx = module_data.findIndex(r => r._manualId === manualId);
             if (idx !== -1) module_data.splice(idx, 1);
             reclassify();
@@ -983,8 +990,13 @@
             });
             document.getElementById('txEditNote').value = row.verwendungszweck || '';
             document.getElementById('txEditDate').value = iso_date_string(row.date);
+            document.getElementById('txEditEffectiveDate').value = iso_date_string(reporting_date(row));
+            document.getElementById('txEditEffectiveDateHint').textContent = row._effectiveDateSource === 'automatic'
+                ? t('txEdit.automaticPeriodHint', { date: fmt_date(reporting_date(row)) })
+                : t('txEdit.bookedPeriodHint', { date: fmt_date(row.date) });
             document.getElementById('txEditError').textContent = '';
             dialog.dataset.txId = txId;
+            dialog.dataset.effectivePeriodMode = '';
             dialog.showModal();
         }
 
@@ -993,6 +1005,14 @@
             document.getElementById('txEditDialog').close();
         });
         document.getElementById('txEditDialog').addEventListener('close', close_popover);
+        document.getElementById('txEditRestoreEffectiveDate').addEventListener('click', () => {
+            const dialog = document.getElementById('txEditDialog');
+            const row = module_data.find(r => tx_id(r) === dialog.dataset.txId);
+            if (!row) return;
+            dialog.dataset.effectivePeriodMode = 'automatic';
+            document.getElementById('txEditEffectiveDate').value = iso_date_string(row.date);
+            document.getElementById('txEditEffectiveDateHint').textContent = t('txEdit.restoreAutomaticPeriodHint');
+        });
         document.getElementById('saveTxEdit').addEventListener('click', async () => {
             const dialog = document.getElementById('txEditDialog');
             const txId = dialog.dataset.txId;
@@ -1000,7 +1020,8 @@
             const category = document.getElementById('txEditCategory').dataset.category;
             const note = document.getElementById('txEditNote').value;
             const isoDate = document.getElementById('txEditDate').value;
-            if (!row || !category || !isoDate) {
+            const effectiveDate = document.getElementById('txEditEffectiveDate').value;
+            if (!row || !category || !isoDate || !effectiveDate) {
                 document.getElementById('txEditError').textContent = t('txEdit.invalid');
                 return;
             }
@@ -1008,6 +1029,11 @@
             if (category !== row._cls?.category) tasks.push(save_overrides([[txId, category]]).then(() => { overridesById[txId] = category; }));
             if (note !== (row.verwendungszweck || '')) tasks.push(save_note_override(txId, note).then(() => { noteOverrides[txId] = note; }));
             if (isoDate !== iso_date_string(row.date)) tasks.push(save_date_override(txId, isoDate).then(() => { dateOverrides[txId] = isoDate; }));
+            if (dialog.dataset.effectivePeriodMode === 'automatic' && effectivePeriodOverrides[txId]) {
+                tasks.push(clear_effective_period_override(txId).then(() => { delete effectivePeriodOverrides[txId]; }));
+            } else if (dialog.dataset.effectivePeriodMode !== 'automatic' && effectiveDate !== iso_date_string(reporting_date(row))) {
+                tasks.push(save_effective_period_override(txId, effectiveDate).then(() => { effectivePeriodOverrides[txId] = effectiveDate; }));
+            }
             await Promise.all(tasks);
             reclassify();
             render_all();
@@ -3817,7 +3843,8 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
                 overrides: await load_all_overrides(),
                 amountOverrides: await load_amount_overrides(),
                 noteOverrides: await load_note_overrides(),
-                dateOverrides: await load_date_overrides()
+                dateOverrides: await load_date_overrides(),
+                effectivePeriodOverrides: await load_effective_period_overrides()
             };
         }
 
@@ -3829,6 +3856,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             if (data.amountOverrides) for (const [id, cents] of Object.entries(data.amountOverrides)) await save_amount_override(id, cents);
             if (data.noteOverrides) for (const [id, note] of Object.entries(data.noteOverrides)) await save_note_override(id, note);
             if (data.dateOverrides) for (const [id, isoDate] of Object.entries(data.dateOverrides)) await save_date_override(id, isoDate);
+            if (data.effectivePeriodOverrides) for (const [id, isoDate] of Object.entries(data.effectivePeriodOverrides)) await save_effective_period_override(id, isoDate);
         }
 
         document.getElementById('syncUploadBtn').addEventListener('click', async () => {
@@ -3867,6 +3895,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
                     amountOverrides = await load_amount_overrides();
                     noteOverrides = await load_note_overrides();
                     dateOverrides = await load_date_overrides();
+                    effectivePeriodOverrides = await load_effective_period_overrides();
                 }
                 await merge_manual_entries();
                 reclassify();
@@ -3981,6 +4010,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             overridesById = await load_all_overrides();
             noteOverrides = await load_note_overrides();
             dateOverrides = await load_date_overrides();
+            effectivePeriodOverrides = await load_effective_period_overrides();
             subBudgetCaps = get_sub_budgets();
 
             // Merge quick-entries and reclassify unconditionally - even with

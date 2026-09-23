@@ -13,6 +13,7 @@ const IMPORT_STORE = 'importedEntries';
 const AMOUNT_PREFIX = 'amount:';
 const NOTE_PREFIX = 'note:';
 const DATE_PREFIX = 'date:';
+const PERIOD_PREFIX = 'period:';
 const STORE = 'categoryOverrides';
 const MANUAL_STORE = 'manualEntries';
 
@@ -53,7 +54,7 @@ export async function load_all_overrides() {
       const cursor = e.target.result;
       if (cursor) {
         const key = String(cursor.key);
-        const isNamespaced = key.startsWith(AMOUNT_PREFIX) || key.startsWith(NOTE_PREFIX) || key.startsWith(DATE_PREFIX);
+        const isNamespaced = key.startsWith(AMOUNT_PREFIX) || key.startsWith(NOTE_PREFIX) || key.startsWith(DATE_PREFIX) || key.startsWith(PERIOD_PREFIX);
         if (!isNamespaced && typeof cursor.value === 'string') overrides[cursor.key] = cursor.value;
         cursor.continue();
       } else {
@@ -112,7 +113,7 @@ export async function delete_manual_entry(id, txId) {
     tx.objectStore(MANUAL_STORE).delete(id);
     if (txId) {
       const store = tx.objectStore(STORE);
-      [txId, AMOUNT_PREFIX + txId, NOTE_PREFIX + txId, DATE_PREFIX + txId].forEach(key => store.delete(key));
+      [txId, AMOUNT_PREFIX + txId, NOTE_PREFIX + txId, DATE_PREFIX + txId, PERIOD_PREFIX + txId].forEach(key => store.delete(key));
     }
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
@@ -199,6 +200,45 @@ export async function save_date_override(id, isoDate) {
   });
 }
 
+// A reporting-period date never changes the bank booking date. It is used
+// solely by recurring-income/fixed-cost analytics and can override an
+// automatic boundary correction for one transaction.
+export async function load_effective_period_overrides() {
+  const db = await open_db();
+  return new Promise((resolve, reject) => {
+    const result = {};
+    const req = db.transaction(STORE, 'readonly').objectStore(STORE).openCursor();
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (!cursor) return resolve(result);
+      if (String(cursor.key).startsWith(PERIOD_PREFIX) && /^\d{4}-\d{2}-\d{2}$/.test(cursor.value || '')) result[String(cursor.key).slice(PERIOD_PREFIX.length)] = cursor.value;
+      cursor.continue();
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function save_effective_period_override(id, isoDate) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate || '')) throw new Error('Invalid reporting period date');
+  const db = await open_db();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(isoDate, PERIOD_PREFIX + id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function clear_effective_period_override(id) {
+  const db = await open_db();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).delete(PERIOD_PREFIX + id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 // Imports have their own durable store; put() is an upsert by source identity.
 export async function upsert_imported_entries(records) {
   const db = await open_db();
@@ -212,7 +252,7 @@ export async function upsert_imported_entries(records) {
       request.onsuccess = () => {
         if (!request.result || request.result._account) return;
         imports.delete(record.legacyId);
-        for (const prefix of ['', AMOUNT_PREFIX, NOTE_PREFIX, DATE_PREFIX]) {
+        for (const prefix of ['', AMOUNT_PREFIX, NOTE_PREFIX, DATE_PREFIX, PERIOD_PREFIX]) {
           const old = overrides.get(prefix + record.legacyId);
           old.onsuccess = () => { if (old.result !== undefined) { overrides.put(old.result, prefix + record.id); overrides.delete(prefix + record.legacyId); } };
         }
