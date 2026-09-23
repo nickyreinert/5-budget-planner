@@ -361,6 +361,30 @@ const dict = {
     'charts.averageMonthlyMetrics': 'Durchschnittliche Monatswerte',
     'charts.moneyLeaks': 'Wo fließt das Geld hin? (Top Kategorien)',
     'charts.expenses': 'Ausgaben',
+    'charts.salary': 'Gehalt',
+    'charts.otherIncome': 'Zusätzliche Einnahmen',
+    'charts.average': 'Durchschnitt',
+    'charts.median': 'Median',
+    'charts.deviationAverageAxis': 'Abweichung zum Durchschnitt (%)',
+    'charts.deviationMedianAxis': 'Abweichung zum Median (%)',
+    'charts.weekLabel': 'KW {week} · {year}',
+    'charts.unassigned': 'Nicht zugeordnet',
+    'charts.budgetTitle': 'Budgetausgaben',
+    'charts.fixedTitle': 'Wiederkehrende Ausgaben',
+    'charts.cashflowTitle': 'Finanzielle Entwicklung',
+    'charts.budgetCaption': 'Alle nicht wiederkehrenden Ausgaben. Budget wählen, um Kategorien zu sehen.',
+    'charts.fixedCaption': 'Tatsächliche Abbuchungen. Kategorie wählen, um Zahlungsempfänger zu sehen.',
+    'charts.cashflowCaption': 'Einnahmen und Ausgaben des gewählten Kontos. Zusätzliche Einnahmen zählen nicht zum Wochenbudget. Netto zeigt die Veränderung, keinen Kontostand.',
+    'charts.transactionCategories': 'Transaktionskategorien',
+    'charts.payees': 'Zahlungsempfänger',
+    'charts.noTransactions': 'Keine Buchungen für diesen Zeitraum.',
+    'charts.allBudgets': 'Alle Budgets',
+    'charts.allFixed': 'Alle Fixkosten',
+    'charts.budgetTrendAria': 'Budgetausgaben im Zeitverlauf',
+    'charts.fixedTrendAria': 'Wiederkehrende Ausgaben im Zeitverlauf',
+    'charts.cashflowTrendAria': 'Einnahmen und Ausgaben im Zeitverlauf',
+    'charts.budgetPickerAria': 'Budget auswählen',
+    'charts.fixedPickerAria': 'Fixkostenkategorie auswählen',
     'charts.incomeNetTitle': 'Einnahmen {income}  →  Netto {net}',
     'charts.month': 'Monat',
     'charts.growthRatePercent': 'Wachstumsrate (%)',
@@ -723,6 +747,30 @@ const dict = {
     'charts.averageMonthlyMetrics': 'Average Monthly Metrics',
     'charts.moneyLeaks': 'Where does the money go? (Top Categories)',
     'charts.expenses': 'Expenses',
+    'charts.salary': 'Salary',
+    'charts.otherIncome': 'Additional income',
+    'charts.average': 'average',
+    'charts.median': 'median',
+    'charts.deviationAverageAxis': 'Deviation from average (%)',
+    'charts.deviationMedianAxis': 'Deviation from median (%)',
+    'charts.weekLabel': 'Week {week} · {year}',
+    'charts.unassigned': 'Unassigned',
+    'charts.budgetTitle': 'Budget spending',
+    'charts.fixedTitle': 'Recurring expenses',
+    'charts.cashflowTitle': 'Financial development',
+    'charts.budgetCaption': 'All non-recurring expenses. Choose a budget to see its categories.',
+    'charts.fixedCaption': 'Actual debits per period. Choose a category to see its payees.',
+    'charts.cashflowCaption': 'Income and expenses for the selected account. Additional income does not count towards the weekly budget. Net shows the change, not the balance.',
+    'charts.transactionCategories': 'Transaction categories',
+    'charts.payees': 'Payees',
+    'charts.noTransactions': 'No transactions for this period.',
+    'charts.allBudgets': 'All budgets',
+    'charts.allFixed': 'All fixed expenses',
+    'charts.budgetTrendAria': 'Budget spending over time',
+    'charts.fixedTrendAria': 'Recurring expenses over time',
+    'charts.cashflowTrendAria': 'Income and expenses over time',
+    'charts.budgetPickerAria': 'Choose a budget',
+    'charts.fixedPickerAria': 'Choose a fixed-expense category',
     'charts.incomeNetTitle': 'Income {income}  →  Net {net}',
     'charts.month': 'Month',
     'charts.growthRatePercent': 'Growth Rate (%)',
@@ -736,13 +784,13 @@ let currentLang = null;
 
 export function get_language() {
   if (currentLang) return currentLang;
-  currentLang = localStorage.getItem(STORAGE_KEY) || 'de';
+  currentLang = typeof localStorage === 'undefined' ? 'de' : (localStorage.getItem(STORAGE_KEY) || 'de');
   return currentLang;
 }
 
 export function set_language(lang) {
   currentLang = dict[lang] ? lang : 'de';
-  localStorage.setItem(STORAGE_KEY, currentLang);
+  if (typeof localStorage !== 'undefined') localStorage.setItem(STORAGE_KEY, currentLang);
 }
 
 // The Intl locale to format numbers/currency/dates with, matching the UI

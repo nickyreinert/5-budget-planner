@@ -208,6 +208,7 @@ input[type="file"]::file-selector-button:hover { background: var(--accent-soft);
 
 /* ===== Setup wizard (onboarding: upload -> salary -> expenses -> budgets) ===== */
 .setup-wizard { width: min(640px, calc(100vw - 24px)); height: min(900px, calc(100dvh - 24px)); max-height: calc(100dvh - 24px); display: flex; flex-direction: column; overflow: hidden; }
+dialog.setup-wizard:not([open]) { display: none; }
 .wizard-step { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; gap: 14px; overflow-y: auto; padding: 2px; }
 .wizard-step[hidden] { display: none; }
 .setup-wizard > .dialog-actions:last-child { flex: 0 0 auto; margin-top: 12px; }

@@ -2,6 +2,7 @@ import { is_real_cashflow } from './data.js';
 import { budget_category } from './budgets.js';
 import { week_start, add_days, iso_week_number, category_color } from './week.js';
 import { account_key, is_paypal_account } from './transfers.js';
+import { t, locale } from './i18n.js';
 
 export const is_salary = row => row._cls?.group === 'income' && (row._cls.incomeType === 'salary' || (!row._cls.incomeType && /gehalt|\blohn\b|salary/i.test(row._cls.category)));
 export function filter_overview_rows(rows, { year = '', from = null, to = null, account = '' } = {}) {
@@ -13,8 +14,8 @@ export function period_start(date, granularity) {
   return new Date(date.getFullYear(), granularity === 'year' ? 0 : date.getMonth(), 1);
 }
 export function period_label(date, granularity) {
-  if (granularity === 'week') return `KW ${iso_week_number(date)} · ${add_days(date, 3).getFullYear()}`;
-  return date.toLocaleDateString('de-DE', granularity === 'year' ? { year: 'numeric' } : { month: 'short', year: '2-digit' });
+  if (granularity === 'week') return t('charts.weekLabel', { week: iso_week_number(date), year: add_days(date, 3).getFullYear() });
+  return date.toLocaleDateString(locale(), granularity === 'year' ? { year: 'numeric' } : { month: 'short', year: '2-digit' });
 }
 // All amounts remain integer cents until the chart boundary.
 export function build_timeline(rows, settings, kind, granularity = 'month', drill = null) {
@@ -36,14 +37,14 @@ export function build_timeline(rows, settings, kind, granularity = 'month', dril
       const id = budget_category(settings, category) || '__unassigned';
       if (drill && id !== drill) continue;
       const main = (settings.mainCategories || []).find(m => m.id === id);
-      key = drill ? category : id; label = drill ? category : main?.label || 'Nicht zugeordnet'; color = drill ? category_color(category) : main?.color || category_color(id);
+      key = drill ? category : id; label = drill ? category : main?.label || t('charts.unassigned'); color = drill ? category_color(category) : main?.color || category_color(id);
       cents = -row.betrag_cents;
     } else if (kind === 'fixed') {
       if (row.betrag_cents >= 0 || cls.group !== 'fixed' || (drill && category !== drill)) continue;
       key = drill ? row.name : category; label = key; cents = -row.betrag_cents; color = category_color(key);
     } else {
       key = row.betrag_cents < 0 ? 'Ausgaben' : is_salary(row) ? 'Gehalt' : 'Zusätzliche Einnahmen';
-      label = key; cents = row.betrag_cents;
+      label = key === 'Ausgaben' ? t('charts.expenses') : key === 'Gehalt' ? t('charts.salary') : t('charts.otherIncome'); cents = row.betrag_cents;
       color = key === 'Ausgaben' ? '#db6671' : key === 'Gehalt' ? '#35a880' : '#679ce4';
     }
     if (!series.has(key)) series.set(key, { key, label, color, values: new Map() });
@@ -90,15 +91,16 @@ export function render_timeline(canvas, model, onSelect, { layout = 'stacked', d
     type: 'bar', data: { labels: model.labels, datasets },
     options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'nearest', intersect: true },
       plugins: { legend: { position: 'bottom', labels: { color: muted, boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: c => {
-        if (!showDeviation) return `${c.dataset.label}: ${c.parsed.y.toLocaleString('de-DE', { style:'currency', currency:'EUR' })}`;
+        if (!showDeviation) return `${c.dataset.label}: ${c.parsed.y.toLocaleString(locale(), { style:'currency', currency:'EUR' })}`;
         const raw = c.dataset.rawValues[c.dataIndex] / 100;
         const reference = c.dataset.referenceValue / 100;
         const sign = c.parsed.y > 0 ? '+' : '';
-        return `${c.dataset.label}: ${sign}${c.parsed.y.toFixed(1)}% (${raw.toLocaleString('de-DE', { style:'currency', currency:'EUR' })} · Ø ${reference.toLocaleString('de-DE', { style:'currency', currency:'EUR' })})`;
+        const baseline = t(deviation === 'median' ? 'charts.median' : 'charts.average');
+        return `${c.dataset.label}: ${sign}${c.parsed.y.toFixed(1)}% (${raw.toLocaleString(locale(), { style:'currency', currency:'EUR' })} · ${baseline} ${reference.toLocaleString(locale(), { style:'currency', currency:'EUR' })})`;
       } } } },
       scales: {
         x: { stacked: layout === 'stacked', ticks: { color: muted, maxRotation: 0, autoSkip: true }, grid: { display: false } },
-        y: { stacked: layout === 'stacked', ticks: { color: muted, callback: value => showDeviation ? `${value > 0 ? '+' : ''}${value}%` : value.toLocaleString('de-DE') + ' €' }, title: { display: showDeviation, text: deviation === 'median' ? 'Abweichung zum Median (%)' : 'Abweichung zum Durchschnitt (%)' } }
+        y: { stacked: layout === 'stacked', ticks: { color: muted, callback: value => showDeviation ? `${value > 0 ? '+' : ''}${value}%` : value.toLocaleString(locale()) + ' €' }, title: { display: showDeviation, text: t(deviation === 'median' ? 'charts.deviationMedianAxis' : 'charts.deviationAverageAxis') } }
       },
       onClick: (_event, elements) => { if (elements.length && onSelect) onSelect(model.series[elements[0].datasetIndex].key, model.stamps[elements[0].index]); },
       onHover: (event, elements) => { if (event.native?.target) event.native.target.style.cursor = elements.length && onSelect ? 'pointer' : 'default'; }

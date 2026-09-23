@@ -119,21 +119,21 @@
                 <div id="paypalNotice" class="filter-note" hidden></div>
                 <div id="weekSavingsCalendar"></div>
                 <section class="timeline-section" id="budgetTrend" tabindex="-1">
-                    <div class="timeline-heading"><h2>Budgetausgaben</h2><button type="button" data-reset-chart="budget" hidden>Alle Budgets</button></div>
-                    <p class="timeline-caption" id="budgetCaption">Balkensegment wählen, um die Transaktionskategorien eines Budgets zu sehen.</p>
-                    <div class="timeline-canvas"><canvas id="budgetChart" aria-label="Budgetausgaben im Zeitverlauf" role="img"></canvas></div>
-                    <div class="chart-drill-options" id="budgetDrillOptions" aria-label="Budget auswählen"></div>
+                    <div class="timeline-heading"><h2 data-i18n="charts.budgetTitle">Budgetausgaben</h2><button type="button" data-reset-chart="budget" data-i18n="charts.allBudgets" hidden>Alle Budgets</button></div>
+                    <p class="timeline-caption" id="budgetCaption" data-i18n="charts.budgetCaption">Alle nicht wiederkehrenden Ausgaben. Budget wählen, um Kategorien zu sehen.</p>
+                    <div class="timeline-canvas"><canvas id="budgetChart" data-i18n-aria-label="charts.budgetTrendAria" aria-label="Budgetausgaben im Zeitverlauf" role="img"></canvas></div>
+                    <div class="chart-drill-options" id="budgetDrillOptions" data-i18n-aria-label="charts.budgetPickerAria" aria-label="Budget auswählen"></div>
                 </section>
                 <section class="timeline-section" id="fixedTrend" tabindex="-1">
-                    <div class="timeline-heading"><h2>Wiederkehrende Ausgaben</h2><button type="button" data-reset-chart="fixed" hidden>Alle Fixkosten</button></div>
-                    <p class="timeline-caption" id="fixedCaption">Tatsächliche Abbuchungen pro Zeitraum. Kategorie wählen, um die Zahlungsempfänger zu sehen.</p>
-                    <div class="timeline-canvas"><canvas id="fixedChart" aria-label="Wiederkehrende Ausgaben im Zeitverlauf" role="img"></canvas></div>
-                    <div class="chart-drill-options" id="fixedDrillOptions" aria-label="Fixkostenkategorie auswählen"></div>
+                    <div class="timeline-heading"><h2 data-i18n="charts.fixedTitle">Wiederkehrende Ausgaben</h2><button type="button" data-reset-chart="fixed" data-i18n="charts.allFixed" hidden>Alle Fixkosten</button></div>
+                    <p class="timeline-caption" id="fixedCaption" data-i18n="charts.fixedCaption">Tatsächliche Abbuchungen. Kategorie wählen, um Zahlungsempfänger zu sehen.</p>
+                    <div class="timeline-canvas"><canvas id="fixedChart" data-i18n-aria-label="charts.fixedTrendAria" aria-label="Wiederkehrende Ausgaben im Zeitverlauf" role="img"></canvas></div>
+                    <div class="chart-drill-options" id="fixedDrillOptions" data-i18n-aria-label="charts.fixedPickerAria" aria-label="Fixkostenkategorie auswählen"></div>
                 </section>
                 <section class="timeline-section" id="incomeTrend" tabindex="-1">
-                    <div class="timeline-heading"><h2>Finanzielle Entwicklung</h2></div>
-                    <p class="timeline-caption">Einnahmen und Ausgaben des gewählten Kontos. Zusätzliche Einnahmen zählen nicht zum Wochenbudget. Netto zeigt die Veränderung, keinen Kontostand.</p>
-                    <div class="timeline-canvas"><canvas id="incomeChart" aria-label="Einnahmen und Ausgaben im Zeitverlauf" role="img"></canvas></div>
+                    <div class="timeline-heading"><h2 data-i18n="charts.cashflowTitle">Finanzielle Entwicklung</h2></div>
+                    <p class="timeline-caption" data-i18n="charts.cashflowCaption">Einnahmen und Ausgaben des gewählten Kontos. Zusätzliche Einnahmen zählen nicht zum Wochenbudget. Netto zeigt die Veränderung, keinen Kontostand.</p>
+                    <div class="timeline-canvas"><canvas id="incomeChart" data-i18n-aria-label="charts.cashflowTrendAria" aria-label="Einnahmen und Ausgaben im Zeitverlauf" role="img"></canvas></div>
                     <div id="cashflowNet" class="cashflow-net"></div>
                 </section>
 
@@ -2234,11 +2234,11 @@
                     if (!chartDrill[kind]) model.series.forEach(series => {
                         const button = document.createElement('button'); button.textContent = series.label; button.onclick = () => onSelect(series.key); options.append(button);
                     });
-                    if (!model.series.length) options.textContent = 'Keine Buchungen für diesen Zeitraum.';
+                    if (!model.series.length) options.textContent = t('charts.noTransactions');
                     const reset = document.querySelector(`[data-reset-chart="${kind}"]`); reset.hidden = !chartDrill[kind];
                     document.getElementById(kind+'Caption').textContent = chartDrill[kind]
-                        ? (kind === 'budget' ? main_category_label(chartDrill[kind]) + ' · Transaktionskategorien' : chartDrill[kind] + ' · Zahlungsempfänger')
-                        : (kind === 'budget' ? 'Alle nicht wiederkehrenden Ausgaben. Budget wählen, um Kategorien zu sehen.' : 'Tatsächliche Abbuchungen. Kategorie wählen, um Zahlungsempfänger zu sehen.');
+                        ? (kind === 'budget' ? main_category_label(chartDrill[kind]) + ' · ' + t('charts.transactionCategories') : chartDrill[kind] + ' · ' + t('charts.payees'))
+                        : t(kind === 'budget' ? 'charts.budgetCaption' : 'charts.fixedCaption');
                 } else {
                     document.getElementById('cashflowNet').innerHTML = model.labels.map((label,i) => `<span>${escape_budget(label)}<b>${fmt_eur(model.series.reduce((sum,series) => sum + series.values[i],0))}</b></span>`).join('');
                 }
