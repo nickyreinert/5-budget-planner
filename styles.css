@@ -306,14 +306,15 @@ dialog.setup-wizard:not([open]) { display: none; }
 .wizard-manual-add input[type="number"] { flex: 0 1 110px; }
 .wizard-manual-add button { flex: 0 0 auto; }
 
-/* Editable transaction rows: click name to reassign category, click a
-   manual entry's amount to edit it in place. */
-.tx-name-btn, .tx-amount-btn {
+/* Editable transaction rows: click name to open the full edit dialog,
+   click the category chip below it to quickly reassign just the category,
+   click a manual entry's amount to edit it in place. */
+.tx-name-btn, .tx-amount-btn, .tx-category-label {
     background: none; border: none; padding: 0; margin: 0; min-height: auto;
     font: inherit; color: inherit; cursor: pointer; text-align: left;
     border-bottom: 1px dotted var(--text-muted);
 }
-.tx-name-btn:hover, .tx-amount-btn:hover { border-bottom-color: var(--accent); color: var(--accent); }
+.tx-name-btn:hover, .tx-amount-btn:hover, .tx-category-label:hover { border-bottom-color: var(--accent); color: var(--accent); }
 .tx-amount-btn { text-align: right; width: 100%; }
 .tx-amount-input { width: 90px; padding: 3px 6px; text-align: right; }
 
@@ -739,7 +740,7 @@ th.select-col:hover { background: var(--surface-muted); }
 .main-budget td:first-child { width: 22%; font-size: 0.75rem; }
 .main-budget td.num { width: 25%; }
 .main-budget td.delete-col { width: 24px; }
-.tx-category-label { display: block; padding-left: 6px; margin-top: 4px; font-size: 0.75rem; font-weight: normal; }
+.tx-category-label { display: block; width: 100%; padding-left: 6px; margin-top: 4px; min-height: 28px; font-size: 0.75rem; font-weight: normal; border-bottom: none !important; }
 .tx-name-btn, .tx-amount-btn { min-height: 44px; }
 .main-budget .tx-amount-input { width: 100%; min-width: 0; box-sizing: border-box; }
 

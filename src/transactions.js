@@ -63,5 +63,9 @@ export function reconcile_transactions(imported, manual, amounts = {}) {
 export function transaction_source_label(row) {
   if (row._matchedManualId) return 'Import · manuell abgeglichen';
   if (row._sources?.length > 1) return 'CSV · Bank abgeglichen';
+  // Visible even though the OTHER leg of the same real payment is excluded
+  // from every total - otherwise a successfully-deduplicated PayPal pair
+  // just silently vanishes from the ledger with no trace of why.
+  if (row._paypalLinked) return row._cls?.source === 'paypal-settlement' || row._cls?.source === 'paypal-funding' ? 'PayPal · Ausgleichsbuchung (ausgeschlossen)' : 'PayPal · zugeordnet';
   return row.source === 'manual' ? 'Manuell' : row.source === 'gocardless' ? 'Bankimport' : 'CSV-Import';
 }

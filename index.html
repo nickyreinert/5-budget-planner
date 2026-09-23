@@ -397,6 +397,12 @@
                             <button type="button" id="importPasteBtn" class="primary" data-i18n="importexport.pasteImport">Eingefügtes SETTING importieren</button>
                     </div>
                     </section><section class="settings-section">
+                        <p style="margin: 0 0 10px 0; color: #555;" data-i18n="importexport.dataIntro">Alles außer dem SETTING: importierte Buchungen, manuelle Einträge, Kategorie-Korrekturen und sonstige Überschreibungen - als eigene Datei, um z. B. in einen anderen Browser umzuziehen (ohne Google-Konto/Cloud, siehe Tab "Sync").</p>
+                        <button id="exportDataBtn" data-i18n="importexport.exportData">Daten exportieren</button>
+                        <button id="importDataBtn" data-i18n="importexport.importData">Daten importieren</button>
+                        <input type="file" id="importDataFile" accept=".json" style="display: none;">
+                        <p id="dataImportStatus" role="status" aria-live="polite"></p>
+                    </section><section class="settings-section">
                         <p style="margin: 0 0 10px 0; color: #555;" data-i18n="importexport.unclassifiedIntro">
                             Unklassifizierte Ausgaben (aktuell gewählter Jahresfilter) als kompakte,
                             nach Summe sortierte Händlerliste + aktuellem Regelwerk + fertigem Prompt
@@ -724,6 +730,24 @@
             render_week();
         }
 
+        // A category typed via a popover's "+ Kategorie hinzufügen" form is
+        // just a raw string, not yet a real rule/category-mapping/main-
+        // budget entry - apply_manual_overrides() only accepts overrides
+        // whose category is already in category_catalog(), so assigning it
+        // straight away was SILENTLY REJECTED (the popover closed, but the
+        // transaction kept its old category and the "new" category never
+        // showed up again anywhere, since it was never actually recorded).
+        // Registering it as an explicitly-unassigned category mapping first
+        // (same as any category with no main-budget yet) makes it "known"
+        // before the assignment, and it can be dragged into a budget
+        // afterward like any other category.
+        async function create_and_assign_category(id, category) {
+            ruleSet.categoryMappings ||= {};
+            if (!(category in ruleSet.categoryMappings)) ruleSet.categoryMappings[category] = '';
+            persist_budgets();
+            await assign_category([id], category);
+        }
+
         // ===== THEME TOGGLE (light/dark, next to the settings gear) =====
         // The actual `data-theme` attribute is already applied synchronously
         // in the tiny inline <script> at the top of <body> (avoids a flash
@@ -872,7 +896,10 @@
                 : '';
             return `<tr>
                 <td>${fmt_date(r.date)}${+reporting_date(r) !== +r.date ? `<small class="transaction-source">${t('txEdit.reportingDate')}: ${fmt_date(reporting_date(r))}</small>` : ''}<small class="transaction-source">${transaction_source_label(r)}</small></td>
-                <td class="tx-description"><button type="button" class="tx-name-btn" data-tx-id="${txId}">${escape_budget(r.name)}<span class="tx-category-label" style="border-left:4px solid ${category_color(r._cls.category)}">${escape_budget(r._cls.category)}</span></button></td>
+                <td class="tx-description">
+                    <button type="button" class="tx-name-btn" data-tx-id="${txId}" title="${t('txEdit.title')}">${escape_budget(r.name)}</button>
+                    <button type="button" class="tx-category-label" style="border-left:4px solid ${category_color(r._cls.category)}" data-tx-id="${txId}" title="${t('txEdit.quickRecategorize')}">${escape_budget(r._cls.category)}</button>
+                </td>
                 <td class="num">${amountCell}</td>
                 <td class="delete-col">${actionsCell}</td>
             </tr>`;
@@ -908,6 +935,16 @@
         function wire_tx_rows(container) {
             container.querySelectorAll('.tx-name-btn').forEach(btn => {
                 btn.addEventListener('click', () => open_tx_edit_dialog(decodeURIComponent(btn.dataset.txId)));
+            });
+            // Split from the name button: the top area opens the full edit
+            // dialog, this bottom "chip" opens just the category dropdown
+            // for a fast reassignment without the bigger dialog.
+            container.querySelectorAll('.tx-category-label').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    open_category_popover(btn, collect_category_options(), async (category) => {
+                        await assign_category([decodeURIComponent(btn.dataset.txId)], category);
+                    }, { onCreate: async (category) => { await create_and_assign_category(decodeURIComponent(btn.dataset.txId), category); } });
+                });
             });
             container.querySelectorAll('.tx-amount-btn').forEach(btn => {
                 btn.addEventListener('click', () => start_edit_amount(btn));
@@ -1162,6 +1199,7 @@
             const monthLeftoverCents = weeks_in_month_up_to(weekMonday).reduce((sum, m) =>
                 sum + (basis.weeklyCents - build_week_report(module_data, m).spentCents), 0);
             document.getElementById('weekHeroStats').innerHTML = `
+                <span>${t('week.spentThisWeek')} <b>${fmt_eur_int(report.spentCents)}</b></span>
                 <span>${t('week.leftoverLastWeek')} <b class="${lastWeekLeftoverCents < 0 ? 'budget-over' : ''}">${fmt_eur_int(lastWeekLeftoverCents)}</b></span>
                 <span>${t('week.leftoverThisMonth')} <b class="${monthLeftoverCents < 0 ? 'budget-over' : ''}">${fmt_eur_int(monthLeftoverCents)}</b></span>
             `;
@@ -2370,6 +2408,19 @@
             wire_rule_group_list(kind);
         }
 
+        // persist_budgets() already reclassifies module_data live, but on
+        // its own only this Settings pane re-renders - any OTHER already-
+        // rendered view (Week tab's category chips/dropdowns, transaction
+        // rows, ...) would keep showing the pre-edit category name until an
+        // unrelated action forces a refresh (e.g. the modal's own explicit
+        // "Speichern" button). Every Fix Expense/Income edit here now
+        // refreshes those too, so a rename is visible everywhere immediately.
+        function persist_and_refresh_rule_group_list(kind) {
+            persist_budgets();
+            render_rule_group_list(kind);
+            if (module_data.length) { render_all(); render_week(); }
+        }
+
         function wire_rule_group_list(kind) {
             const cfg = RULE_GROUP_EDITORS[kind];
             const container = document.getElementById(cfg.containerId);
@@ -2411,7 +2462,7 @@
                     if (!input.value.trim()) { input.value = t('fixExpense.generalSubcategory'); }
                     rule.category = join_category(parent, input.value.trim() || t('fixExpense.generalSubcategory'));
                     rule.label ||= rule.category;
-                    persist_budgets(); render_rule_group_list(kind);
+                    persist_and_refresh_rule_group_list(kind);
                 };
             });
             // A flat (non-grouped) row's input still edits the whole category.
@@ -2422,7 +2473,7 @@
                     if (!input.value.trim()) { input.value = rule.category || rule.label || ''; return; }
                     rule.category = input.value.trim();
                     rule.label ||= rule.category;
-                    persist_budgets(); render_rule_group_list(kind);
+                    persist_and_refresh_rule_group_list(kind);
                 };
             });
             // Renaming a group's parent header renames every rule in it.
@@ -2437,7 +2488,7 @@
                         r.label ||= r.category;
                     });
                     if (cfg.expandedGroups.has(oldParent)) { cfg.expandedGroups.delete(oldParent); cfg.expandedGroups.add(newParent); }
-                    persist_budgets(); render_rule_group_list(kind);
+                    persist_and_refresh_rule_group_list(kind);
                 };
             });
 
@@ -2455,7 +2506,7 @@
                     });
                     cfg.expandedGroups.add(parent);
                     cfg.expandedRules.add(id);
-                    persist_budgets(); render_rule_group_list(kind);
+                    persist_and_refresh_rule_group_list(kind);
                 });
             });
 
@@ -2467,7 +2518,7 @@
                     if (!matchers.length) return;
                     rule.matchers = matchers;
                     delete rule.namePattern; delete rule.verwendungPattern; delete rule.kategoriePattern; delete rule.matchType;
-                    persist_budgets(); render_rule_group_list(kind);
+                    persist_and_refresh_rule_group_list(kind);
             }
             container.querySelectorAll('.rule-matchers').forEach(matcherContainer => {
                 matcherContainer.querySelectorAll('input, select').forEach(input => input.addEventListener('change', () => save_matchers(matcherContainer.dataset.rule, matcherContainer)));
@@ -2481,7 +2532,7 @@
                 if (!rule) return;
                 rule.matchers = [...rule_matchers(rule), { field: 'any', operator: 'contains', value: '', exclude: false }];
                 delete rule.namePattern; delete rule.verwendungPattern; delete rule.kategoriePattern; delete rule.matchType;
-                persist_budgets(); render_rule_group_list(kind);
+                persist_and_refresh_rule_group_list(kind);
             }));
             container.querySelectorAll('.browse-rule-btn').forEach(btn => btn.addEventListener('click', () => open_rule_transaction_browser(kind, btn.dataset.rule)));
             // Manually book a payment that will never show up in an imported
@@ -2503,7 +2554,7 @@
                     const i = (ruleSet.rules || []).findIndex(r => r.id === id);
                     if (i === -1) return;
                     ruleSet.rules.splice(i, 1);
-                    persist_budgets(); render_rule_group_list(kind);
+                    persist_and_refresh_rule_group_list(kind);
                 });
             });
 
@@ -2520,7 +2571,7 @@
                 dragged.label ||= dragged.category;
                 dragged.priority = beforePriority;
                 cfg.expandedGroups.add(targetParent);
-                persist_budgets(); render_rule_group_list(kind);
+                persist_and_refresh_rule_group_list(kind);
             }
             container.querySelectorAll('.fixexpense-row[draggable="true"]').forEach(row => {
                 row.addEventListener('dragstart', (e) => {
@@ -3883,6 +3934,55 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             } catch (err) {
                 document.getElementById('settingsImportStatus').textContent = t('importexport.importFailed', { error: err.message });
             }
+        });
+
+        // Everything EXCEPT the SETTING (imports, manual entries,
+        // overrides) as its own local file - mirrors gather_sync_transactions()/
+        // apply_synced_transactions() (see the Sync tab below), just written
+        // to/read from a file instead of the cloud, so moving to a different
+        // browser doesn't require a Google account.
+        document.getElementById('exportDataBtn').addEventListener('click', async () => {
+            const dataStr = JSON.stringify(await gather_sync_transactions(), null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '5ive_data_export.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('importDataBtn').addEventListener('click', () => {
+            document.getElementById('importDataFile').click();
+        });
+
+        document.getElementById('importDataFile').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            const statusEl = document.getElementById('dataImportStatus');
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async (ev) => {
+                try {
+                    const data = JSON.parse(ev.target.result);
+                    if (!data || typeof data !== 'object') throw new Error(t('importexport.invalidDataFile'));
+                    if (!confirm(t('importexport.importDataConfirm'))) return;
+                    await apply_synced_transactions(data);
+                    overridesById = await load_all_overrides();
+                    amountOverrides = await load_amount_overrides();
+                    noteOverrides = await load_note_overrides();
+                    dateOverrides = await load_date_overrides();
+                    effectivePeriodOverrides = await load_effective_period_overrides();
+                    await merge_manual_entries();
+                    reclassify();
+                    render_all();
+                    render_week();
+                    statusEl.textContent = t('importexport.importDataSuccess');
+                } catch (err) {
+                    statusEl.textContent = t('importexport.importDataFailed', { error: err.message });
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = '';
         });
 
         document.getElementById('exportUnclassifiedBtn').addEventListener('click', () => {

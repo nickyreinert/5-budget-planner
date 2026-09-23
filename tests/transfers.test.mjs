@@ -15,6 +15,11 @@ test('unique bundled debit preserves every merchant and excludes only settlement
   reconcile_paypal([a,b,bank]);
   assert.equal(a._paypalLinked,true); assert.equal(b._paypalLinked,true); assert.equal(bank._cls.excluded,true);
 });
+test('a settlement leg is recognized by PayPal\'s own 17-char transaction ID format even when the bank never writes the word "PayPal" anywhere', () => {
+  const purchase = row('Shop','-20','PayPal'), bank = row('1TW73003SD8960608 / Payment','-20','DKB');
+  reconcile_paypal([purchase,bank]);
+  assert.equal(purchase._paypalLinked,true); assert.equal(bank._cls.excluded,true);
+});
 test('missing PayPal history never drops the bank expense', () => {
   const bank = row('PayPal Europe','-20','DKB','12.09.2026','internal_transfer');
   reconcile_paypal([bank]); assert.equal(bank._cls.excluded,false); assert.equal(bank._paypalUnmatched,true);
