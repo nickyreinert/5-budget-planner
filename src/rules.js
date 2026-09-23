@@ -64,10 +64,14 @@ function matcher_matches(tx, matcher) {
   if (matcher.field === 'amount') {
     const amount = Math.abs(tx.betrag_cents || 0) / 100;
     const value = Number(matcher.value);
-    return matcher.operator === 'gt' ? amount > value : amount < value;
+    if (matcher.operator === 'gt') return amount > value;
+    if (matcher.operator === 'equals') return Math.abs(tx.betrag_cents || 0) === Math.round(value * 100);
+    if (matcher.operator === 'lt') return amount < value;
+    return amount < value;
   }
   const text = matcher_text(tx, matcher.field);
   if (matcher.operator === 'contains') return text.toLocaleLowerCase().includes(String(matcher.value || '').toLocaleLowerCase());
+  if (matcher.operator === 'equals') return text.toLocaleLowerCase() === String(matcher.value || '').toLocaleLowerCase();
   const regex = safe_regex(matcher.value);
   return regex ? regex.test(text) : false;
 }

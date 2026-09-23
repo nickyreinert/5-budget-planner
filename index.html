@@ -928,6 +928,11 @@
             categoryButton.dataset.category = '';
             categoryButton.textContent = t('recurringExpense.chooseCategory');
             function chooseCategory(category) {
+                // Keep a freshly-typed category in the popover's own option
+                // list too - it isn't a real ruleSet rule until Speichern, so
+                // recomputing fixed_expense_categories() on reopen would
+                // otherwise silently drop it again.
+                if (!categories.includes(category)) categories.push(category);
                 categoryButton.dataset.category = category;
                 categoryButton.textContent = category;
                 document.getElementById('recurringExpenseError').textContent = '';
@@ -2003,6 +2008,7 @@
                     </select>
                     <select data-matcher-operator aria-label="Vergleich">
                         <option value="contains" ${matcher.operator === 'contains' ? 'selected' : ''}>enthält</option>
+                        <option value="equals" ${matcher.operator === 'equals' ? 'selected' : ''}>gleich</option>
                         <option value="regex" ${matcher.operator === 'regex' ? 'selected' : ''}>Regex</option>
                         <option value="gt" ${matcher.operator === 'gt' ? 'selected' : ''}>größer als</option>
                         <option value="lt" ${matcher.operator === 'lt' ? 'selected' : ''}>kleiner als</option>
@@ -2777,7 +2783,13 @@
                 categoryBtn.textContent = c.category || t('recurringExpense.chooseCategory');
                 categoryBtn.addEventListener('click', (e) => {
                     e.preventDefault();
-                    open_category_popover(categoryBtn, fixed_expense_categories(ruleSet, favoriteCategories), (category) => {
+                    // Union with every OTHER candidate's already-picked category too,
+                    // not just ruleSet - a category chosen for candidate A isn't a
+                    // real ruleSet rule yet, so it would otherwise vanish from B's
+                    // list until the wizard is finished/saved.
+                    const draftCategories = wizardState.expenseCandidates.map(x => x.category).filter(Boolean);
+                    const options = sort_categories([...new Set([...fixed_expense_categories(ruleSet, favoriteCategories), ...draftCategories])], favoriteCategories);
+                    open_category_popover(categoryBtn, options, (category) => {
                         c.category = category; render_wizard_expenses_step(); update_wizard_expense_total();
                     }, { onCreate: (category) => { c.category = category; render_wizard_expenses_step(); update_wizard_expense_total(); } });
                 });
@@ -2937,6 +2949,26 @@
             document.getElementById('wizardSavingsPreview').textContent = fmt_eur(savingsMonthlyCents);
         }
 
+        // Re-running the wizard and reassigning a payee to a different rule
+        // (e.g. moving it to another category) must UPDATE the previous
+        // decision, not merely add a new one on top of it - otherwise the
+        // payee keeps matching its old, now-stale wizard-managed rule too.
+        // Only touches OTHER rules that are themselves wizard-managed
+        // (carry `wizardPayees`), never a hand-authored rule that happens
+        // to share the same group.
+        function wizard_remove_payees_from_other_rules(group, keepRule, names) {
+            const lowerNames = names.map(name => name.toLocaleLowerCase());
+            (ruleSet.rules || []).forEach(r => {
+                if (r === keepRule || r.group !== group || !Array.isArray(r.wizardPayees) || !r.wizardPayees.length) return;
+                const remaining = r.wizardPayees.filter(payee => !lowerNames.includes(String(payee).trim().toLocaleLowerCase()));
+                if (remaining.length === r.wizardPayees.length) return;
+                r.wizardPayees = remaining;
+                if (!remaining.length) { r.matchers = []; return; }
+                const escaped = remaining.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+                r.matchers = [{ field: 'name', operator: 'regex', value: `(?:${escaped})`, exclude: false }];
+            });
+        }
+
         // Adds one or more bank-visible names to a rule. A single regex
         // matcher gives those names OR semantics; separate include matchers
         // would mean "must contain every recipient", which can never match
@@ -2960,6 +2992,7 @@
                 rule.contractMerges = (rule.contractMerges || []).filter(merge => merge.id !== contractMerge.id);
                 rule.contractMerges.push(contractMerge);
             }
+            wizard_remove_payees_from_other_rules(rule.group, rule, names);
             return rule;
         }
 
