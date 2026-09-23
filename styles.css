@@ -262,8 +262,11 @@ input[type="file"]::file-selector-button:hover { background: var(--accent-soft);
     .wizard-candidate-info { flex-basis: 100%; }
 }
 .wizard-budget-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
-.wizard-budget-row .wizard-candidate-name { flex: 1; font-weight: 400; }
+.wizard-budget-row .wizard-budget-name { flex: 1; min-width: 0; font-weight: 400; }
 .wizard-budget-row input[type="number"] { width: 90px; box-sizing: border-box; }
+.wizard-budget-remove, .wizard-budget-add { min-height: 36px; }
+.wizard-budget-remove { flex: 0 0 auto; padding: 4px 10px; color: var(--text-muted); }
+.wizard-budget-add { margin-top: 8px; }
 /* Manual fallback for both candidate steps (custom name entry + browse) -
    wraps on narrow screens instead of squeezing 3 controls into one row. */
 .wizard-manual-add { display: flex; flex-wrap: wrap; gap: 8px; }

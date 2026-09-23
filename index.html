@@ -2654,19 +2654,54 @@
 
         function render_wizard_budgets_step() {
             const container = document.getElementById('wizardBudgetEditor');
-            container.innerHTML = (ruleSet.mainCategories || []).map(m => `
+            const budgets = ruleSet.mainCategories || [];
+            container.innerHTML = budgets.map(m => `
                 <div class="wizard-budget-row">
-                    <span class="wizard-candidate-name">${escape_budget(m.label)}</span>
+                    <input type="text" class="wizard-budget-name" data-wizard-budget-name="${escape_budget(m.id)}" value="${escape_budget(m.label)}" aria-label="${escape_budget(m.label)}">
                     <input type="number" min="0" step="1" data-wizard-budget="${escape_budget(m.id)}" value="${((wizardState.budgetCaps[m.id] || 0) / 100).toFixed(0)}">
                     <span>€ ${t('budgets.perWeek')}</span>
+                    ${budgets.length > 4 ? `<button type="button" class="wizard-budget-remove" data-wizard-remove-budget="${escape_budget(m.id)}" aria-label="${t('wizard.removeBudget')}">×</button>` : ''}
                 </div>
-            `).join('');
+            `).join('') + (budgets.length < 5 ? `<button type="button" class="wizard-budget-add" id="wizardAddBudget">+ ${t('wizard.addBudget')}</button>` : '');
             update_wizard_savings_preview();
+            container.querySelectorAll('input[data-wizard-budget-name]').forEach(input => {
+                input.addEventListener('change', () => {
+                    const budget = budgets.find(item => item.id === input.dataset.wizardBudgetName);
+                    const label = input.value.trim();
+                    if (!budget || !label) { input.value = budget?.label || ''; return; }
+                    budget.entryCategory ||= budget.label;
+                    budget.label = label;
+                    persist_budgets();
+                    render_wizard_budgets_step();
+                });
+            });
             container.querySelectorAll('input[data-wizard-budget]').forEach(input => {
                 input.addEventListener('input', () => {
                     wizardState.budgetCaps[input.dataset.wizardBudget] = Math.max(0, Math.round((parseFloat(input.value) || 0) * 100));
                     update_wizard_savings_preview();
                 });
+            });
+            container.querySelectorAll('[data-wizard-remove-budget]').forEach(button => {
+                button.addEventListener('click', () => {
+                    const id = button.dataset.wizardRemoveBudget;
+                    ruleSet.mainCategories = ruleSet.mainCategories.filter(item => item.id !== id);
+                    delete wizardState.budgetCaps[id];
+                    delete subBudgetCaps[id];
+                    Object.keys(ruleSet.categoryMappings || {}).forEach(category => {
+                        if (ruleSet.categoryMappings[category] === id) ruleSet.categoryMappings[category] = UNASSIGNED_BUDGET_ID;
+                    });
+                    ruleSet.rules.forEach(rule => { if (rule.budgetCategory === id) delete rule.budgetCategory; });
+                    persist_budgets();
+                    save_sub_budgets(subBudgetCaps);
+                    render_wizard_budgets_step();
+                });
+            });
+            document.getElementById('wizardAddBudget')?.addEventListener('click', () => {
+                const id = 'budget_' + Date.now();
+                ruleSet.mainCategories.push({ id, label: t('wizard.newBudget'), color: '#6b7280' });
+                wizardState.budgetCaps[id] = 0;
+                persist_budgets();
+                render_wizard_budgets_step();
             });
         }
 
