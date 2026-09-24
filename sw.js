@@ -29,7 +29,8 @@ const APP_SHELL = [
   './src/i18n.js',
   './src/csv_config.js',
   './src/footer.js',
-  './src/default_rules.json'
+  './src/default_rules.json',
+  './src/default_rules.en.json'
 ];
 
 self.addEventListener('install', (event) => {

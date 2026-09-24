@@ -781,9 +781,36 @@
         });
         update_theme_toggle_icon();
 
+        // Switches the built-in default rules/categories to the new UI
+        // language - but only while the user is still on the untouched
+        // defaults with no per-transaction overrides. Category names are
+        // identifiers in stored overrides, so customised data is left alone.
+        async function swap_default_rule_set(previousLang) {
+            const lang = get_language();
+            if (lang === previousLang || !ruleSet || Object.keys(overridesById).length) return;
+            const previous = ensure_budget_coverage(structuredClone(await load_default_rule_set(previousLang)));
+            const { _manualRuleIds, ...current } = ruleSet;
+            if (JSON.stringify(current) !== JSON.stringify(previous)) return;
+            defaultRuleSet = await load_default_rule_set(lang);
+            ruleSet = ensure_budget_coverage(structuredClone(defaultRuleSet));
+            settingsBaseline = structuredClone(ruleSet);
+            ruleSet._manualRuleIds = [];
+            if (get_stored_rule_set()) save_rule_set(ruleSet);
+            render_quick_add_tiles();
+            if (module_data.length > 0) reclassify();
+            if (modal.style.display === 'block') {
+                modalOpenSnapshot = settings_snapshot();
+                render_sub_budget_settings();
+                render_fix_expense_list();
+                render_rule_group_list('income');
+            }
+        }
+
         const languageToggleBtn = document.getElementById('languageToggleBtn');
-        languageToggleBtn.addEventListener('click', () => {
-            set_language(get_language() === 'de' ? 'en' : 'de');
+        languageToggleBtn.addEventListener('click', async () => {
+            const previousLang = get_language();
+            set_language(previousLang === 'de' ? 'en' : 'de');
+            await swap_default_rule_set(previousLang);
             apply_static_i18n();
             document.querySelectorAll('input[name="appLanguage"]').forEach(radio => { radio.checked = radio.value === get_language(); });
             refresh_footer();
@@ -3873,7 +3900,7 @@
 
         loadDefaultRulesBtn.addEventListener('click', async () => {
             if (!confirm(t('importexport.confirmReplace'))) return;
-            const def = await load_default_rule_set();
+            const def = await load_default_rule_set(get_language());
             ruleSet = JSON.parse(JSON.stringify(def));
             render_sub_budget_settings();
             render_fix_expense_list();
@@ -4499,8 +4526,10 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
         }
 
         document.querySelectorAll('input[name="appLanguage"]').forEach(radio => {
-            radio.addEventListener('change', (e) => {
+            radio.addEventListener('change', async (e) => {
+                const previousLang = get_language();
                 set_language(e.target.value);
+                await swap_default_rule_set(previousLang);
                 apply_static_i18n();
                 refresh_footer();
                 if (modal.style.display === 'block') render_transfer_preview();
@@ -4579,7 +4608,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             populate_sync_form();
             document.getElementById('transferMaxDays').value = get_transfer_max_days();
 
-            defaultRuleSet = await load_default_rule_set();
+            defaultRuleSet = await load_default_rule_set(get_language());
             const stored = get_stored_rule_set();
             ruleSet = stored || JSON.parse(JSON.stringify(defaultRuleSet));
             try { settingsBaseline = JSON.parse(localStorage.getItem('settingsImportBaseline') || 'null'); } catch {}

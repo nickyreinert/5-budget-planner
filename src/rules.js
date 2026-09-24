@@ -14,13 +14,14 @@ import { budget_category } from './budgets.js';
 const STORAGE_KEY = 'classificationRules';
 const FALLBACK_GROUP = 'unclassified';
 
-let defaultRuleSet = null;
+const defaultRuleSets = {};
 
-export async function load_default_rule_set() {
-  if (defaultRuleSet) return defaultRuleSet;
-  const res = await fetch('./src/default_rules.json');
-  defaultRuleSet = await res.json();
-  return defaultRuleSet;
+// The default rule set ships once per UI language; German is the base file.
+export async function load_default_rule_set(lang = 'de') {
+  if (defaultRuleSets[lang]) return defaultRuleSets[lang];
+  const res = await fetch(lang === 'en' ? './src/default_rules.en.json' : './src/default_rules.json');
+  defaultRuleSets[lang] = await res.json();
+  return defaultRuleSets[lang];
 }
 
 export function get_stored_rule_set() {
