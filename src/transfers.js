@@ -127,8 +127,12 @@ export function apply_internal_transfer_pairs(rows, pairs) {
 // bank/processor specific and would never generalise). The evidence used is
 // purely structural: same account, exactly opposite amounts, same
 // counterparty, within `maxDays`.
+function text_key(value) {
+  return String(value || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
 function name_key(row) {
-  return String(row.name || row.Name || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  return text_key(row.name || row.Name || '');
 }
 
 // "Bank Account" vs "Bank Account (direct debit)": the reversal leg is
@@ -203,7 +207,7 @@ const funding = row => is_paypal_account(row) && /bank account|bankkonto|guthabe
 //    passes it through instead of the Gläubiger-ID.
 // Both are structural/official identifiers, not brand-name guesses, and
 // are only ever used as a PRE-FILTER here - the actual pairing decision
-// below still requires an exact amount match via unique_bundle() within
+// below still requires an exact amount match via pick_bundle() within
 // maxDays, which is what actually prevents false positives.
 const PAYPAL_SEPA_CREDITOR_ID = /lu96zzz0000000000000000058/i;
 const PAYPAL_TX_ID = /\b\d[A-Z0-9]{16}\b/;
@@ -230,15 +234,44 @@ function unique_bundle(candidates, target) {
   const matches = sums.get(target);
   return matches?.length === 1 ? matches[0] : null;
 }
+
+// The settlement line usually repeats the merchant PayPal collected for
+// ("... / ALDI Nord, Ihr Einkauf bei ALDI Nord"). Comparing the two rows'
+// OWN texts is data-driven, not a brand list, and is only ever used to
+// break a tie between equally-plausible same-amount candidates.
+function counterparty_mentioned(purchase, bank) {
+  const payee = name_key(purchase);
+  if (payee.length < 4) return false;
+  return text_key(`${bank.name || bank.Name || ''} ${bank.verwendungszweck || ''}`).includes(payee);
+}
+
+// One settlement almost always covers exactly ONE purchase; bundling several
+// is the rare exception. Checking the single exact match FIRST matters: a
+// week of PayPal purchases very often contains some other subset that also
+// adds up to the same total (e.g. 20,00 + 14,43 = 34,43), which made
+// unique_bundle() declare the whole thing ambiguous and leave the obvious
+// 34,43 purchase unlinked - the reported bug.
+function pick_bundle(candidates, bank) {
+  const target = Math.abs(bank.betrag_cents);
+  const exact = candidates.filter(r => Math.abs(r.betrag_cents) === target);
+  if (exact.length === 1) return exact;
+  if (exact.length > 1) {
+    const named = exact.filter(r => counterparty_mentioned(r, bank));
+    return named.length === 1 ? named : null;
+  }
+  return unique_bundle(candidates, target);
+}
 export function reconcile_paypal(rows, maxDays = 7, splitIds = new Set()) {
   rows.forEach(r => { delete r._effectiveAccount; delete r._paypalLinked; delete r._paypalUnmatched; });
   const eligible = r => !splitIds.has(tx_id(r)) && r._mergeGroup?.kind !== 'reversal';
   const purchases = rows.filter(r => is_paypal_account(r) && !funding(r) && r.betrag_cents && eligible(r));
   const used = new Set();
-  rows.filter(r => funding(r) && eligible(r)).forEach(r => { r._cls = { ...r._cls, group: 'internal_transfer', excluded: true, source: 'paypal-funding' }; });
+  const fundingLegs = rows.filter(r => funding(r) && eligible(r));
+  fundingLegs.forEach(r => { r._cls = { ...r._cls, group: 'internal_transfer', excluded: true, source: 'paypal-funding' }; });
+  const usedFunding = new Set();
   for (const bank of rows.filter(r => settlement(r) && eligible(r)).sort((a,b) => a.date-b.date)) {
     const candidates = purchases.filter(r => !used.has(r) && Math.sign(r.betrag_cents) === Math.sign(bank.betrag_cents) && days_between(r.date, bank.date) <= maxDays);
-    const bundle = unique_bundle(candidates, Math.abs(bank.betrag_cents));
+    const bundle = pick_bundle(candidates, bank);
     if (!bundle) {
       // A settlement rule alone is not evidence that the matching PayPal
       // export exists. Never silently discard a bank-only purchase.
@@ -257,7 +290,15 @@ export function reconcile_paypal(rows, maxDays = 7, splitIds = new Set()) {
       }
       used.add(purchase); purchase._effectiveAccount = account_key(bank); purchase._paypalLinked = true;
     }
-    tag_merge_group([bank, ...bundle], 'paypal');
+    // The wallet top-up that funded exactly this purchase is the third leg of
+    // the same real payment - group it too, so the UI shows one booking
+    // instead of an unexplained plus/minus pair on the intermediary account.
+    const total = bundle.reduce((sum, r) => sum + r.betrag_cents, 0);
+    const topUp = fundingLegs.find(f => !usedFunding.has(f) && f.betrag_cents === -total
+      && bundle.some(p => account_key(p) === account_key(f))
+      && days_between(f.date, bank.date) <= maxDays);
+    if (topUp) { usedFunding.add(topUp); topUp._paypalLinked = true; }
+    tag_merge_group([bank, ...bundle, ...(topUp ? [topUp] : [])], 'paypal');
   }
   return rows;
 }

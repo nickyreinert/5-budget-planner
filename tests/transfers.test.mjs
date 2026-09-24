@@ -93,3 +93,33 @@ test('merged PayPal legs are grouped so the UI can list them together', () => {
   assert.equal(purchase._mergeGroup.kind, 'paypal');
   assert.equal(purchase._mergeGroup.id, bank._mergeGroup.id);
 });
+test('an exact single match wins over an unrelated subset that happens to add up to the same total', () => {
+  const aldi = row('ALDI Nord','-34.43','PayPal','15.09.2026');
+  const topUp = row('Bank Account (direct debit)','34.43','PayPal','15.09.2026');
+  const other1 = row('Shop A','-20','PayPal','14.09.2026');
+  const other2 = row('Shop B','-14.43','PayPal','14.09.2026');
+  const bank = { ...enrich_row({ Datum: '16.09.2026', Name: 'PayPal Europe S.a.r.l. et Cie S.C.A', Betrag: '-34.43', Bank: 'DKB', Account: 'DKB', Konto: 'DKB',
+    Verwendungszweck: '1053077432981/. ALDI Nord , Ihr Einkauf bei ALDI Nord' }),
+    _cls: { category: 'Lebensmittel', group: 'essential', excluded: false } };
+  const rows = [aldi, topUp, other1, other2, bank];
+  reconcile_paypal(rows);
+  assert.equal(bank._cls.excluded, true);
+  assert.equal(aldi._paypalLinked, true);
+  assert.equal(aldi._cls.excluded, false);
+  assert.equal(other1._cls.excluded, false);
+  assert.equal(other2._cls.excluded, false);
+  // Settlement, purchase and wallet top-up are one booking.
+  assert.deepEqual(new Set(aldi._mergeGroup.members), new Set([tx_id(bank), tx_id(aldi), tx_id(topUp)]));
+  assert.equal(topUp._mergeGroup.id, bank._mergeGroup.id);
+});
+test('several same-amount purchases are disambiguated by the merchant the settlement line names', () => {
+  const aldi = row('ALDI Nord','-34.43','PayPal','15.09.2026');
+  const netto = row('Netto Marken-Discount','-34.43','PayPal','15.09.2026');
+  const bank = { ...enrich_row({ Datum: '16.09.2026', Name: 'PayPal Europe S.a.r.l. et Cie S.C.A', Betrag: '-34.43', Bank: 'DKB', Account: 'DKB', Konto: 'DKB',
+    Verwendungszweck: '1053077432981/. ALDI Nord , Ihr Einkauf bei ALDI Nord' }),
+    _cls: { category: 'Lebensmittel', group: 'essential', excluded: false } };
+  reconcile_paypal([aldi, netto, bank]);
+  assert.equal(aldi._paypalLinked, true);
+  assert.equal(netto._paypalLinked, undefined);
+  assert.equal(bank._cls.excluded, true);
+});
