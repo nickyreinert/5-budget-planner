@@ -294,7 +294,7 @@
 
                 <div id="settingsTab-budgets" class="settings-tab-pane" hidden>
                     <div id="budgetRecommendation" class="settings-summary-sticky"></div>
-                    <section class="settings-section">
+                    <section class="settings-section recurring-settings-section">
                     <p data-i18n="budgets.intro">Setze ein wöchentliches Limit für Kategorien, die du im Blick behalten willst. Nur Kategorien mit Limit erscheinen als Sub-Budget auf der Wochenübersicht.</p>
                     <div id="mainCategoryEditor"></div><button type="button" id="addMainCategory">+ Budget</button><div id="categoryMappingEditor"></div>
                     </section>
@@ -1357,10 +1357,11 @@
                     const matches = rule_all_matches(rule, r => r.betrag_cents < 0);
                     const totalCents = rule_monthly_equivalent(matches, rule.recurringOverrides || {}, basis.refDate).totalCents;
                     return `
-                        <details class="main-budget">
+                        <details class="main-budget rg-card" style="--group-color:${category_color(rule.category || rule.label || '')}">
                             <summary>
                                 <span class="main-budget-row">
                                     <span class="main-budget-arrow" aria-hidden="true"></span>
+                                    <i class="rg-dot" aria-hidden="true"></i>
                                     <strong>${escape_budget(rule.category || rule.label || '')}</strong>
                                     <span class="main-budget-value" title="${t('fixExpense.monthlyHint')}">${fmt_eur(totalCents)}</span>
                                 </span>
@@ -1379,6 +1380,10 @@
         // ===== QUICK ADD: category tile -> straight into the keypad =====
 
 
+        // Shared colour for a budget everywhere it is drawn as a card/outline.
+        function budget_color(id) {
+            return (ruleSet.mainCategories || []).find(m => m.id === id)?.color || category_color(String(id));
+        }
         const escape_budget = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
         function main_category_label(id) {
             return id === '__unassigned' ? 'Nicht zugeordnet' : ((ruleSet.mainCategories || []).find(m => m.id === id) || {}).label || id;
@@ -1403,11 +1408,9 @@
             button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>';
             button.onclick = open; card.append(button);
         }
-        async function change_category(remove) {
-            const old = editingCategory;
-            const next = (remove ? document.getElementById('categoryReplacement').value : document.getElementById('categoryNewName').value).trim();
-            if (!next || next === old) return;
-            if (!remove && collect_category_options().includes(next)) { document.getElementById('categoryActionError').textContent = 'Dieser Kategoriename existiert bereits.'; return; }
+        // Renames `old` to `next` everywhere it is stored, or (remove) merges
+        // it into the existing category `next`.
+        async function apply_category_change(old, next, remove) {
             const affected = module_data.filter(r => r._cls?.category === old).map(tx_id);
             const nextBudget = category_to_main(remove ? next : old);
             const nextGroup = ruleSet.rules.find(r => r.category === next)?.group;
@@ -1425,6 +1428,13 @@
             const overrideIds = new Set([...affected, ...Object.keys(overridesById).filter(id => overridesById[id] === old)]);
             await save_overrides([...overrideIds].map(id => [id,next]));
             overrideIds.forEach(id => { overridesById[id] = next; });
+        }
+        async function change_category(remove) {
+            const old = editingCategory;
+            const next = (remove ? document.getElementById('categoryReplacement').value : document.getElementById('categoryNewName').value).trim();
+            if (!next || next === old) return;
+            if (!remove && collect_category_options().includes(next)) { document.getElementById('categoryActionError').textContent = 'Dieser Kategoriename existiert bereits.'; return; }
+            await apply_category_change(old, next, remove);
             persist_budgets(); render_sub_budget_settings();
             render_category_grid(document.getElementById('categoryGridSearch').value);
             document.getElementById('categoryActionsDialog').close();
@@ -1458,10 +1468,11 @@
                 const positive = m.categories.reduce((sum, c) => sum + Math.max(0, c.cents), 0);
                 const width = m.capCents ? m.pct : (positive ? 100 : 0);
                 const over = m.capCents && m.remainingCents < 0;
-                return `<details class="main-budget" data-budget="${escape_budget(m.id)}" ${opened.has(m.id) ? 'open' : ''}>
+                return `<details class="main-budget rg-card" style="--group-color:${budget_color(m.id)}" data-budget="${escape_budget(m.id)}" ${opened.has(m.id) ? 'open' : ''}>
                     <summary>
                         <span class="main-budget-row">
                             <span class="main-budget-arrow" aria-hidden="true"></span>
+                            <i class="rg-dot" aria-hidden="true"></i>
                             <strong>${escape_budget(m.label)}</strong>
                             <span class="main-budget-value${over ? ' budget-over' : ''}">${fmt_eur(m.spentCents)}${m.capCents ? ' / ' + fmt_eur(m.capCents) : ''}</span>
                         </span>
@@ -2038,8 +2049,17 @@
         // Each category chip is itself a second expand/collapse level,
         // previewing that category's last 3 months of transactions.
         let expandedCatChips = new Set();
+        // Spending rules (the ones that put transactions into a transaction
+        // category) - everything except fixed costs, income and transfers.
+        function spending_rules_for(category) {
+            if (category === UNCATEGORIZED) return [];
+            return (ruleSet.rules || []).filter(r => (r.category || r.label) === category && !['fixed', 'income', 'internal_transfer'].includes(r.group) && !r.excludeFromTotals);
+        }
+
         function render_main_category_editor() {
             const editor = document.getElementById('mainCategoryEditor');
+            const cfg = RULE_GROUP_EDITORS.spending;
+            const openPreviews = new Set([...editor.querySelectorAll('details[open]')].map(el => el.dataset.rule));
             const mains = ruleSet.mainCategories || [];
             const allCategories = collect_category_options();
             const groups = [
@@ -2052,6 +2072,7 @@
                 const expanded = expandedBudgetGroups.has(g.id);
                 const capCents = g.unassigned ? 0 : (subBudgetCaps[g.id] || 0);
                 return `
+                  <div class="budget-card rg-card" style="--group-color:${g.unassigned ? 'var(--border)' : budget_color(g.id)}" data-budget="${escape_budget(g.id)}">
                     <div class="main-budget-editor-row main-budget-group-row" data-budget="${escape_budget(g.id)}">
                         <button type="button" class="group-toggle-btn" data-budget="${escape_budget(g.id)}" title="${t('budgets.toggleCategories')}">${expanded ? '▼' : '▶'}</button>
                         <input value="${escape_budget(g.label)}" data-budget="${escape_budget(g.id)}" aria-label="Budgetname" ${g.unassigned ? 'disabled' : ''}>
@@ -2059,8 +2080,10 @@
                         <button type="button" class="move-up-btn" data-idx="${i}" title="Nach oben" ${g.unassigned || i === 0 ? 'disabled' : ''}>↑</button>
                         <button type="button" class="remove-btn" data-budget="${escape_budget(g.id)}" title="Budget entfernen" ${g.unassigned ? 'disabled' : ''}>×</button>
                     </div>
-                    <div class="main-budget-group-categories" data-budget="${escape_budget(g.id)}" ${expanded ? '' : 'hidden'}>
+                    <div class="main-budget-group-categories budget-card-body" data-budget="${escape_budget(g.id)}" ${expanded ? '' : 'hidden'}>
                         ${categories.map(c => {
+                            const rules = spending_rules_for(c);
+                            if (rules.length) return rules.map((rule, n) => build_rule_row_html('spending', rule, c, { openPreviews }).html.replace('<input value=', n ? '<input readonly value=' : '<input value=')).join('');
                             const chipJson = escape_budget(JSON.stringify(c));
                             const chipExpanded = expandedCatChips.has(c);
                             const rows = chipExpanded ? preview_rows_for_category(c) : [];
@@ -2068,6 +2091,7 @@
                                 <div class="cat-chip-row" draggable="true" data-category='${chipJson}'>
                                     <button type="button" class="cat-chip-toggle" data-category='${chipJson}' title="${t('budgets.toggleTransactions')}">${chipExpanded ? '▼' : '▶'}</button>
                                     <span>${escape_budget(c)}</span>
+                                    ${c === UNCATEGORIZED ? '' : `<button type="button" class="cat-rule-btn" data-category='${chipJson}' data-budget="${escape_budget(g.id)}">${t('budgets.addRule')}</button>`}
                                     <button type="button" class="cat-remove-btn" data-category='${chipJson}' title="${t('budgets.removeCategory')}">−</button>
                                 </div>
                                 ${chipExpanded ? `<div class="cat-chip-preview">
@@ -2076,13 +2100,15 @@
                                 </div>` : ''}
                             `;
                         }).join('') || `<p class="cat-chip-empty">${t('budgets.noCategoriesInGroup')}</p>`}
-                        ${!g.unassigned ? `<button type="button" class="cat-add-btn" data-budget="${escape_budget(g.id)}">+ ${t('budgets.addCategory')}</button>` : ''}
+                        ${!g.unassigned ? `<div class="budget-card-actions"><button type="button" class="cat-new-btn" data-budget="${escape_budget(g.id)}">${t('budgets.newCategory')}</button><button type="button" class="cat-add-btn" data-budget="${escape_budget(g.id)}">+ ${t('budgets.addCategory')}</button></div>` : ''}
                     </div>
+                  </div>
                 `;
             }).join('');
 
             editor.querySelectorAll('.cat-chip-row').forEach(row => row.prepend(favorite_button(JSON.parse(row.dataset.category))));
             wire_main_category_editor();
+            wire_rule_group_list('spending');
             render_category_mapping_editor(mains);
         }
 
@@ -2098,9 +2124,7 @@
                 });
             });
 
-            wire_transaction_preview(editor, () => render_main_category_editor());
-
-            editor.querySelectorAll('.group-toggle-btn').forEach(btn => {
+            editor.querySelectorAll('.main-budget-group-row .group-toggle-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const id = btn.dataset.budget;
                     if (expandedBudgetGroups.has(id)) expandedBudgetGroups.delete(id); else expandedBudgetGroups.add(id);
@@ -2146,7 +2170,7 @@
                 });
             });
 
-            editor.querySelectorAll('.remove-btn').forEach(btn => {
+            editor.querySelectorAll('.main-budget-group-row .remove-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const id = btn.dataset.budget;
                     const i = (ruleSet.mainCategories || []).findIndex(m => m.id === id);
@@ -2168,6 +2192,49 @@
                 btn.addEventListener('click', () => unassign(JSON.parse(btn.dataset.category)));
             });
 
+            // Rename a spending category straight from its rule row.
+            editor.querySelectorAll('.budget-card-body .fixexpense-row input[data-field="category"]:not([readonly])').forEach(input => {
+                input.onchange = async () => {
+                    const rule = (ruleSet.rules || []).find(r => r.id === input.dataset.rule);
+                    const old = rule && (rule.category || rule.label);
+                    const next = input.value.trim();
+                    if (!rule || !next || next === old) { if (rule) input.value = old; return; }
+                    if (collect_category_options().includes(next)) { alert(t('budgets.categoryExists')); input.value = old; return; }
+                    await apply_category_change(old, next, false);
+                    persist_budgets(); render_sub_budget_settings();
+                };
+            });
+
+            // Auto-assignment: a spending rule makes matching transactions
+            // land in its category (and therefore in this budget) by itself.
+            const new_spending_rule = (category, budgetId) => {
+                const maxPriority = (ruleSet.rules || []).reduce((m, r) => Math.max(m, r.priority || 0), 0);
+                const id = RULE_GROUP_EDITORS.spending.idPrefix + Date.now();
+                const rule = {
+                    id, group: 'discretionary', category, label: category,
+                    matchers: [{ field: 'any', operator: 'contains', value: '', exclude: false }],
+                    priority: maxPriority + 10
+                };
+                if (budgetId) rule.budgetCategory = budgetId;
+                (ruleSet.rules ||= []).push(rule);
+                RULE_GROUP_EDITORS.spending.expandedRules.add(id);
+                expandedBudgetGroups.add(budgetId || UNASSIGNED_BUDGET_ID);
+                persist_budgets(); render_sub_budget_settings();
+            };
+            editor.querySelectorAll('.cat-rule-btn').forEach(btn => {
+                btn.addEventListener('click', () => new_spending_rule(JSON.parse(btn.dataset.category), btn.dataset.budget));
+            });
+            editor.querySelectorAll('.cat-new-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const base = t('budgets.newCategoryLabel');
+                    let name = base, n = 2;
+                    while (collect_category_options().includes(name)) name = `${base} ${n++}`;
+                    ruleSet.categoryMappings ||= {};
+                    ruleSet.categoryMappings[name] = btn.dataset.budget;
+                    new_spending_rule(name, btn.dataset.budget);
+                });
+            });
+
             editor.querySelectorAll('.cat-add-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const targetId = btn.dataset.budget;
@@ -2186,7 +2253,7 @@
                     e.dataTransfer.effectAllowed = 'move';
                 });
             });
-            editor.querySelectorAll('.main-budget-group-row, .main-budget-group-categories').forEach(dropzone => {
+            editor.querySelectorAll('.main-budget-group-row, .budget-card-body').forEach(dropzone => {
                 dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag-over'); });
                 dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
                 dropzone.addEventListener('drop', (e) => {
@@ -2288,6 +2355,11 @@
                 idPrefix: 'fixed_', newLabelKey: 'fixExpense.newCategoryLabel',
                 amountFilter: r => r.betrag_cents < 0, amountValue: r => -r.betrag_cents,
                 showUnassigned: true
+            },
+            spending: {
+                containerId: 'mainCategoryEditor', expandedRules: new Set(),
+                idPrefix: 'spend_', newLabelKey: 'budgets.newCategoryLabel',
+                amountFilter: r => r.betrag_cents < 0, amountValue: r => -r.betrag_cents
             },
             income: {
                 containerId: 'incomeRulesList', addBtnId: 'addIncomeRuleBtn', expandedRules: new Set(), expandedGroups: new Set(),
@@ -2462,7 +2534,44 @@
             document.getElementById('ruleTransactionBrowser').close();
         });
 
+        // One expandable rule row (name, value, matchers, browse/manual-entry
+        // actions, live preview). Shared by the Fix Expense / Income tabs and
+        // the Budgets tab ('spending'), so every rule editor looks and behaves
+        // the same.
+        function build_rule_row_html(kind, rule, displayName, { extraBodyHtml = '', openPreviews = new Set(), refDate = null } = {}) {
+            const cfg = RULE_GROUP_EDITORS[kind];
+            const recurring = kind !== 'spending';
+            const matches = rule_all_matches(rule, cfg.amountFilter);
+            const totalCents = recurring ? rule_monthly_equivalent(matches, rule.recurringOverrides || {}, refDate).totalCents : 0;
+            const expanded = cfg.expandedRules.has(rule.id);
+            const matchers = rule_matchers(rule);
+            const valueHtml = recurring
+                ? `${fmt_eur(totalCents)} ${t('fixExpense.perMonth')}`
+                : t('budgets.matchCount', { count: matches.length });
+            const html = `
+                <div class="main-budget-editor-row fixexpense-row" draggable="true" data-rule="${escape_budget(rule.id)}" data-kind="${kind}">
+                    <button type="button" class="group-toggle-btn" data-rule="${escape_budget(rule.id)}" title="${t('budgets.toggleCategories')}">${expanded ? '▼' : '▶'}</button>
+                    <input value="${escape_budget(displayName)}" data-rule="${escape_budget(rule.id)}" data-field="category" aria-label="Kategorie">
+                    <span class="fixexpense-monthly" title="${recurring ? t('fixExpense.monthlyHint') : ''}">${valueHtml}</span>
+                    <button type="button" class="remove-btn" data-rule="${escape_budget(rule.id)}" title="${t('fixExpense.removeRow')}">×</button>
+                </div>
+                <div class="main-budget-group-categories fixexpense-body" ${expanded ? '' : 'hidden'}>
+                    <div class="rule-matchers" data-rule="${escape_budget(rule.id)}">${matcher_editor_html(matchers)}</div>
+                    <div class="rule-matcher-actions"><button type="button" class="add-matcher-btn" data-rule="${escape_budget(rule.id)}">+ Suchmuster</button><button type="button" class="browse-rule-btn" data-rule="${escape_budget(rule.id)}">Buchungen durchsuchen</button><button type="button" class="add-manual-tx-btn" data-rule="${escape_budget(rule.id)}" data-kind="${kind}">${t('fixExpense.addManualEntry')}</button></div>
+                    <details class="fixexpense-preview" data-rule="${escape_budget(rule.id)}" ${openPreviews.has(rule.id) ? 'open' : ''}>
+                        <summary>${t('fixExpense.recurringPreviewToggle', { count: matches.length })}</summary>
+                        ${recurring
+                            ? render_transaction_preview_table(matches, cfg.amountValue, { byBillingPeriod: true, overrides: rule.recurringOverrides || {}, ruleId: rule.id, refDate })
+                            : render_transaction_preview_table(matches, cfg.amountValue)}
+                    </details>
+                    ${extraBodyHtml}
+                </div>
+            `;
+            return { html, totalCents };
+        }
+
         function render_rule_group_list(kind) {
+            if (kind === 'spending') return render_sub_budget_settings();
             const cfg = RULE_GROUP_EDITORS[kind];
             const container = document.getElementById(cfg.containerId);
             const openPreviews = new Set([...container.querySelectorAll('details[open]')].map(el => el.dataset.rule));
@@ -2491,28 +2600,7 @@
             });
 
             function rule_row_html(rule, displayName, extraBodyHtml = '') {
-                const matches = matches_for(rule);
-                const totalCents = rule_monthly_equivalent(matches, rule.recurringOverrides || {}, refDate).totalCents;
-                const expanded = cfg.expandedRules.has(rule.id);
-                const matchers = rule_matchers(rule);
-                const html = `
-                    <div class="main-budget-editor-row fixexpense-row" draggable="true" data-rule="${escape_budget(rule.id)}" data-kind="${kind}">
-                        <button type="button" class="group-toggle-btn" data-rule="${escape_budget(rule.id)}" title="${t('budgets.toggleCategories')}">${expanded ? '▼' : '▶'}</button>
-                        <input value="${escape_budget(displayName)}" data-rule="${escape_budget(rule.id)}" data-field="category" aria-label="Kategorie">
-                        <span class="fixexpense-monthly" title="${t('fixExpense.monthlyHint')}">${fmt_eur(totalCents)} ${t('fixExpense.perMonth')}</span>
-                        <button type="button" class="remove-btn" data-rule="${escape_budget(rule.id)}" title="${t('fixExpense.removeRow')}">×</button>
-                    </div>
-                    <div class="main-budget-group-categories fixexpense-body" ${expanded ? '' : 'hidden'}>
-                        <div class="rule-matchers" data-rule="${escape_budget(rule.id)}">${matcher_editor_html(matchers)}</div>
-                        <div class="rule-matcher-actions"><button type="button" class="add-matcher-btn" data-rule="${escape_budget(rule.id)}">+ Suchmuster</button><button type="button" class="browse-rule-btn" data-rule="${escape_budget(rule.id)}">Buchungen durchsuchen</button><button type="button" class="add-manual-tx-btn" data-rule="${escape_budget(rule.id)}" data-kind="${kind}">${t('fixExpense.addManualEntry')}</button></div>
-                        <details class="fixexpense-preview" data-rule="${escape_budget(rule.id)}" ${openPreviews.has(rule.id) ? 'open' : ''}>
-                            <summary>${t('fixExpense.recurringPreviewToggle', { count: matches.length })}</summary>
-                            ${render_transaction_preview_table(matches, cfg.amountValue, { byBillingPeriod: true, overrides: rule.recurringOverrides || {}, ruleId: rule.id, refDate })}
-                        </details>
-                        ${extraBodyHtml}
-                    </div>
-                `;
-                return { html, totalCents };
+                return build_rule_row_html(kind, rule, displayName, { extraBodyHtml, openPreviews, refDate });
             }
 
             const rowsHtml = [...groups.entries()].map(([parent, groupRules]) => {
@@ -2524,7 +2612,7 @@
                     // to the collapsed row.
                     const { html, totalCents } = rule_row_html(rule, rule.category || rule.label || '', addBtnHtml);
                     overviewTotalCents += totalCents;
-                    return `<div class="fixexpense-group" data-parent="${escape_budget(parent)}" data-kind="${kind}">${html}</div>`;
+                    return `<div class="fixexpense-group rg-card" style="--group-color:${category_color(parent)}" data-parent="${escape_budget(parent)}" data-kind="${kind}">${html}</div>`;
                 }
                 const groupExpanded = cfg.expandedGroups.has(parent);
                 const sortedRules = [...groupRules].sort((a, b) => (a.priority || 0) - (b.priority || 0));
@@ -2535,7 +2623,7 @@
                 const groupTotalCents = rendered.reduce((sum, r) => sum + r.totalCents, 0);
                 overviewTotalCents += groupTotalCents;
                 return `
-                    <div class="fixexpense-group" data-parent="${escape_budget(parent)}" data-kind="${kind}">
+                    <div class="fixexpense-group rg-card" style="--group-color:${category_color(parent)}" data-parent="${escape_budget(parent)}" data-kind="${kind}">
                         <div class="main-budget-editor-row fixexpense-group-row" data-parent="${escape_budget(parent)}" data-kind="${kind}">
                             <button type="button" class="group-toggle-btn" data-parent="${escape_budget(parent)}" title="${t('budgets.toggleCategories')}">${groupExpanded ? '▼' : '▶'}</button>
                             <input value="${escape_budget(parent)}" data-parent="${escape_budget(parent)}" data-kind="${kind}" data-field="parent-category" aria-label="Kategorie">
@@ -2724,9 +2812,12 @@
             }
             container.querySelectorAll('.fixexpense-row[draggable="true"]').forEach(row => {
                 row.addEventListener('dragstart', (e) => {
-                    e.dataTransfer.setData('text/plain', row.dataset.rule);
+                    // On the Budgets tab a rule row moves its category between budgets.
+                    const rule = (ruleSet.rules || []).find(r => r.id === row.dataset.rule);
+                    e.dataTransfer.setData('text/plain', kind === 'spending' ? JSON.stringify(rule?.category || rule?.label || '') : row.dataset.rule);
                     e.dataTransfer.effectAllowed = 'move';
                 });
+                if (kind === 'spending') return;
                 row.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); row.classList.add('drag-over'); });
                 row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
                 row.addEventListener('drop', (e) => {
@@ -3352,7 +3443,7 @@
             // Categorized groups first (color-coded outline), then pending
             // (undecided) rows, ignored ones sunk to the very bottom.
             groups.forEach((rows, category) => {
-                const group = document.createElement('div'); group.className = 'wizard-candidate-group';
+                const group = document.createElement('div'); group.className = 'wizard-candidate-group rg-card';
                 group.style.setProperty('--group-color', category_color(category));
                 const expanded = wizardState.expandedExpenseCategories.has(category);
                 const title = document.createElement('button'); title.type = 'button'; title.className = 'wizard-candidate-group-title';

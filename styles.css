@@ -869,7 +869,6 @@ button.budget-totals-cell:hover { border-color: var(--accent); }
 .recurring-settings-section { background: transparent; border: 0; padding: 0; }
 .recurring-settings-section:nth-child(even) { background: transparent; }
 .recurring-settings-section > p { margin: 0 0 12px; font-size: .85rem; color: var(--text-muted); }
-.recurring-settings-section .fixexpense-group { padding: 8px 12px; margin: 8px 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); }
 .recurring-settings-section .main-budget-editor-row { margin: 0; gap: 8px; }
 .recurring-settings-section .fixexpense-group-row { background: transparent; }
 .recurring-settings-section .main-budget-editor-row button { min-height: 36px; }
@@ -898,3 +897,28 @@ button.budget-totals-cell:hover { border-color: var(--accent); }
 @media (max-width: 600px) {
     .recurring-settings-section .rule-matcher-row { grid-template-columns: 1fr 1fr 32px; }
 }
+
+/* Shared expandable card (.rg-card) - one look for the main screen budgets,
+   the Fix Expense / Income / Budgets settings tabs and the setup wizard's
+   category groups: white card outlined in the item's own colour
+   (--group-color) with a matching dot; an open card gets a thicker outline. */
+.rg-card { --group-color: var(--border); background: var(--surface); border: 1px solid var(--group-color); border-radius: var(--radius-md); padding: 8px 12px; margin: 8px 0; }
+.rg-card[open], .rg-card:has(> .fixexpense-body:not([hidden])), .rg-card:has(.budget-card-body:not([hidden])), .rg-card:has(.fixexpense-group-body:not([hidden])) { box-shadow: 0 0 0 1px var(--group-color); }
+.rg-dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: var(--group-color); }
+.rg-card > .main-budget-editor-row::before { content: ''; flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: var(--group-color); order: 1; }
+.rg-card > .main-budget-editor-row > .group-toggle-btn { order: 0; }
+.rg-card > .main-budget-editor-row > :not(.group-toggle-btn) { order: 2; }
+.rg-card.drag-over { outline: 2px dashed var(--group-color); outline-offset: 2px; }
+.recurring-settings-section .budget-card-body { margin: 8px 0 0; padding: 4px 0 0; background: transparent; border: 0; border-top: 1px solid var(--border); border-radius: 0; gap: 0; }
+.recurring-settings-section .budget-card-body > .fixexpense-row, .recurring-settings-section .budget-card-body > .cat-chip-row { padding-top: 8px; margin-top: 8px; border-top: 1px solid var(--border); }
+.recurring-settings-section .budget-card-body > :first-child { padding-top: 0; margin-top: 0; border-top: 0; }
+.recurring-settings-section .budget-card-body > .fixexpense-body { margin-top: 8px; }
+.recurring-settings-section .cat-chip-row { background: transparent; border-width: 0; border-radius: 0; padding: 0; gap: 8px; }
+.recurring-settings-section .cat-chip-row .cat-rule-btn { flex: 0 0 auto; min-height: 30px; padding: 4px 10px; font-size: .8rem; background: transparent; color: var(--accent); }
+.recurring-settings-section .budget-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.recurring-settings-section .cat-new-btn, .recurring-settings-section .cat-add-btn { background: transparent; border: 1px dashed var(--accent); color: var(--accent); font-weight: 600; min-height: 36px; padding: 6px 12px; }
+.recurring-settings-section .budget-card .main-budget-editor-row .budgetcap-number { flex: 0 0 84px; }
+.recurring-settings-section #categoryMappingEditor { margin-top: 16px; }
+.main-budget.rg-card { margin: 8px 0; }
+.recurring-settings-section .cat-chip-row > span { font-weight: 600; }
+.recurring-settings-section .cat-chip-toggle { border: 0; background: transparent; color: var(--text-muted); font-size: .65rem; }
