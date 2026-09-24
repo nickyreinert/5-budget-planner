@@ -2298,7 +2298,6 @@
         }
 
         function render_sub_budget_settings() {
-            const suggestion = ruleSet.budgetRecommendation;
             const panel = document.getElementById('budgetRecommendation');
             const total = Object.values(subBudgetCaps).reduce((sum,v) => sum + v,0);
             const basis = build_budget_basis(module_data);
@@ -2310,7 +2309,6 @@
                 <div class="budget-totals-cell"><span>${t('budgets.limitWeekly')}</span><strong>${fmt_eur(total)}</strong></div>
                 <div class="budget-totals-cell"><span>${t('budgets.savingsMonthly')}</span><strong>${fmt_eur(savingsMonthly)}</strong></div>
             </div>
-            ${suggestion ? `<p class="budget-suggestion">LLM-Vorschlag: ${fmt_eur(suggestion.weeklyLimitCents)} / Woche. ${escape_budget(suggestion.rationale || '')}</p>` : ''}
             ${total > Math.max(0,basis.weeklyCents) && module_data.length ? '<p class="budget-warning">Die Limits übersteigen das verfügbare Wochenbudget.</p>' : ''}`;
             render_main_category_editor();
         }
