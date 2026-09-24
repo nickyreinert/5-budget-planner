@@ -613,6 +613,7 @@
         import { get_language, set_language, apply_static_i18n, t, locale } from './src/i18n.js';
         import { get_csv_config, save_csv_config, default_csv_config } from './src/csv_config.js';
         import { load_footer } from './src/footer.js';
+        import { init_section_highlight } from './src/highlight.js';
         import { csv_records, reconcile_transactions, transaction_source_label } from './src/transactions.js';
         import { category_catalog, sort_categories, fixed_expense_categories, UNCATEGORIZED, split_category, join_category } from './src/categories.js';
         import { upsert_imported_entries, load_imported_entries } from './src/db.js';
@@ -2093,7 +2094,7 @@
                             const chipExpanded = expandedCatChips.has(c);
                             const rows = chipExpanded ? preview_rows_for_category(c) : [];
                             return `
-                                <div class="cat-chip-row" draggable="true" data-category='${chipJson}'>
+                                <div class="cat-chip-row rg-item" data-rg-key="cat:${escape_budget(c)}" draggable="true" data-category='${chipJson}'>
                                     <button type="button" class="cat-chip-toggle" data-category='${chipJson}' title="${t('budgets.toggleTransactions')}">${chipExpanded ? '▼' : '▶'}</button>
                                     <span>${escape_budget(c)}</span>
                                     ${c === UNCATEGORIZED ? '' : `<button type="button" class="cat-rule-btn" data-category='${chipJson}' data-budget="${escape_budget(g.id)}">${t('budgets.addRule')}</button>`}
@@ -2554,6 +2555,7 @@
                 ? `${fmt_eur(totalCents)} ${t('fixExpense.perMonth')}`
                 : t('budgets.matchCount', { count: matches.length });
             const html = `
+              <div class="rg-item" data-rg-key="${escape_budget(rule.id)}">
                 <div class="main-budget-editor-row fixexpense-row" draggable="true" data-rule="${escape_budget(rule.id)}" data-kind="${kind}">
                     <button type="button" class="group-toggle-btn" data-rule="${escape_budget(rule.id)}" title="${t('budgets.toggleCategories')}">${expanded ? '▼' : '▶'}</button>
                     <input value="${escape_budget(displayName)}" data-rule="${escape_budget(rule.id)}" data-field="category" aria-label="Kategorie">
@@ -2571,6 +2573,7 @@
                     </details>
                     ${extraBodyHtml}
                 </div>
+              </div>
             `;
             return { html, totalCents };
         }
@@ -2708,7 +2711,7 @@
                 };
             });
             // A flat (non-grouped) row's input still edits the whole category.
-            container.querySelectorAll('.fixexpense-group > .fixexpense-row input[data-field="category"]').forEach(input => {
+            container.querySelectorAll('.fixexpense-group > .rg-item > .fixexpense-row input[data-field="category"]').forEach(input => {
                 input.onchange = () => {
                     const rule = (ruleSet.rules || []).find(r => r.id === input.dataset.rule);
                     if (!rule) return;
@@ -3286,7 +3289,7 @@
             }
             const sorted = [...wizardState.salaryCandidates].sort((a, b) => Number(a.ignored) - Number(b.ignored));
             sorted.forEach(c => {
-                const row = document.createElement('label'); row.className = 'wizard-candidate-row' + (c.ignored ? ' ignored' : '');
+                const row = document.createElement('label'); row.className = 'wizard-candidate-row rg-item' + (c.ignored ? ' ignored' : '');
                 const checkbox = document.createElement('input'); checkbox.type = 'checkbox';
                 checkbox.checked = wizardState.selectedSalaryPayees.has(c.payee); checkbox.disabled = c.ignored;
                 checkbox.addEventListener('change', () => {
@@ -3361,7 +3364,7 @@
             }
 
             function make_row(c, selection = null) {
-                const row = document.createElement('div'); row.className = 'wizard-candidate-row' + (c.ignored ? ' ignored' : '');
+                const row = document.createElement('div'); row.className = 'wizard-candidate-row rg-item' + (c.ignored ? ' ignored' : '');
                 if (selection) {
                     const checkbox = document.createElement('input');
                     checkbox.type = 'checkbox'; checkbox.className = 'wizard-candidate-select';
@@ -3450,6 +3453,7 @@
             groups.forEach((rows, category) => {
                 const group = document.createElement('div'); group.className = 'wizard-candidate-group rg-card';
                 group.style.setProperty('--group-color', category_color(category));
+                group.dataset.rgKey = category;
                 const expanded = wizardState.expandedExpenseCategories.has(category);
                 const title = document.createElement('button'); title.type = 'button'; title.className = 'wizard-candidate-group-title';
                 title.setAttribute('aria-expanded', String(expanded));
@@ -4692,6 +4696,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
 
         // Restore from localStorage
         window.addEventListener('load', async () => {
+            init_section_highlight();
             apply_static_i18n();
             const langRadio = document.querySelector(`input[name="appLanguage"][value="${get_language()}"]`);
             if (langRadio) langRadio.checked = true;

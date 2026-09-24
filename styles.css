@@ -888,7 +888,7 @@ button.budget-totals-cell:hover { border-color: var(--accent); }
 .recurring-settings-section .fixexpense-preview summary { padding: 8px 10px; background: var(--accent-soft); border-radius: var(--radius-sm); }
 .recurring-settings-section .fixexpense-group-body { margin: 6px 0 0; padding: 0 0 0 12px; border: 0; gap: 0; }
 .recurring-settings-section .fixexpense-group-body .fixexpense-row { background: transparent; }
-.recurring-settings-section .fixexpense-group-body .fixexpense-row:not(:first-child) { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.recurring-settings-section .fixexpense-group-body > .rg-item:not(:first-child) { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
 .recurring-settings-section .fixexpense-group-body .fixexpense-row > input { font-weight: 500; }
 .recurring-settings-section .fixexpense-group-body .fixexpense-body { border-top: 0; padding-top: 8px; margin: 0 0 8px; }
 .recurring-settings-section .fixexpense-group-body > .fixexpense-add-sub-btn { margin: 8px 0 4px; }
@@ -903,16 +903,15 @@ button.budget-totals-cell:hover { border-color: var(--accent); }
    category groups: white card outlined in the item's own colour
    (--group-color) with a matching dot; an open card gets a thicker outline. */
 .rg-card { --group-color: var(--border); background: var(--surface); border: 1px solid var(--group-color); border-radius: var(--radius-md); padding: 8px 12px; margin: 8px 0; }
-.rg-card[open], .rg-card:has(> .fixexpense-body:not([hidden])), .rg-card:has(.budget-card-body:not([hidden])), .rg-card:has(.fixexpense-group-body:not([hidden])) { box-shadow: 0 0 0 1px var(--group-color); }
+.rg-card[open], .rg-card:has(.fixexpense-body:not([hidden])), .rg-card:has(.budget-card-body:not([hidden])), .rg-card:has(.fixexpense-group-body:not([hidden])) { box-shadow: 0 0 0 1px var(--group-color); }
 .rg-dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: var(--group-color); }
-.rg-card > .main-budget-editor-row::before { content: ''; flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: var(--group-color); order: 1; }
-.rg-card > .main-budget-editor-row > .group-toggle-btn { order: 0; }
-.rg-card > .main-budget-editor-row > :not(.group-toggle-btn) { order: 2; }
+.rg-card > .main-budget-editor-row::before, .rg-card > .rg-item > .main-budget-editor-row::before { content: ''; flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: var(--group-color); order: 1; }
+.rg-card > .main-budget-editor-row > .group-toggle-btn, .rg-card > .rg-item > .main-budget-editor-row > .group-toggle-btn { order: 0; }
+.rg-card > .main-budget-editor-row > :not(.group-toggle-btn), .rg-card > .rg-item > .main-budget-editor-row > :not(.group-toggle-btn) { order: 2; }
 .rg-card.drag-over { outline: 2px dashed var(--group-color); outline-offset: 2px; }
 .recurring-settings-section .budget-card-body { margin: 8px 0 0; padding: 4px 0 0; background: transparent; border: 0; border-top: 1px solid var(--border); border-radius: 0; gap: 0; }
-.recurring-settings-section .budget-card-body > .fixexpense-row, .recurring-settings-section .budget-card-body > .cat-chip-row { padding-top: 8px; margin-top: 8px; border-top: 1px solid var(--border); }
+.recurring-settings-section .budget-card-body > .rg-item { padding-top: 8px; margin-top: 8px; border-top: 1px solid var(--border); }
 .recurring-settings-section .budget-card-body > :first-child { padding-top: 0; margin-top: 0; border-top: 0; }
-.recurring-settings-section .budget-card-body > .fixexpense-body { margin-top: 8px; }
 .recurring-settings-section .cat-chip-row { background: transparent; border-width: 0; border-radius: 0; padding: 0; gap: 8px; }
 .recurring-settings-section .cat-chip-row .cat-rule-btn { flex: 0 0 auto; min-height: 30px; padding: 4px 10px; font-size: .8rem; background: transparent; color: var(--accent); }
 .recurring-settings-section .budget-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
@@ -922,3 +921,14 @@ button.budget-totals-cell:hover { border-color: var(--accent); }
 .main-budget.rg-card { margin: 8px 0; }
 .recurring-settings-section .cat-chip-row > span { font-weight: 600; font-size: 13.333px; }
 .recurring-settings-section .cat-chip-toggle { border: 0; background: transparent; color: var(--text-muted); font-size: .65rem; }
+
+/* Hover / focus guidance (see src/highlight.js): the section under the pointer
+   - or the one holding the focus - is tinted slightly, its siblings fade back. */
+.rg-card, .rg-item { transition: opacity .15s ease, background-color .15s ease; }
+.rg-dim { opacity: .55; }
+.rg-card.rg-active { background: color-mix(in srgb, var(--group-color) 6%, var(--surface)); }
+.rg-item.rg-active { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.recurring-settings-section .rg-item { margin-inline: -6px; padding-inline: 6px; border-radius: var(--radius-sm); }
+.recurring-settings-section .fixexpense-group > .rg-item { margin-inline: 0; padding-inline: 0; }
+@media (prefers-reduced-motion: reduce) { .rg-card, .rg-item { transition: none; } }
+.rg-card > .rg-item.rg-active { background: transparent; }
