@@ -28,6 +28,12 @@ The app gives you:
 ```sh
 python3 -m http.server 3000
 ```
+or
+
+```sh
+npm install
+npm run dev
+```
 
 Open <http://localhost:3000>. The app stores transactions and manual entries
 in IndexedDB and settings in localStorage. Bank data stays in the browser; the

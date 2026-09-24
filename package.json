@@ -1,6 +1,12 @@
 {
   "name": "5ive-budgets",
   "private": true,
+  "scripts": {
+    "dev": "netlify dev"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.36.4"
+  },
   "dependencies": {
     "google-auth-library": "^9.14.1",
     "postgres": "^3.4.4"
