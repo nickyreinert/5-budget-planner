@@ -3039,6 +3039,8 @@
             render_drill_transactions();
         });
         document.getElementById('closeDrillTransactions').addEventListener('click', () => document.getElementById('drillTransactionsDialog').close());
+        // Charts keep their drill/filter state; just redraw with the new assignments (also on Esc).
+        document.getElementById('drillTransactionsDialog').addEventListener('close', () => { render_all(); render_week(); });
 
         function render_all() {
             if (!ruleSet) return;
