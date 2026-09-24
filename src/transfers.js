@@ -217,6 +217,21 @@ const settlement = row => {
   return /paypal/i.test(text) || PAYPAL_TX_ID.test(text) || PAYPAL_SEPA_CREDITOR_ID.test(text);
 };
 
+// A settlement line that could NOT be linked (no purchase export imported for
+// that period) stays visible - but with the collector's legal name
+// ("PayPal Europe S.a.r.l. et Cie S.C.A") it is unidentifiable. Its own text
+// almost always carries the real merchant, just buried behind a booking
+// reference ("1053077432981/. ALDI Nord , Ihr Einkauf bei ALDI Nord").
+const REFERENCE_PREFIX = /^[\s\d/.:;#-]+/;
+const clean_segment = value => String(value || '').split(',')[0].replace(REFERENCE_PREFIX, '').trim();
+
+export function settlement_payee(row) {
+  // Whichever segment does NOT itself look like a collector line is the
+  // merchant - reuses settlement()'s own markers instead of a brand list.
+  return [clean_segment(row.name || row.Name), clean_segment(row.verwendungszweck)]
+    .find(segment => /\p{L}{3}/u.test(segment) && !settlement({ name: segment, verwendungszweck: '' })) || '';
+}
+
 // Find a unique exact combination, bounded to keep CSV imports responsive.
 // Ambiguous or oversized candidate sets stay visible for review.
 function unique_bundle(candidates, target) {
@@ -262,7 +277,7 @@ function pick_bundle(candidates, bank) {
   return unique_bundle(candidates, target);
 }
 export function reconcile_paypal(rows, maxDays = 7, splitIds = new Set()) {
-  rows.forEach(r => { delete r._effectiveAccount; delete r._paypalLinked; delete r._paypalUnmatched; });
+  rows.forEach(r => { delete r._effectiveAccount; delete r._paypalLinked; delete r._paypalUnmatched; delete r._displayName; });
   const eligible = r => !splitIds.has(tx_id(r)) && r._mergeGroup?.kind !== 'reversal';
   const purchases = rows.filter(r => is_paypal_account(r) && !funding(r) && r.betrag_cents && eligible(r));
   const used = new Set();
@@ -277,6 +292,7 @@ export function reconcile_paypal(rows, maxDays = 7, splitIds = new Set()) {
       // export exists. Never silently discard a bank-only purchase.
       if (bank._cls?.group === 'internal_transfer') bank._cls = { category: 'Unkategorisiert', group: 'unclassified', excluded: false, source: 'paypal-unmatched' };
       bank._paypalUnmatched = true;
+      bank._displayName = settlement_payee(bank) || undefined;
       continue;
     }
     const manualClassification = bank._cls?.source === 'manual' ? { ...bank._cls } : null;

@@ -81,7 +81,7 @@ export function render_table(rows, tbodySelector, current_path, leakCategoryFilt
     const id = tx_id(r);
     const checked = selectedIds.has(id) ? ' checked' : '';
     tr.innerHTML = `<td class="select-col"><input type="checkbox" class="row-select" data-id="${esc(id)}"${checked}></td>` +
-      `<td>${esc(r.Datum)}<small class="transaction-source">${esc(transaction_source_label(r))}</small></td><td>${esc(r.Name)}</td><td>${esc(r.Verwendungszweck)}</td><td>${euro}</td>` +
+      `<td>${esc(r.Datum)}<small class="transaction-source">${esc(transaction_source_label(r))}</small></td><td>${esc(r._displayName || r.Name)}</td><td>${esc(r.Verwendungszweck)}</td><td>${euro}</td>` +
       `<td><button type="button" class="category-picker-btn" data-id="${esc(id)}" data-category="${esc(cls)}">${esc(cls) || '—'} <span class="caret">▾</span></button></td>`;
     tbody.appendChild(tr);
   });

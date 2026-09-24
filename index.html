@@ -905,7 +905,7 @@
             return `<tr>
                 <td>${fmt_date(r.date)}${+reporting_date(r) !== +r.date ? `<small class="transaction-source">${t('txEdit.reportingDate')}: ${fmt_date(reporting_date(r))}</small>` : ''}<small class="transaction-source">${transaction_source_label(r)}</small></td>
                 <td class="tx-description">
-                    <button type="button" class="tx-name-btn" data-tx-id="${txId}" title="${t('txEdit.title')}">${escape_budget(r.name)}</button>
+                    <button type="button" class="tx-name-btn" data-tx-id="${txId}" title="${t('txEdit.title')}">${escape_budget(r._displayName || r.name)}</button>
                     <button type="button" class="tx-category-label" style="border-left:4px solid ${category_color(r._cls.category)}" data-tx-id="${txId}" title="${t('txEdit.quickRecategorize')}">${escape_budget(r._cls.category)}</button>
                     ${r._mergeGroup ? `<button type="button" class="tx-merge-badge" data-tx-id="${txId}" title="${t('merge.badgeTitle', { count: r._mergeGroup.members.length })}" aria-label="${t('merge.badgeTitle', { count: r._mergeGroup.members.length })}">\u29c9 ${r._mergeGroup.members.length}</button>` : ''}
                 </td>

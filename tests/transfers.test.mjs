@@ -33,6 +33,15 @@ test('missing PayPal history never drops the bank expense', () => {
   const bank = row('PayPal Europe','-20','DKB','12.09.2026','internal_transfer');
   reconcile_paypal([bank]); assert.equal(bank._cls.excluded,false); assert.equal(bank._paypalUnmatched,true);
 });
+test('an unlinkable settlement leg is shown under the merchant it names, not the collector', () => {
+  const aldi = { ...enrich_row({ Datum: '16.09.2026', Name: 'PayPal Europe S.a.r.l. et Cie S.C.A', Betrag: '-34.43', Bank: 'DKB', Account: 'DKB', Konto: 'DKB',
+    Verwendungszweck: '1053077432981/. ALDI Nord , Ihr Einkauf bei ALDI Nord' }), _cls: { category: 'Lebensmittel', group: 'essential', excluded: false } };
+  const decathlon = { ...enrich_row({ Datum: '16.09.2026', Name: '1053073282674/. Decathlon Deutschland', Betrag: '-27.16', Bank: 'DKB', Account: 'DKB', Konto: 'DKB',
+    Verwendungszweck: 'Ihr Einkauf bei Decathlon Deutschland, Umsatzart: Folgelastschrift, Gl\u00e4ubiger-ID: LU96ZZZ0000000000000000058' }), _cls: { category: 'Sport', group: 'essential', excluded: false } };
+  reconcile_paypal([aldi, decathlon]);
+  assert.equal(aldi._displayName, 'ALDI Nord');
+  assert.equal(decathlon._displayName, 'Decathlon Deutschland');
+});
 test('ambiguous equal purchases stay visible instead of guessing', () => {
   const rows = [row('Shop A','-20','PayPal'),row('Shop B','-20','PayPal'),row('PayPal Europe','-20','DKB')];
   reconcile_paypal(rows); assert.equal(rows[2]._paypalUnmatched,true); assert.ok(rows.every(r => !r._cls.excluded));
