@@ -132,3 +132,11 @@ test('several same-amount purchases are disambiguated by the merchant the settle
   assert.equal(netto._paypalLinked, undefined);
   assert.equal(bank._cls.excluded, true);
 });
+test('without any account column, PayPal ledger lines are still recognized by their booking reference', () => {
+  const plain = (Datum, Name, Betrag, Verwendungszweck) => ({ ...enrich_row({ Datum, Name, Betrag, Verwendungszweck }), _cls: { category: 'Lebensmittel', group: 'essential', excluded: false } });
+  const purchase = plain('15.09.2026', 'ALDI Nord', '-34.43', '33J907732G7745748 / Payment, Umsatzart: Payment');
+  const bank = plain('16.09.2026', 'PayPal Europe S.a.r.l. et Cie S.C.A', '-34.43', '1053077432981/. ALDI Nord , Ihr Einkauf bei ALDI Nord, Umsatzart: Folgelastschrift');
+  reconcile_paypal([purchase, bank]);
+  assert.equal(account_key(purchase), 'PayPal'); assert.equal(account_key(bank), 'Konto unbekannt');
+  assert.equal(purchase._paypalLinked, true); assert.equal(bank._cls.excluded, true); assert.equal(purchase._cls.excluded, false);
+});

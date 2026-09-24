@@ -1117,7 +1117,8 @@
 
         // Shows every transaction the automatic detection folded into the same
         // booking, with a per-leg "Trennen" escape hatch - and the inverse
-        // "wieder zusammenführen" for a leg that was split out earlier.        function render_tx_merge_section(row, txId) {
+        // "wieder zusammenführen" for a leg that was split out earlier.
+        function render_tx_merge_section(row, txId) {
             const section = document.getElementById('txEditMergeSection');
             const list = document.getElementById('txEditMergeList');
             const hint = document.getElementById('txEditMergeHint');

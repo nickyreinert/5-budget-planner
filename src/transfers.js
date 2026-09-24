@@ -187,8 +187,17 @@ export function apply_reversal_pairs(rows, pairs) {
 }
 
 
+// A combined multi-account export has no account column, so every row ends
+// up as "Konto unbekannt" and PayPal matching never triggers. PayPal's own
+// ledger lines are still recognizable by their booking reference format:
+// "<17-char transaction ID> / <type>, Umsatzart: ..." (bank lines never
+// start like that).
+const PAYPAL_LEDGER_REFERENCE = /^[A-Z0-9]{17} \/ .*Umsatzart:/;
 export function account_key(row) {
-  return row._account || row.Kontoname || row.Account || row['Eigenes Konto'] || (row.source === 'manual' ? 'Manuell' : 'Konto unbekannt');
+  const explicit = row._account || row.Kontoname || row.Account || row['Eigenes Konto'];
+  if (explicit) return explicit;
+  if (row.source === 'manual') return 'Manuell';
+  return PAYPAL_LEDGER_REFERENCE.test(row.verwendungszweck || row.Verwendungszweck || '') ? 'PayPal' : 'Konto unbekannt';
 }
 export function is_paypal_account(row) { return /paypal/i.test(account_key(row)); }
 const funding = row => is_paypal_account(row) && /bank account|bankkonto|guthaben.*(ein|aus)zahlung/i.test(row.name || row.Name || '');
