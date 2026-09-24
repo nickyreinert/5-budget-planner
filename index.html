@@ -460,6 +460,13 @@
         <div class="dialog-actions"><button type="button" id="applyRuleTransactionBrowser" class="primary">Für Regel übernehmen</button></div>
     </dialog>
 
+    <dialog id="drillTransactionsDialog" class="review-dialog rule-transaction-browser" aria-labelledby="drillTransactionsTitle">
+        <div class="dialog-actions"><h2 id="drillTransactionsTitle">Buchungen</h2><button type="button" id="closeDrillTransactions" aria-label="Schließen">×</button></div>
+        <div id="drillTransactionsMatchers" class="rule-matchers"></div>
+        <button type="button" id="drillTransactionsAddMatcher">+ Suchmuster</button>
+        <div class="transaction-browser-table"><table><thead><tr><th data-drill-sort="date">Datum</th><th data-drill-sort="name">Buchung</th><th data-drill-sort="category">Transaktionskategorie</th><th data-drill-sort="budget">Budget</th><th data-drill-sort="amount">Betrag</th></tr></thead><tbody id="drillTransactionsRows"></tbody></table></div>
+    </dialog>
+
     <!-- Chart Enlarge Modal -->
     <dialog id="settingsReviewDialog" class="review-dialog" aria-labelledby="settingsReviewTitle">
         <h2 id="settingsReviewTitle">SETTING-Änderungen prüfen</h2>
@@ -605,7 +612,7 @@
 
     <script type="module">
         import { parse_csv, data as module_data, build_group_summary, build_unclassified_report, enrich_row, tx_id } from './src/data.js';
-        import { filter_overview_rows, build_timeline, render_timeline } from './src/overview.js';
+        import { filter_overview_rows, build_timeline, render_timeline, period_label } from './src/overview.js';
         import { apply_effective_periods, reporting_date } from './src/recurrence.js';
         import { settings_changes, apply_settings_changes, manual_rule_ids } from './src/settings.js';
         import { open_category_popover, close_popover } from './src/table.js';
@@ -2889,6 +2896,62 @@
             const rows = filter_overview_rows(module_data, { year: currentYear, from, to, account: selectedAccount });
             return monthFilter?.startsWith('all-') ? rows.filter(row => row.date.getMonth() === Number(monthFilter.slice(4))) : rows;
         }
+        // Chart leaf (a category / payee bar with nothing left to drill into):
+        // lists the transactions behind that bar in a searchable, sortable table.
+        let drillTxState = null;
+        function open_drill_transactions(title, rows) {
+            drillTxState = { rows, matchers: [{ field: 'any', operator: 'contains', value: '', exclude: false }], sort: 'date', descending: true };
+            document.getElementById('drillTransactionsTitle').textContent = title;
+            render_drill_transactions();
+            document.getElementById('drillTransactionsDialog').showModal();
+        }
+        function render_drill_transaction_rows() {
+            const active = drillTxState.matchers.filter(matcher => matcher.value);
+            const rows = active.length ? drillTxState.rows.filter(row => rule_matches(row, { matchers: active })) : [...drillTxState.rows];
+            const budgetLabel = row => (ruleSet.mainCategories || []).find(item => item.id === category_to_main(row._cls?.category))?.label || '–';
+            const valueFor = (row, key) => key === 'date' ? row.date.getTime() : key === 'amount' ? row.betrag_cents
+                : key === 'category' ? row._cls?.category || '' : key === 'budget' ? budgetLabel(row) : row.name || '';
+            rows.sort((a, b) => {
+                const left = valueFor(a, drillTxState.sort), right = valueFor(b, drillTxState.sort);
+                const compare = typeof left === 'number' ? left - right : String(left).localeCompare(String(right), locale());
+                return drillTxState.descending ? -compare : compare;
+            });
+            document.getElementById('drillTransactionsRows').innerHTML = rows.map(row => `<tr><td>${fmt_date(row.date)}</td><td>${escape_budget(row.name)}</td><td>${escape_budget(row._cls?.category || 'Unkategorisiert')}</td><td>${escape_budget(budgetLabel(row))}</td><td class="num">${fmt_eur(row.betrag_cents)}</td></tr>`).join('') || '<tr><td colspan="5">Keine passenden Buchungen.</td></tr>';
+        }
+        function render_drill_transactions() {
+            const container = document.getElementById('drillTransactionsMatchers');
+            container.innerHTML = matcher_editor_html(drillTxState.matchers);
+            render_drill_transaction_rows();
+            container.querySelectorAll('.rule-matcher-row').forEach((element, index) => {
+                element.querySelector('[data-matcher-value]').addEventListener('input', () => {
+                    drillTxState.matchers[index].value = element.querySelector('[data-matcher-value]').value.trim();
+                    render_drill_transaction_rows();
+                });
+                [element.querySelector('[data-matcher-field]'), element.querySelector('[data-matcher-operator]'), element.querySelector('[data-matcher-exclude]')].forEach(control => control.addEventListener('change', () => {
+                    drillTxState.matchers[index] = {
+                        field: element.querySelector('[data-matcher-field]').value,
+                        operator: element.querySelector('[data-matcher-operator]').value,
+                        value: element.querySelector('[data-matcher-value]').value.trim(),
+                        exclude: element.querySelector('[data-matcher-exclude]').checked
+                    };
+                    render_drill_transactions();
+                }));
+                element.querySelector('.remove-matcher-btn').addEventListener('click', () => {
+                    if (drillTxState.matchers.length < 2) return;
+                    drillTxState.matchers.splice(index, 1); render_drill_transactions();
+                });
+            });
+        }
+        document.querySelectorAll('[data-drill-sort]').forEach(header => header.onclick = () => {
+            drillTxState.descending = drillTxState.sort === header.dataset.drillSort ? !drillTxState.descending : false;
+            drillTxState.sort = header.dataset.drillSort; render_drill_transaction_rows();
+        });
+        document.getElementById('drillTransactionsAddMatcher').addEventListener('click', () => {
+            drillTxState.matchers.push({ field: 'any', operator: 'contains', value: '', exclude: false });
+            render_drill_transactions();
+        });
+        document.getElementById('closeDrillTransactions').addEventListener('click', () => document.getElementById('drillTransactionsDialog').close());
+
         function render_all() {
             if (!ruleSet) return;
             populate_week_filter();
@@ -2915,7 +2978,12 @@
             notice.textContent = (missingAccount ? 'Kontoinformation fehlt. Unter CSV-Import die Spalte für das eigene Konto wählen oder getrennte Dateien mit einem Kontonamen importieren. Konto/Bank können Empfängerdaten sein. ' : '') + `${unmatched} PayPal-Bankbuchung(en) ohne eindeutigen Gegenposten. Bitte vollständige PayPal-Historie importieren und in den Budgetdetails prüfen; diese Beträge bleiben sichtbar.`;
             for (const kind of ['budget','fixed','income']) {
                 const model = build_timeline(rows, ruleSet, kind, granularity, chartDrill[kind]);
-                const onSelect = kind === 'income' ? null : key => { if (!chartDrill[kind]) { chartDrill[kind] = key; chartFilter[kind].clear(); render_all(); } };
+                const onSelect = kind === 'income' ? null : (key, stamp) => {
+                    if (!chartDrill[kind]) { chartDrill[kind] = key; chartFilter[kind].clear(); render_all(); return; }
+                    const series = model.series.find(item => item.key === key);
+                    const bucket = series?.rowsByStamp.get(stamp);
+                    if (bucket) open_drill_transactions(`${series.label} · ${period_label(new Date(stamp), granularity)}`, bucket);
+                };
                 const filter = chartFilter[kind];
                 const shown = filter?.size ? { ...model, series: model.series.filter(series => filter.has(series.key)) } : model;
                 render_timeline(document.getElementById(kind+'Chart'), shown, onSelect, { layout: chartLayout, deviation: chartDeviation });

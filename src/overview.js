@@ -51,9 +51,10 @@ export function build_timeline(rows, settings, kind, granularity = 'month', dril
       label = key === 'Ausgaben' ? t('charts.expenses') : key === 'Gehalt' ? t('charts.salary') : t('charts.otherIncome'); cents = row.betrag_cents;
       color = key === 'Ausgaben' ? '#db6671' : key === 'Gehalt' ? '#35a880' : '#679ce4';
     }
-    if (!series.has(key)) series.set(key, { key, label, color, values: new Map() });
+    if (!series.has(key)) series.set(key, { key, label, color, values: new Map(), rowsByStamp: new Map() });
     const stamp = +period_start(reporting_date(row), granularity), s = series.get(key);
     s.values.set(stamp, (s.values.get(stamp) || 0) + cents);
+    s.rowsByStamp.set(stamp, [...(s.rowsByStamp.get(stamp) || []), row]);
   }
   const stamps = [...periods.keys()].sort((a,b) => a-b);
   return { labels: stamps.map(s => periods.get(s)), stamps,
