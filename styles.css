@@ -862,3 +862,39 @@ button.budget-totals-cell:hover { border-color: var(--accent); }
 .main-budget[open] .main-budget-arrow { transform: rotate(135deg); }
 .main-budget .transaction-rows td { width: auto; }
 .main-budget .transaction-rows .tx-description { overflow-wrap: anywhere; }
+
+/* Settings > Fix Expense / Income: same look as the week view's .main-budget
+   cards - one calm card per category, flat contents inside it, no stacked
+   tinted panels. Scoped so the Budgets tab keeps its own editor rows. */
+.recurring-settings-section { background: transparent; border: 0; padding: 0; }
+.recurring-settings-section:nth-child(even) { background: transparent; }
+.recurring-settings-section > p { margin: 0 0 12px; font-size: .85rem; color: var(--text-muted); }
+.recurring-settings-section .fixexpense-group { padding: 8px 12px; margin: 8px 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.recurring-settings-section .main-budget-editor-row { margin: 0; gap: 8px; }
+.recurring-settings-section .fixexpense-group-row { background: transparent; }
+.recurring-settings-section .main-budget-editor-row button { min-height: 36px; }
+.recurring-settings-section .group-toggle-btn { width: 28px; min-width: 28px !important; min-height: 28px !important; border: 0; background: transparent; color: var(--text-muted); font-size: .65rem; }
+.recurring-settings-section .main-budget-editor-row > input { border-color: transparent; background: transparent; font-weight: 600; min-height: 36px; }
+.recurring-settings-section .main-budget-editor-row > input:hover { border-color: var(--border); }
+.recurring-settings-section .main-budget-editor-row > input:focus { border-color: var(--accent); background: var(--surface); outline: 0; }
+.recurring-settings-section .fixexpense-monthly { flex: 0 0 auto !important; font-weight: 400; font-size: .85rem; }
+.recurring-settings-section .remove-btn { flex: 0 0 auto; min-width: 32px !important; border: 0; background: transparent; color: var(--text-muted); }
+.recurring-settings-section .remove-btn:hover { color: var(--danger); }
+.recurring-settings-section .fixexpense-remove-placeholder { flex-basis: 32px !important; width: 32px !important; min-width: 32px !important; }
+.recurring-settings-section .fixexpense-body { margin: 8px 0 0; padding: 12px 0 0; border: 0; border-top: 1px solid var(--border); border-radius: 0; background: transparent; gap: 10px; }
+.recurring-settings-section .rule-matchers { padding: 0; background: transparent; }
+.recurring-settings-section .rule-matcher-actions button, .recurring-settings-section .fixexpense-add-sub-btn { background: transparent; border: 1px solid var(--border); color: var(--text); font-weight: 400; }
+.recurring-settings-section .fixexpense-add-sub-btn { border-style: dashed; color: var(--accent); min-width: 36px; min-height: 36px; }
+.recurring-settings-section .fixexpense-preview { margin: 0; padding: 0; background: transparent; border: 0; }
+.recurring-settings-section .fixexpense-preview summary { padding: 8px 10px; background: var(--accent-soft); border-radius: var(--radius-sm); }
+.recurring-settings-section .fixexpense-group-body { margin: 6px 0 0; padding: 0 0 0 12px; border: 0; gap: 0; }
+.recurring-settings-section .fixexpense-group-body .fixexpense-row { background: transparent; }
+.recurring-settings-section .fixexpense-group-body .fixexpense-row:not(:first-child) { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.recurring-settings-section .fixexpense-group-body .fixexpense-row > input { font-weight: 500; }
+.recurring-settings-section .fixexpense-group-body .fixexpense-body { border-top: 0; padding-top: 8px; margin: 0 0 8px; }
+.recurring-settings-section .fixexpense-group-body > .fixexpense-add-sub-btn { margin: 8px 0 4px; }
+.recurring-settings-section > button[id^="add"] { width: 100%; min-height: 44px; background: transparent; border: 1px dashed var(--accent); color: var(--accent); font-weight: 600; }
+.recurring-settings-section .rule-matcher-row { grid-template-columns: minmax(115px, .9fr) minmax(105px, .8fr) minmax(120px, 1.4fr) auto 32px; }
+@media (max-width: 600px) {
+    .recurring-settings-section .rule-matcher-row { grid-template-columns: 1fr 1fr 32px; }
+}
