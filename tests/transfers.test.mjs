@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { enrich_row } from '../src/data.js';
-import { reconcile_paypal, find_internal_transfer_pairs, apply_internal_transfer_pairs, account_key } from '../src/transfers.js';
+import { reconcile_paypal, find_internal_transfer_pairs, apply_internal_transfer_pairs, find_reversal_pairs, apply_reversal_pairs, account_key } from '../src/transfers.js';
+import { tx_id } from '../src/data.js';
 const row = (Name, Betrag, Bank, Datum = '10.09.2026', group = 'essential') => ({ ...enrich_row({ Datum, Name, Betrag, Bank, Account: Bank, Konto: Bank, Verwendungszweck: '' }), _cls: { category: 'Lebensmittel', group, excluded: group === 'internal_transfer' } });
 
 test('PayPal merchant, funding and bank debit count once with bank account attribution', () => {
@@ -57,4 +58,38 @@ test('manual bank category survives merging its PayPal merchant purchase', () =>
  bank._cls={category:'Dining',group:'essential',source:'manual',excluded:false};bank._matchedManualId='manual-1';
  reconcile_paypal([bank,purchase]);
  assert.equal(purchase._cls.category,'Dining');assert.equal(purchase._matchedManualId,'manual-1');assert.equal(bank._cls.excluded,true);
+});
+
+test('a failed top-up and its reversal cancel out while the real purchase stays', () => {
+  const topUp = row('Bank Account (direct debit)','43.51','PayPal','19.09.2026');
+  const purchase = row('Netto ApS & Co. KG','-43.51','PayPal','19.09.2026');
+  const reversal = row('Bank Account','-43.51','PayPal','24.09.2026');
+  const rows = [topUp, purchase, reversal];
+  const pairs = find_reversal_pairs(rows, 14);
+  assert.equal(pairs.length, 1);
+  apply_reversal_pairs(rows, pairs);
+  assert.equal(topUp._cls.excluded, true);
+  assert.equal(reversal._cls.excluded, true);
+  assert.equal(purchase._cls.excluded, false);
+  assert.equal(topUp._mergeGroup.id, reversal._mergeGroup.id);
+  assert.deepEqual(topUp._mergeGroup.members, [tx_id(topUp), tx_id(reversal)]);
+});
+test('reversals need the same account, a related counterparty and the date window', () => {
+  const sameAmountDifferentPayee = [row('Miete','-500','DKB','01.09.2026'), row('Gehalt','500','DKB','03.09.2026')];
+  assert.equal(find_reversal_pairs(sameAmountDifferentPayee, 14).length, 0);
+  const differentAccounts = [row('Bank Account','-20','PayPal','01.09.2026'), row('Bank Account','20','DKB','03.09.2026')];
+  assert.equal(find_reversal_pairs(differentAccounts, 14).length, 0);
+  const tooFarApart = [row('Bank Account','-20','PayPal','01.09.2026'), row('Bank Account','20','PayPal','30.09.2026')];
+  assert.equal(find_reversal_pairs(tooFarApart, 14).length, 0);
+});
+test('a transaction split out by hand is never merged again', () => {
+  const topUp = row('Bank Account (direct debit)','43.51','PayPal','19.09.2026');
+  const reversal = row('Bank Account','-43.51','PayPal','24.09.2026');
+  assert.equal(find_reversal_pairs([topUp, reversal], 14, new Set([tx_id(reversal)])).length, 0);
+});
+test('merged PayPal legs are grouped so the UI can list them together', () => {
+  const purchase = row('Shop','-20','PayPal'), bank = row('PayPal Europe','-20','DKB');
+  reconcile_paypal([purchase, bank]);
+  assert.equal(purchase._mergeGroup.kind, 'paypal');
+  assert.equal(purchase._mergeGroup.id, bank._mergeGroup.id);
 });

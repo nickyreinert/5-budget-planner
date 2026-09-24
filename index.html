@@ -582,6 +582,11 @@
         <label><span data-i18n="txEdit.reportingDate">Budget-/Auswertungsdatum für wiederkehrende Buchungen</span><input type="date" id="txEditEffectiveDate"></label>
         <p class="dialog-hint" id="txEditEffectiveDateHint"></p>
         <button type="button" id="txEditRestoreEffectiveDate" data-i18n="txEdit.restoreAutomaticPeriod">Automatische Zuordnung wiederherstellen</button>
+        <section id="txEditMergeSection" class="tx-merge-section" hidden>
+            <h3 data-i18n="merge.title">Zusammengeführte Buchungen</h3>
+            <p class="dialog-hint" id="txEditMergeHint"></p>
+            <div id="txEditMergeList" class="tx-merge-list"></div>
+        </section>
         <p id="txEditError" role="alert"></p>
         <div class="dialog-actions"><button type="button" id="cancelTxEdit" data-i18n="modal.cancel">Abbrechen</button><button type="button" id="saveTxEdit" class="primary" data-i18n="modal.save">Speichern</button></div>
     </dialog>
@@ -618,7 +623,7 @@
         import { push_digit, pop_digit, buffer_to_cents } from './src/keypad.js';
         import { transaction_to_row, transaction_key } from './src/gocardless.js';
         import { get_sync_settings, save_sync_settings, render_google_button, sign_out as sync_sign_out, current_session as current_sync_session, push_data as sync_push_data, pull_data as sync_pull_data } from './src/sync.js';
-        import { find_internal_transfer_pairs, apply_internal_transfer_pairs, get_transfer_max_days, save_transfer_max_days, reconcile_paypal, account_key } from './src/transfers.js';
+        import { find_internal_transfer_pairs, apply_internal_transfer_pairs, find_reversal_pairs, apply_reversal_pairs, get_reversal_max_days, clear_merge_groups, get_merge_split_ids, save_merge_split_ids, get_transfer_max_days, save_transfer_max_days, reconcile_paypal, account_key } from './src/transfers.js';
 
         let currentYear = '';
         let weekFilterMonday = null; // Monday of the week the Übersicht tab is narrowed to, or null for none
@@ -677,9 +682,12 @@
             apply_note_overrides(module_data, noteOverrides);
             apply_date_overrides(module_data, dateOverrides);
             classify_all(module_data, ruleSet);
-            apply_internal_transfer_pairs(module_data, find_internal_transfer_pairs(module_data, get_transfer_max_days()));
+            const splitIds = get_merge_split_ids();
+            clear_merge_groups(module_data);
+            apply_internal_transfer_pairs(module_data, find_internal_transfer_pairs(module_data, get_transfer_max_days(), splitIds));
+            apply_reversal_pairs(module_data, find_reversal_pairs(module_data, get_reversal_max_days(), splitIds));
             apply_manual_overrides(module_data, overridesById, ruleSet);
-            reconcile_paypal(module_data, Math.max(7, get_transfer_max_days()));
+            reconcile_paypal(module_data, Math.max(7, get_transfer_max_days()), splitIds);
             ensure_budget_coverage(ruleSet, module_data);
             apply_effective_periods(module_data, effectivePeriodOverrides);
         }
@@ -899,6 +907,7 @@
                 <td class="tx-description">
                     <button type="button" class="tx-name-btn" data-tx-id="${txId}" title="${t('txEdit.title')}">${escape_budget(r.name)}</button>
                     <button type="button" class="tx-category-label" style="border-left:4px solid ${category_color(r._cls.category)}" data-tx-id="${txId}" title="${t('txEdit.quickRecategorize')}">${escape_budget(r._cls.category)}</button>
+                    ${r._mergeGroup ? `<button type="button" class="tx-merge-badge" data-tx-id="${txId}" title="${t('merge.badgeTitle', { count: r._mergeGroup.members.length })}" aria-label="${t('merge.badgeTitle', { count: r._mergeGroup.members.length })}">\u29c9 ${r._mergeGroup.members.length}</button>` : ''}
                 </td>
                 <td class="num">${amountCell}</td>
                 <td class="delete-col">${actionsCell}</td>
@@ -948,6 +957,9 @@
             });
             container.querySelectorAll('.tx-amount-btn').forEach(btn => {
                 btn.addEventListener('click', () => start_edit_amount(btn));
+            });
+            container.querySelectorAll('.tx-merge-badge').forEach(btn => {
+                btn.addEventListener('click', () => open_tx_edit_dialog(decodeURIComponent(btn.dataset.txId)));
             });
             container.querySelectorAll('.tx-actions-btn').forEach(btn => {
                 btn.addEventListener('click', () => open_tx_row_actions_dialog(btn));
@@ -1055,7 +1067,58 @@
             document.getElementById('txEditError').textContent = '';
             dialog.dataset.txId = txId;
             dialog.dataset.effectivePeriodMode = '';
+            render_tx_merge_section(row, txId);
             dialog.showModal();
+        }
+
+        // Shows every transaction the automatic detection folded into the same
+        // booking, with a per-leg "Trennen" escape hatch - and the inverse
+        // "wieder zusammenführen" for a leg that was split out earlier.
+        function render_tx_merge_section(row, txId) {
+            const section = document.getElementById('txEditMergeSection');
+            const list = document.getElementById('txEditMergeList');
+            const hint = document.getElementById('txEditMergeHint');
+            const splitIds = get_merge_split_ids();
+            list.innerHTML = '';
+            if (splitIds.has(txId)) {
+                section.hidden = false;
+                hint.textContent = t('merge.splitHint');
+                const rejoin = document.createElement('button');
+                rejoin.type = 'button';
+                rejoin.textContent = t('merge.rejoin');
+                rejoin.addEventListener('click', () => update_merge_splits(ids => ids.delete(txId)));
+                list.appendChild(rejoin);
+                return;
+            }
+            if (!row._mergeGroup) { section.hidden = true; return; }
+            section.hidden = false;
+            hint.textContent = t(`merge.hint.${row._mergeGroup.kind}`);
+            row._mergeGroup.members.forEach(memberId => {
+                const member = module_data.find(r => tx_id(r) === memberId);
+                if (!member) return;
+                const entry = document.createElement('div');
+                entry.className = 'tx-merge-entry';
+                const info = document.createElement('div');
+                info.className = 'tx-merge-entry-info';
+                info.innerHTML = `<strong>${escape_budget(member.name)}</strong><small>${fmt_date(member.date)} · ${fmt_eur(-member.betrag_cents)}</small>`;
+                entry.appendChild(info);
+                const split = document.createElement('button');
+                split.type = 'button';
+                split.textContent = t('merge.split');
+                split.addEventListener('click', () => update_merge_splits(ids => ids.add(memberId)));
+                entry.appendChild(split);
+                list.appendChild(entry);
+            });
+        }
+
+        function update_merge_splits(mutate) {
+            const ids = get_merge_split_ids();
+            mutate(ids);
+            save_merge_split_ids(ids);
+            reclassify();
+            render_all();
+            render_week();
+            document.getElementById('txEditDialog').close();
         }
 
         document.getElementById('cancelTxEdit').addEventListener('click', () => {

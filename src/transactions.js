@@ -67,5 +67,7 @@ export function transaction_source_label(row) {
   // from every total - otherwise a successfully-deduplicated PayPal pair
   // just silently vanishes from the ledger with no trace of why.
   if (row._paypalLinked) return row._cls?.source === 'paypal-settlement' || row._cls?.source === 'paypal-funding' ? 'PayPal · Ausgleichsbuchung (ausgeschlossen)' : 'PayPal · zugeordnet';
+  if (row._cls?.source === 'reversal-detection') return 'Storniert · zusammengeführt (ausgeschlossen)';
+  if (row._mergeGroup) return 'Zusammengeführt';
   return row.source === 'manual' ? 'Manuell' : row.source === 'gocardless' ? 'Bankimport' : 'CSV-Import';
 }

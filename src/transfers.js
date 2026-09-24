@@ -10,8 +10,15 @@
 // configurable number of days of each other. Greedy nearest-gap matching;
 // each transaction is used in at most one pair.
 
+import { tx_id } from './data.js';
+
 const STORAGE_KEY = 'internalTransferMaxDays';
 const DEFAULT_MAX_DAYS = 3;
+// A reversal ist meist deutlich später gebucht als das Original, deshalb ein
+// eigenes, größeres Fenster statt des engen Transfer-Fensters.
+const REVERSAL_STORAGE_KEY = 'reversalMaxDays';
+const DEFAULT_REVERSAL_MAX_DAYS = 14;
+const SPLIT_STORAGE_KEY = 'mergeSplitIds';
 
 export function get_transfer_max_days() {
   const stored = parseInt(localStorage.getItem(STORAGE_KEY), 10);
@@ -22,13 +29,48 @@ export function save_transfer_max_days(days) {
   localStorage.setItem(STORAGE_KEY, String(Math.max(0, Math.round(days) || 0)));
 }
 
+export function get_reversal_max_days() {
+  const stored = parseInt(localStorage.getItem(REVERSAL_STORAGE_KEY), 10);
+  return Number.isFinite(stored) && stored >= 0 ? stored : DEFAULT_REVERSAL_MAX_DAYS;
+}
+
+export function save_reversal_max_days(days) {
+  localStorage.setItem(REVERSAL_STORAGE_KEY, String(Math.max(0, Math.round(days) || 0)));
+}
+
+// Transactions the user explicitly pulled OUT of an automatic merge ("wait,
+// this one doesn't belong here") - they never take part in any pairing again.
+export function get_merge_split_ids() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(SPLIT_STORAGE_KEY) || '[]');
+    return new Set(Array.isArray(stored) ? stored : []);
+  } catch { return new Set(); }
+}
+
+export function save_merge_split_ids(ids) {
+  localStorage.setItem(SPLIT_STORAGE_KEY, JSON.stringify([...ids]));
+}
+
+// Every automatically linked set of transactions carries the same
+// `_mergeGroup`, so the UI can show "this is one merged booking" and list
+// its members. Derived per reclassify, never persisted.
+export function clear_merge_groups(rows) {
+  rows.forEach(r => { delete r._mergeGroup; });
+}
+
+function tag_merge_group(members, kind) {
+  const ids = members.map(tx_id);
+  const id = `${kind}:${[...ids].sort().join('|')}`;
+  members.forEach(r => { r._mergeGroup = { id, kind, members: ids }; });
+}
+
 function days_between(a, b) {
   return Math.abs(a.getTime() - b.getTime()) / 86400000;
 }
 
 // Returns [{a, b, days}], `a` always the earlier leg, sorted by that date.
-export function find_internal_transfer_pairs(rows, maxDays) {
-  const candidates = rows.filter(r => r.betrag_cents && r._cls?.group === 'internal_transfer' && !/paypal|bank account/i.test(`${r.name} ${r.verwendungszweck} ${account_key(r)}`));
+export function find_internal_transfer_pairs(rows, maxDays, splitIds = new Set()) {
+  const candidates = rows.filter(r => r.betrag_cents && r._cls?.group === 'internal_transfer' && !splitIds.has(tx_id(r)) && !/paypal|bank account/i.test(`${r.name} ${r.verwendungszweck} ${account_key(r)}`));
   const byAbsAmount = new Map();
   candidates.forEach((r, idx) => {
     const key = Math.abs(r.betrag_cents);
@@ -69,6 +111,74 @@ export function apply_internal_transfer_pairs(rows, pairs) {
   rowsInPairs.forEach(r => {
     if (!r._cls) return;
     r._cls = { ...r._cls, group: 'internal_transfer', excluded: true, source: 'transfer-detection' };
+  });
+  pairs.forEach(p => tag_merge_group([p.a, p.b], 'transfer'));
+}
+
+// --- Reversals / failed transfers -------------------------------------
+// A booking and its later cancellation land on the SAME account (unlike the
+// two-account transfer pair above): a top-up that never went through, a
+// refunded purchase, a returned direct debit. Both legs cancel each other
+// out to exactly zero, so counting either one distorts the budget - while
+// the real expense they were meant to cover is a separate transaction with
+// a different counterparty that must stay untouched.
+//
+// Deliberately NOT keyed off any wording like "failed transfer" (that's
+// bank/processor specific and would never generalise). The evidence used is
+// purely structural: same account, exactly opposite amounts, same
+// counterparty, within `maxDays`.
+function name_key(row) {
+  return String(row.name || row.Name || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+// "Bank Account" vs "Bank Account (direct debit)": the reversal leg is
+// usually the same counterparty, just with an extra qualifier appended.
+function same_counterparty(a, b) {
+  const x = name_key(a), y = name_key(b);
+  if (!x || !y) return false;
+  return x.startsWith(y) || y.startsWith(x);
+}
+
+export function find_reversal_pairs(rows, maxDays = DEFAULT_REVERSAL_MAX_DAYS, splitIds = new Set()) {
+  const candidates = rows.filter(r => r.betrag_cents && !splitIds.has(tx_id(r)));
+  const byAbsAmount = new Map();
+  candidates.forEach((r, idx) => {
+    const key = Math.abs(r.betrag_cents);
+    if (!byAbsAmount.has(key)) byAbsAmount.set(key, []);
+    byAbsAmount.get(key).push(idx);
+  });
+
+  const used = new Set();
+  const pairs = [];
+  candidates.forEach((r, idx) => {
+    if (used.has(idx)) return;
+    let best = null;
+    for (const otherIdx of byAbsAmount.get(Math.abs(r.betrag_cents)) || []) {
+      if (otherIdx === idx || used.has(otherIdx)) continue;
+      const other = candidates[otherIdx];
+      if (other.betrag_cents !== -r.betrag_cents) continue;
+      if (account_key(r) !== account_key(other)) continue;
+      if (!same_counterparty(r, other)) continue;
+      const gap = days_between(r.date, other.date);
+      if (gap > maxDays) continue;
+      if (!best || gap < best.gap) best = { idx: otherIdx, gap };
+    }
+    if (!best) return;
+    used.add(idx); used.add(best.idx);
+    const other = candidates[best.idx];
+    const [a, b] = r.date <= other.date ? [r, other] : [other, r];
+    pairs.push({ a, b, days: best.gap });
+  });
+
+  return pairs.sort((x, y) => x.a.date - y.a.date);
+}
+
+export function apply_reversal_pairs(rows, pairs) {
+  pairs.forEach(p => {
+    [p.a, p.b].forEach(r => {
+      r._cls = { ...(r._cls || {}), group: 'internal_transfer', excluded: true, source: 'reversal-detection' };
+    });
+    tag_merge_group([p.a, p.b], 'reversal');
   });
 }
 
@@ -120,12 +230,13 @@ function unique_bundle(candidates, target) {
   const matches = sums.get(target);
   return matches?.length === 1 ? matches[0] : null;
 }
-export function reconcile_paypal(rows, maxDays = 7) {
+export function reconcile_paypal(rows, maxDays = 7, splitIds = new Set()) {
   rows.forEach(r => { delete r._effectiveAccount; delete r._paypalLinked; delete r._paypalUnmatched; });
-  const purchases = rows.filter(r => is_paypal_account(r) && !funding(r) && r.betrag_cents);
+  const eligible = r => !splitIds.has(tx_id(r)) && r._mergeGroup?.kind !== 'reversal';
+  const purchases = rows.filter(r => is_paypal_account(r) && !funding(r) && r.betrag_cents && eligible(r));
   const used = new Set();
-  rows.filter(funding).forEach(r => { r._cls = { ...r._cls, group: 'internal_transfer', excluded: true, source: 'paypal-funding' }; });
-  for (const bank of rows.filter(settlement).sort((a,b) => a.date-b.date)) {
+  rows.filter(r => funding(r) && eligible(r)).forEach(r => { r._cls = { ...r._cls, group: 'internal_transfer', excluded: true, source: 'paypal-funding' }; });
+  for (const bank of rows.filter(r => settlement(r) && eligible(r)).sort((a,b) => a.date-b.date)) {
     const candidates = purchases.filter(r => !used.has(r) && Math.sign(r.betrag_cents) === Math.sign(bank.betrag_cents) && days_between(r.date, bank.date) <= maxDays);
     const bundle = unique_bundle(candidates, Math.abs(bank.betrag_cents));
     if (!bundle) {
@@ -146,6 +257,7 @@ export function reconcile_paypal(rows, maxDays = 7) {
       }
       used.add(purchase); purchase._effectiveAccount = account_key(bank); purchase._paypalLinked = true;
     }
+    tag_merge_group([bank, ...bundle], 'paypal');
   }
   return rows;
 }
