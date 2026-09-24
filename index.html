@@ -465,7 +465,12 @@
         <div class="dialog-actions"><h2 id="drillTransactionsTitle">Buchungen</h2><button type="button" id="closeDrillTransactions" aria-label="Schließen">×</button></div>
         <div id="drillTransactionsMatchers" class="rule-matchers"></div>
         <button type="button" id="drillTransactionsAddMatcher">+ Suchmuster</button>
-        <div class="transaction-browser-table"><table><thead><tr><th data-drill-sort="date">Datum</th><th data-drill-sort="name">Buchung</th><th data-drill-sort="category">Transaktionskategorie</th><th data-drill-sort="budget">Budget</th><th data-drill-sort="amount">Betrag</th></tr></thead><tbody id="drillTransactionsRows"></tbody></table></div>
+        <div class="drill-assign-bar">
+            <select id="drillAssignTarget" aria-label="Zielkategorie"></select>
+            <button type="button" id="drillAssignSelected" class="primary" hidden></button>
+            <button type="button" id="drillAssignAll" class="primary"></button>
+        </div>
+        <div class="transaction-browser-table"><table><thead><tr><th class="select-col"><input type="checkbox" id="drillSelectAll" aria-label="Alle auswählen"></th><th data-drill-sort="date">Datum</th><th data-drill-sort="name">Buchung</th><th data-drill-sort="category">Kategorie</th><th data-drill-sort="budget">Budget</th><th data-drill-sort="amount">Betrag</th></tr></thead><tbody id="drillTransactionsRows"></tbody></table></div>
     </dialog>
 
     <!-- Chart Enlarge Modal -->
@@ -623,7 +628,7 @@
         import { load_footer } from './src/footer.js';
         import { init_section_highlight } from './src/highlight.js';
         import { csv_records, reconcile_transactions, transaction_source_label } from './src/transactions.js';
-        import { category_catalog, sort_categories, fixed_expense_categories, UNCATEGORIZED, split_category, join_category } from './src/categories.js';
+        import { category_catalog, sort_categories, fixed_expense_categories, UNCATEGORIZED, ADDITIONAL_INCOME, split_category, join_category } from './src/categories.js';
         import { upsert_imported_entries, load_imported_entries } from './src/db.js';
         import { apply_amount_overrides, apply_note_overrides, apply_date_overrides, is_real_cashflow } from './src/data.js';
         import { load_amount_overrides, save_amount_override, load_all_overrides, save_overrides, add_manual_entry, load_manual_entries, delete_manual_entry, load_note_overrides, save_note_override, load_date_overrides, save_date_override, load_effective_period_overrides, save_effective_period_override, clear_effective_period_override } from './src/db.js';
@@ -2901,27 +2906,102 @@
         // lists the transactions behind that bar in a searchable, sortable table.
         let drillTxState = null;
         function open_drill_transactions(title, rows) {
-            drillTxState = { rows, matchers: [{ field: 'any', operator: 'contains', value: '', exclude: false }], sort: 'date', descending: true };
+            drillTxState = { rows, matchers: [{ field: 'any', operator: 'contains', value: '', exclude: false }], sort: 'date', descending: true, selected: new Set(), visible: [] };
             document.getElementById('drillTransactionsTitle').textContent = title;
             render_drill_transactions();
             document.getElementById('drillTransactionsDialog').showModal();
         }
-        function render_drill_transaction_rows() {
+
+        // Assignment targets grouped by what the category means: income,
+        // recurring expense (Fix Expense rule) or plain transaction category
+        // (which belongs to a budget). Income is only offered for incoming
+        // money.
+        function assign_category_groups() {
+            const rules = ruleSet.rules || [];
+            const namesOf = group => rules.filter(rule => rule.group === group).map(rule => rule.category || rule.label).filter(Boolean);
+            const income = new Set([ADDITIONAL_INCOME, ...namesOf('income')]);
+            const fixed = new Set(namesOf('fixed'));
+            const rest = collect_category_options().filter(name => !income.has(name) && !fixed.has(name));
+            return [
+                { key: 'income', label: 'Einnahmen', names: sort_categories([...income], favoriteCategories) },
+                { key: 'fixed', label: 'Wiederkehrende Ausgaben', names: sort_categories([...fixed], favoriteCategories) },
+                { key: 'spending', label: 'Transaktionskategorien', names: rest }
+            ].filter(group => group.names.length);
+        }
+        function assign_options_html(groups, { incoming = true, outgoing = true, current = '' } = {}) {
+            const optionsHtml = names => names.map(name => `<option value="${escape_budget(name)}">${escape_budget(name)}</option>`).join('');
+            const html = groups.filter(group => group.key !== 'income' || incoming).map(group => `<optgroup label="${escape_budget(group.label)}">${optionsHtml(group.names)}</optgroup>`).join('');
+            const known = groups.some(group => group.names.includes(current));
+            return (current && !known ? `<option value="${escape_budget(current)}">${escape_budget(current)}</option>` : '') + html;
+        }
+        function drill_visible_rows() {
             const active = drillTxState.matchers.filter(matcher => matcher.value);
             const rows = active.length ? drillTxState.rows.filter(row => rule_matches(row, { matchers: active })) : [...drillTxState.rows];
-            const budgetLabel = row => (ruleSet.mainCategories || []).find(item => item.id === category_to_main(row._cls?.category))?.label || '–';
             const valueFor = (row, key) => key === 'date' ? row.date.getTime() : key === 'amount' ? row.betrag_cents
-                : key === 'category' ? row._cls?.category || '' : key === 'budget' ? budgetLabel(row) : row.name || '';
+                : key === 'category' ? row._cls?.category || '' : key === 'budget' ? drill_budget_label(row) : row.name || '';
             rows.sort((a, b) => {
                 const left = valueFor(a, drillTxState.sort), right = valueFor(b, drillTxState.sort);
                 const compare = typeof left === 'number' ? left - right : String(left).localeCompare(String(right), locale());
                 return drillTxState.descending ? -compare : compare;
             });
-            document.getElementById('drillTransactionsRows').innerHTML = rows.map(row => `<tr><td>${fmt_date(row.date)}</td><td>${escape_budget(row.name)}</td><td>${escape_budget(row._cls?.category || 'Unkategorisiert')}</td><td>${escape_budget(budgetLabel(row))}</td><td class="num">${fmt_eur(row.betrag_cents)}</td></tr>`).join('') || '<tr><td colspan="5">Keine passenden Buchungen.</td></tr>';
+            return rows;
+        }
+        function drill_budget_label(row) {
+            return (ruleSet.mainCategories || []).find(item => item.id === category_to_main(row._cls?.category))?.label || '–';
+        }
+        function render_drill_transaction_rows() {
+            const rows = drillTxState.visible = drill_visible_rows();
+            const groups = assign_category_groups();
+            const body = document.getElementById('drillTransactionsRows');
+            body.innerHTML = rows.map((row, index) => {
+                const id = tx_id(row);
+                return `<tr><td class="select-col"><input type="checkbox" class="drill-row-select" data-index="${index}" aria-label="Auswählen"${drillTxState.selected.has(id) ? ' checked' : ''}></td><td>${fmt_date(row.date)}</td><td>${escape_budget(row.name)}</td><td><select class="drill-row-category" data-index="${index}" aria-label="Kategorie"></select></td><td>${escape_budget(drill_budget_label(row))}</td><td class="num">${fmt_eur(row.betrag_cents)}</td></tr>`;
+            }).join('') || '<tr><td colspan="6">Keine passenden Buchungen.</td></tr>';
+            const optionsFor = {};
+            body.querySelectorAll('.drill-row-category').forEach(select => {
+                const row = rows[Number(select.dataset.index)], current = row._cls?.category || UNCATEGORIZED, incoming = row.betrag_cents > 0;
+                const cacheKey = `${incoming}|${current}`;
+                select.innerHTML = optionsFor[cacheKey] ||= assign_options_html(groups, { incoming, current });
+                select.value = current;
+                select.addEventListener('change', async () => { await assign_category([tx_id(row)], select.value); render_drill_transaction_rows(); });
+            });
+            body.querySelectorAll('.drill-row-select').forEach(box => box.addEventListener('change', () => {
+                const id = tx_id(rows[Number(box.dataset.index)]);
+                if (box.checked) drillTxState.selected.add(id); else drillTxState.selected.delete(id);
+                update_drill_assign_bar();
+            }));
+            update_drill_assign_bar();
+        }
+        function update_drill_assign_bar() {
+            const rows = drillTxState.visible;
+            const selectedCount = rows.filter(row => drillTxState.selected.has(tx_id(row))).length;
+            const target = document.getElementById('drillAssignTarget');
+            const selectedBtn = document.getElementById('drillAssignSelected'), allBtn = document.getElementById('drillAssignAll');
+            const selectAll = document.getElementById('drillSelectAll');
+            selectAll.checked = rows.length > 0 && selectedCount === rows.length;
+            selectAll.indeterminate = selectedCount > 0 && selectedCount < rows.length;
+            selectedBtn.hidden = !selectedCount;
+            selectedBtn.textContent = `${selectedCount} ausgewählte zuweisen`;
+            allBtn.textContent = `Alle ${rows.length} Treffer zuweisen`;
+            selectedBtn.disabled = allBtn.disabled = !target.value;
+            allBtn.disabled ||= !rows.length;
+        }
+        // Income categories only take incoming rows; expenses in the batch are skipped.
+        async function assign_drill_rows(rows) {
+            const category = document.getElementById('drillAssignTarget').value;
+            const isIncome = assign_category_groups().some(group => group.key === 'income' && group.names.includes(category));
+            const targets = isIncome ? rows.filter(row => row.betrag_cents > 0) : rows;
+            if (!category || !targets.length) return;
+            await assign_category(targets.map(tx_id), category);
+            drillTxState.selected.clear();
+            render_drill_transaction_rows();
         }
         function render_drill_transactions() {
             const container = document.getElementById('drillTransactionsMatchers');
             container.innerHTML = matcher_editor_html(drillTxState.matchers);
+            const target = document.getElementById('drillAssignTarget'), previous = target.value;
+            target.innerHTML = '<option value="">Kategorie wählen …</option>' + assign_options_html(assign_category_groups());
+            target.value = previous;
             render_drill_transaction_rows();
             container.querySelectorAll('.rule-matcher-row').forEach((element, index) => {
                 element.querySelector('[data-matcher-value]').addEventListener('input', () => {
@@ -2943,6 +3023,13 @@
                 });
             });
         }
+        document.getElementById('drillAssignTarget').addEventListener('change', update_drill_assign_bar);
+        document.getElementById('drillAssignSelected').addEventListener('click', () => assign_drill_rows(drillTxState.visible.filter(row => drillTxState.selected.has(tx_id(row)))));
+        document.getElementById('drillAssignAll').addEventListener('click', () => assign_drill_rows(drillTxState.visible));
+        document.getElementById('drillSelectAll').addEventListener('change', event => {
+            drillTxState.visible.forEach(row => event.target.checked ? drillTxState.selected.add(tx_id(row)) : drillTxState.selected.delete(tx_id(row)));
+            render_drill_transaction_rows();
+        });
         document.querySelectorAll('[data-drill-sort]').forEach(header => header.onclick = () => {
             drillTxState.descending = drillTxState.sort === header.dataset.drillSort ? !drillTxState.descending : false;
             drillTxState.sort = header.dataset.drillSort; render_drill_transaction_rows();

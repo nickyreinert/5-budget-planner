@@ -560,6 +560,10 @@ dialog.rule-transaction-browser:not([open]) { display: none; }
    a fixed 310px that leaves a big empty gap on taller dialogs/screens. */
 .transaction-browser-table { flex: 1 1 auto; min-height: 0; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); margin-top: 14px; }
 .transaction-browser-table th { white-space: nowrap; }
+.drill-assign-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; padding: 8px; background: var(--accent-soft); border-radius: var(--radius-sm); }
+.drill-assign-bar select { flex: 1 1 220px; min-width: 0; }
+.transaction-browser-table .select-col { width: 32px; text-align: center; }
+.drill-row-category { width: 100%; min-width: 160px; max-width: 260px; padding: 4px 6px; font-size: .85rem; }
 @media (max-width: 600px) {
     .review-dialog { padding: 14px; width: 100vw; max-height: 100dvh; border-radius: 0; }
     .review-dialog.rule-transaction-browser { width: 100vw; height: 100dvh; max-height: 100dvh; }
