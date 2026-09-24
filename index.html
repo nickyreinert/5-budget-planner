@@ -110,7 +110,7 @@
                 <div class="stats-bar" id="statsBar"></div>
                 <div class="overview-filters" id="overviewFilters">
                     <div class="overview-filters-top">
-                        <div id="yearButtons" aria-label="Jahr"></div>
+                        <div id="yearButtons" data-i18n-aria-label="filters.year" aria-label="Jahr"></div>
                         <div id="chartViewControls" class="chart-view-controls">
                             <select id="chartLayoutSelect" data-i18n-aria-label="charts.layout" aria-label="Diagrammtyp">
                                 <option value="stacked" data-i18n="charts.stacked">Gestapelt</option>
@@ -124,11 +124,11 @@
                         </div>
                     </div>
                     <div class="filter-controls">
-                        <label>Monat<select id="monthFilterSelect" aria-label="Monat"></select></label>
-                        <label>Zeitraum<select id="weekFilterSelect" aria-label="Kalenderwoche"></select></label>
-                        <label>Ansicht<select id="granularitySelect"><option value="week">Woche</option><option value="month" selected>Monat</option><option value="year">Jahr</option></select></label>
-                        <label>Konto<select id="accountSelect"><option value="">Alle Konten</option></select></label>
-                        <button id="resetDrillBtn" type="button">Drilldown zurücksetzen</button>
+                        <label><span data-i18n="filters.month">Monat</span><select id="monthFilterSelect" data-i18n-aria-label="filters.month" aria-label="Monat"></select></label>
+                        <label><span data-i18n="filters.period">Zeitraum</span><select id="weekFilterSelect" data-i18n-aria-label="filters.calendarWeek" aria-label="Kalenderwoche"></select></label>
+                        <label><span data-i18n="filters.view">Ansicht</span><select id="granularitySelect"><option value="week" data-i18n="filters.viewWeek">Woche</option><option value="month" data-i18n="filters.viewMonth" selected>Monat</option><option value="year" data-i18n="filters.viewYear">Jahr</option></select></label>
+                        <label><span data-i18n="filters.account">Konto</span><select id="accountSelect"><option value="">Alle Konten</option></select></label>
+                        <button id="resetDrillBtn" type="button" data-i18n="filters.resetDrill">Drilldown zurücksetzen</button>
                     </div>
                     <div id="overviewFilterNote" class="filter-note" aria-live="polite"></div>
                 </div>
@@ -462,15 +462,15 @@
     </dialog>
 
     <dialog id="drillTransactionsDialog" class="review-dialog rule-transaction-browser" aria-labelledby="drillTransactionsTitle">
-        <div class="dialog-actions"><h2 id="drillTransactionsTitle">Buchungen</h2><button type="button" id="closeDrillTransactions" aria-label="Schließen">×</button></div>
+        <div class="dialog-actions"><h2 id="drillTransactionsTitle" data-i18n="drill.title">Buchungen</h2><button type="button" id="closeDrillTransactions" data-i18n-aria-label="drill.close" aria-label="Schließen">×</button></div>
         <div id="drillTransactionsMatchers" class="rule-matchers"></div>
-        <button type="button" id="drillTransactionsAddMatcher">+ Suchmuster</button>
+        <button type="button" id="drillTransactionsAddMatcher" data-i18n="wizard.addMatcher">+ Suchmuster</button>
         <div class="drill-assign-bar">
-            <select id="drillAssignTarget" aria-label="Zielkategorie"></select>
+            <select id="drillAssignTarget" data-i18n-aria-label="drill.targetAria" aria-label="Zielkategorie"></select>
             <button type="button" id="drillAssignSelected" class="primary" hidden></button>
             <button type="button" id="drillAssignAll" class="primary"></button>
         </div>
-        <div class="transaction-browser-table"><table><thead><tr><th class="select-col"><input type="checkbox" id="drillSelectAll" aria-label="Alle auswählen"></th><th data-drill-sort="date">Datum</th><th data-drill-sort="name">Buchung</th><th data-drill-sort="category">Kategorie</th><th data-drill-sort="budget">Budget</th><th data-drill-sort="amount">Betrag</th></tr></thead><tbody id="drillTransactionsRows"></tbody></table></div>
+        <div class="transaction-browser-table"><table><thead><tr><th class="select-col"><input type="checkbox" id="drillSelectAll" data-i18n-aria-label="drill.selectAll" aria-label="Alle auswählen"></th><th data-drill-sort="date" data-i18n="table.date">Datum</th><th data-drill-sort="name" data-i18n="drill.colName">Buchung</th><th data-drill-sort="category" data-i18n="table.kategorie">Kategorie</th><th data-drill-sort="budget" data-i18n="drill.colBudget">Budget</th><th data-drill-sort="amount" data-i18n="table.betrag">Betrag</th></tr></thead><tbody id="drillTransactionsRows"></tbody></table></div>
     </dialog>
 
     <!-- Chart Enlarge Modal -->
@@ -2419,25 +2419,26 @@
         }
 
         function matcher_editor_html(matchers) {
+            const opt = (matcher, prop, value, key) => `<option value="${value}" ${matcher[prop] === value ? 'selected' : ''}>${t(key)}</option>`;
             return matchers.map((matcher, index) => `
                 <div class="rule-matcher-row" data-matcher-index="${index}">
-                    <select data-matcher-field aria-label="Feld">
-                        <option value="any" ${matcher.field === 'any' ? 'selected' : ''}>Alle Textfelder</option>
-                        <option value="name" ${matcher.field === 'name' ? 'selected' : ''}>Name</option>
-                        <option value="purpose" ${matcher.field === 'purpose' ? 'selected' : ''}>Verwendungszweck</option>
-                        <option value="category" ${matcher.field === 'category' ? 'selected' : ''}>Bankkategorie</option>
-                        <option value="amount" ${matcher.field === 'amount' ? 'selected' : ''}>Betrag</option>
+                    <select data-matcher-field aria-label="${t('matcher.field')}">
+                        ${opt(matcher, 'field', 'any', 'matcher.any')}
+                        ${opt(matcher, 'field', 'name', 'matcher.name')}
+                        ${opt(matcher, 'field', 'purpose', 'matcher.purpose')}
+                        ${opt(matcher, 'field', 'category', 'matcher.bankCategory')}
+                        ${opt(matcher, 'field', 'amount', 'matcher.amount')}
                     </select>
-                    <select data-matcher-operator aria-label="Vergleich">
-                        <option value="contains" ${matcher.operator === 'contains' ? 'selected' : ''}>enthält</option>
-                        <option value="equals" ${matcher.operator === 'equals' ? 'selected' : ''}>gleich</option>
-                        <option value="regex" ${matcher.operator === 'regex' ? 'selected' : ''}>Regex</option>
-                        <option value="gt" ${matcher.operator === 'gt' ? 'selected' : ''}>größer als</option>
-                        <option value="lt" ${matcher.operator === 'lt' ? 'selected' : ''}>kleiner als</option>
+                    <select data-matcher-operator aria-label="${t('matcher.operator')}">
+                        ${opt(matcher, 'operator', 'contains', 'matcher.contains')}
+                        ${opt(matcher, 'operator', 'equals', 'matcher.equals')}
+                        ${opt(matcher, 'operator', 'regex', 'matcher.regex')}
+                        ${opt(matcher, 'operator', 'gt', 'matcher.gt')}
+                        ${opt(matcher, 'operator', 'lt', 'matcher.lt')}
                     </select>
-                    <input data-matcher-value type="${matcher.field === 'amount' ? 'number' : 'text'}" step="${matcher.field === 'amount' ? '0.01' : ''}" value="${escape_budget(String(matcher.value || ''))}" placeholder="${matcher.field === 'amount' ? 'Euro' : 'Suchmuster'}" aria-label="Suchwert">
-                    <label class="matcher-exclude"><input data-matcher-exclude type="checkbox" ${matcher.exclude ? 'checked' : ''}> ausschließen</label>
-                    <button type="button" class="remove-matcher-btn" title="Suchmuster entfernen" aria-label="Suchmuster entfernen">×</button>
+                    <input data-matcher-value type="${matcher.field === 'amount' ? 'number' : 'text'}" step="${matcher.field === 'amount' ? '0.01' : ''}" value="${escape_budget(String(matcher.value || ''))}" placeholder="${matcher.field === 'amount' ? t('matcher.euro') : t('matcher.placeholder')}" aria-label="${t('matcher.value')}">
+                    <label class="matcher-exclude"><input data-matcher-exclude type="checkbox" ${matcher.exclude ? 'checked' : ''}> ${t('matcher.exclude')}</label>
+                    <button type="button" class="remove-matcher-btn" title="${t('matcher.remove')}" aria-label="${t('matcher.remove')}">×</button>
                 </div>
             `).join('');
         }
@@ -2497,7 +2498,7 @@
 
         function render_rule_transaction_browser_rows() {
             const { rows, valueFor } = rule_transaction_browser_rows();
-            document.getElementById('ruleTransactionBrowserRows').innerHTML = rows.map(row => `<tr><td>${fmt_date(row.date)}</td><td>${escape_budget(row.name)}</td><td>${escape_budget(row._cls?.category || 'Unkategorisiert')}</td><td>${escape_budget(valueFor(row, 'budget'))}</td><td>${valueFor(row, 'direction')}</td><td class="num">${fmt_eur(row.betrag_cents)}</td></tr>`).join('') || '<tr><td colspan="6">Keine passenden Buchungen.</td></tr>';
+            document.getElementById('ruleTransactionBrowserRows').innerHTML = rows.map(row => `<tr><td>${fmt_date(row.date)}</td><td>${escape_budget(row.name)}</td><td>${escape_budget(row._cls?.category || 'Unkategorisiert')}</td><td>${escape_budget(valueFor(row, 'budget'))}</td><td>${valueFor(row, 'direction')}</td><td class="num">${fmt_eur(row.betrag_cents)}</td></tr>`).join('') || `<tr><td colspan="6">${t('wizard.noMatchingTransactions')}</td></tr>`;
         }
 
         function render_rule_transaction_browser() {
@@ -2923,9 +2924,9 @@
             const fixed = new Set(namesOf('fixed'));
             const rest = collect_category_options().filter(name => !income.has(name) && !fixed.has(name));
             return [
-                { key: 'income', label: 'Einnahmen', names: sort_categories([...income], favoriteCategories) },
-                { key: 'fixed', label: 'Wiederkehrende Ausgaben', names: sort_categories([...fixed], favoriteCategories) },
-                { key: 'spending', label: 'Transaktionskategorien', names: rest }
+                { key: 'income', label: t('drill.groupIncome'), names: sort_categories([...income], favoriteCategories) },
+                { key: 'fixed', label: t('drill.groupFixed'), names: sort_categories([...fixed], favoriteCategories) },
+                { key: 'spending', label: t('drill.groupSpending'), names: rest }
             ].filter(group => group.names.length);
         }
         function assign_options_html(groups, { incoming = true, outgoing = true, current = '' } = {}) {
@@ -2955,8 +2956,8 @@
             const body = document.getElementById('drillTransactionsRows');
             body.innerHTML = rows.map((row, index) => {
                 const id = tx_id(row);
-                return `<tr><td class="select-col"><input type="checkbox" class="drill-row-select" data-index="${index}" aria-label="Auswählen"${drillTxState.selected.has(id) ? ' checked' : ''}></td><td>${fmt_date(row.date)}</td><td>${escape_budget(row.name)}</td><td><select class="drill-row-category" data-index="${index}" aria-label="Kategorie"></select></td><td>${escape_budget(drill_budget_label(row))}</td><td class="num">${fmt_eur(row.betrag_cents)}</td></tr>`;
-            }).join('') || '<tr><td colspan="6">Keine passenden Buchungen.</td></tr>';
+                return `<tr><td class="select-col"><input type="checkbox" class="drill-row-select" data-index="${index}" aria-label="${t('drill.selectRow')}"${drillTxState.selected.has(id) ? ' checked' : ''}></td><td>${fmt_date(row.date)}</td><td>${escape_budget(row.name)}</td><td><select class="drill-row-category" data-index="${index}" aria-label="${t('table.kategorie')}"></select></td><td>${escape_budget(drill_budget_label(row))}</td><td class="num">${fmt_eur(row.betrag_cents)}</td></tr>`;
+            }).join('') || `<tr><td colspan="6">${t('wizard.noMatchingTransactions')}</td></tr>`;
             const optionsFor = {};
             body.querySelectorAll('.drill-row-category').forEach(select => {
                 const row = rows[Number(select.dataset.index)], current = row._cls?.category || UNCATEGORIZED, incoming = row.betrag_cents > 0;
@@ -2981,8 +2982,8 @@
             selectAll.checked = rows.length > 0 && selectedCount === rows.length;
             selectAll.indeterminate = selectedCount > 0 && selectedCount < rows.length;
             selectedBtn.hidden = !selectedCount;
-            selectedBtn.textContent = `${selectedCount} ausgewählte zuweisen`;
-            allBtn.textContent = `Alle ${rows.length} Treffer zuweisen`;
+            selectedBtn.textContent = t('drill.assignSelected', { count: selectedCount });
+            allBtn.textContent = t('drill.assignAll', { count: rows.length });
             selectedBtn.disabled = allBtn.disabled = !target.value;
             allBtn.disabled ||= !rows.length;
         }
@@ -3000,7 +3001,7 @@
             const container = document.getElementById('drillTransactionsMatchers');
             container.innerHTML = matcher_editor_html(drillTxState.matchers);
             const target = document.getElementById('drillAssignTarget'), previous = target.value;
-            target.innerHTML = '<option value="">Kategorie wählen …</option>' + assign_options_html(assign_category_groups());
+            target.innerHTML = `<option value="">${t('drill.pickCategory')}</option>` + assign_options_html(assign_category_groups());
             target.value = previous;
             render_drill_transaction_rows();
             container.querySelectorAll('.rule-matcher-row').forEach((element, index) => {
@@ -3048,20 +3049,20 @@
             populate_month_filter();
             const accountSelect = document.getElementById('accountSelect');
             const accounts = [...new Set(module_data.map(account_key))].sort();
-            accountSelect.replaceChildren(new Option('Alle Konten', ''), ...accounts.map(a => new Option(a,a)));
+            accountSelect.replaceChildren(new Option(t('filters.allAccounts'), ''), ...accounts.map(a => new Option(a,a)));
             if (!accounts.includes(selectedAccount)) selectedAccount = '';
             accountSelect.value = selectedAccount;
             const rows = overview_rows();
             const summary = build_group_summary(rows);
             const rate = summary.totalIncome ? (summary.net / summary.totalIncome * 100).toFixed(1) + '%' : '–';
-            document.getElementById('statsBar').innerHTML = [['Ausgaben',summary.totalExpenses],['Einnahmen',summary.totalIncome],['Netto',summary.net]].map(([label,cents]) => `<span>${label}<b>${fmt_eur(cents)}</b></span>`).join('') + `<span>Sparquote<b>${rate}</b></span>`;
+            document.getElementById('statsBar').innerHTML = [[t('charts.expenses'),summary.totalExpenses],[t('charts.income'),summary.totalIncome],[t('stats.netShort'),summary.net]].map(([label,cents]) => `<span>${label}<b>${fmt_eur(cents)}</b></span>`).join('') + `<span>${t('stats.savingsRateShort')}<b>${rate}</b></span>`;
             render_finance_overview();
             render_week_savings_calendar();
             document.querySelectorAll('#yearButtons button').forEach(b => b.classList.toggle('active', b.dataset.year === String(currentYear)));
             const monthFilterLabel = monthFilter && monthFilter.startsWith('all-')
                 ? new Date(2000, Number(monthFilter.slice(4)), 1).toLocaleDateString(locale(), { month: 'long' })
                 : monthFilter ? new Date(Number(monthFilter.split('-')[0]), Number(monthFilter.split('-')[1]), 1).toLocaleDateString(locale(), { month:'long', year:'numeric' }) : '';
-            document.getElementById('overviewFilterNote').textContent = `${currentYear || 'Alle Jahre'} · ${selectedAccount || 'Alle Konten'}${monthFilterLabel ? ' · ' + monthFilterLabel : ''}${weekFilterMonday ? ' · KW ' + iso_week_number(weekFilterMonday) : ''} · ${rows.length} Buchungen`;
+            document.getElementById('overviewFilterNote').textContent = `${currentYear || t('filters.allYears')} · ${selectedAccount || t('filters.allAccounts')}${monthFilterLabel ? ' · ' + monthFilterLabel : ''}${weekFilterMonday ? ' · ' + t('week.label', { week: iso_week_number(weekFilterMonday) }) : ''} · ${t('budgets.matchCount', { count: rows.length })}`;
             const unmatched = module_data.filter(r => r._paypalUnmatched).length;
             const notice = document.getElementById('paypalNotice');
             const missingAccount = module_data.some(r => account_key(r) === 'Konto unbekannt');
