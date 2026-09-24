@@ -798,6 +798,7 @@ button.budget-totals-cell:hover { border-color: var(--accent); }
 .timeline-canvas { height: 330px; position: relative; min-width: 0; }
 .chart-drill-options { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 .chart-drill-options button { padding: 6px 10px; min-height: 36px; font-size: .78rem; background: var(--surface-muted); color: var(--text); }
+.chart-drill-options button[aria-pressed="true"] { background: var(--accent); color: white; }
 .cashflow-net { display: flex; overflow-x: auto; gap: 20px; margin-top: 12px; font-size: .8rem; }
 .cashflow-net span { display: flex; flex-direction: column; white-space: nowrap; gap: 4px; color: var(--text-muted); }
 .cashflow-net b { color: var(--text); }

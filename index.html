@@ -634,6 +634,7 @@
         let granularity = 'month', selectedAccount = '', monthFilter = null;
         let chartLayout = 'stacked', chartDeviation = 'none';
         const chartDrill = { budget: null, fixed: null };
+        const chartFilter = { budget: new Set(), fixed: new Set() }; // series keys shown ONLY; empty = show all
         let settingsBaseline = null;
         let ruleSet = null;
         let defaultRuleSet = null;
@@ -2914,12 +2915,15 @@
             notice.textContent = (missingAccount ? 'Kontoinformation fehlt. Unter CSV-Import die Spalte für das eigene Konto wählen oder getrennte Dateien mit einem Kontonamen importieren. Konto/Bank können Empfängerdaten sein. ' : '') + `${unmatched} PayPal-Bankbuchung(en) ohne eindeutigen Gegenposten. Bitte vollständige PayPal-Historie importieren und in den Budgetdetails prüfen; diese Beträge bleiben sichtbar.`;
             for (const kind of ['budget','fixed','income']) {
                 const model = build_timeline(rows, ruleSet, kind, granularity, chartDrill[kind]);
-                const onSelect = kind === 'income' ? null : key => { if (!chartDrill[kind]) { chartDrill[kind] = key; render_all(); } };
-                render_timeline(document.getElementById(kind+'Chart'), model, onSelect, { layout: chartLayout, deviation: chartDeviation });
+                const onSelect = kind === 'income' ? null : key => { if (!chartDrill[kind]) { chartDrill[kind] = key; chartFilter[kind].clear(); render_all(); } };
+                const filter = chartFilter[kind];
+                const shown = filter?.size ? { ...model, series: model.series.filter(series => filter.has(series.key)) } : model;
+                render_timeline(document.getElementById(kind+'Chart'), shown, onSelect, { layout: chartLayout, deviation: chartDeviation });
                 if (kind !== 'income') {
                     const options = document.getElementById(kind+'DrillOptions'); options.replaceChildren();
                     if (!chartDrill[kind]) model.series.forEach(series => {
-                        const button = document.createElement('button'); button.textContent = series.label; button.onclick = () => onSelect(series.key); options.append(button);
+                        const button = document.createElement('button'); button.textContent = series.label; button.setAttribute('aria-pressed', filter.has(series.key));
+                        button.onclick = () => { filter.has(series.key) ? filter.delete(series.key) : filter.add(series.key); render_all(); }; options.append(button);
                     });
                     if (!model.series.length) options.textContent = t('charts.noTransactions');
                     const reset = document.querySelector(`[data-reset-chart="${kind}"]`); reset.hidden = !chartDrill[kind];
@@ -3829,7 +3833,7 @@
         });
 
         document.getElementById('resetDrillBtn').addEventListener('click', () => {
-            chartDrill.budget = chartDrill.fixed = null; weekFilterMonday = null; monthFilter = null; render_all();
+            chartDrill.budget = chartDrill.fixed = null; chartFilter.budget.clear(); chartFilter.fixed.clear(); weekFilterMonday = null; monthFilter = null; render_all();
         });
         document.getElementById('granularitySelect').onchange = e => { granularity = e.target.value; render_all(); };
         document.getElementById('accountSelect').onchange = e => { selectedAccount = e.target.value; render_all(); };
