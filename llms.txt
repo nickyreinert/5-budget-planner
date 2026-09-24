@@ -1,0 +1,54 @@
+# 5ive – Budget Planner (AI usage guide)
+
+Local-first budget app. All data stays in the browser (IndexedDB + localStorage); there is no backend to call.
+Everything the app "knows" about categories, budgets and recurring payments lives in one JSON document, the SETTING.
+Your job as an AI agent: read the user's transactions, produce a SETTING JSON, paste it into the app.
+
+## What the user usually asks
+"Here is my list of transactions: find all recurring payments and my regular salary, and sort the
+non-recurring expenses into ~5 budgets (main categories) with transaction categories."
+
+## Vocabulary
+- Budget (main category): `mainCategories[]`, ~5 of them, each with an optional weekly cap in `subBudgetCaps` (integer cents).
+- Transaction category: a purpose such as "Lebensmittel", "Drogerie", "Gaming". Never a merchant or payment method
+  (Amazon, PayPal, Klarna, Steam ... are NOT categories). Each category belongs to exactly one budget via `categoryMappings`.
+- Rule: `rules[]`; matches transactions by text and assigns a category. Highest `priority` wins.
+- Recurring payment: a rule with `"group": "fixed"` and `"recurring": {"intervalMonths": 1|3|6|12}`.
+  Optional sub-category with a dot: `"category": "Versicherungen.HDI Leben"`.
+- Salary: a rule with `"group": "income"` and `"incomeType": "salary"`. Other income: `"incomeType": "other"`.
+- Unknown purpose: category `Unkategorisiert`, `categoryMappings.Unkategorisiert = ""` (shown as "Nicht zugeordnet"). Never guess.
+
+## Steps
+1. Get the transactions from the user (attached CSV or pasted text). Do not send them to third parties.
+2. Detect: (a) salary streams, (b) recurring payments and their interval, (c) non-recurring spending by purpose.
+   PayPal purchases and their bank debits are the same purchase; PayPal funding / account transfers are internal
+   transfers (`"group": "internal_transfer", "excludeFromTotals": true`), not income or spending.
+3. Write the SETTING JSON. Full schema + rules of thumb: /examples/budget-llm-prompt.txt
+   Working example: /examples/five-budgets.setting.json
+4. Import it in the browser UI:
+   - open Settings: click `#configRulesBtn`
+   - click tab `[data-settings-tab="importexport"]`
+   - paste the JSON into `#importPasteText`, click `#importPasteBtn`
+   - if a review dialog lists changes, accept them; read the result in `#settingsImportStatus`
+   (Import errors name the failing field – fix the JSON and paste again.)
+5. Verify: the Week tab lists the budgets; Settings > Income / Fixkosten / Budgets show salary, recurring payments,
+   budgets with their categories. Few items should remain under "Nicht zugeordnet".
+
+## SETTING essentials (validated on import)
+- Amounts are integer cents. `id` of every rule and budget is unique (`[a-zA-Z0-9_-]+` for budgets).
+- Required top level: `rules` (array), `groups` (array of `{id,label,color}`). Also `mainCategories`,
+  `categoryMappings`, `subBudgetCaps`, optionally `budgetRecommendation`.
+- Rule: `{ id, category, label, group, priority, budgetCategory?, matchers[] }`
+  groups: `fixed`, `essential`, `discretionary`, `reserve`, `savings`, `income`, `internal_transfer`, `unclassified`.
+- Matcher: `{ "field": "any|name|purpose|category|amount", "operator": "contains|regex|gt|lt", "value": "...", "exclude": false }`
+  Text values must be non-empty; regex is JavaScript, case-insensitive (double-escape backslashes in JSON).
+  A rule matches when all non-excluded matchers match and no excluded matcher matches.
+- `categoryMappings` values must be an existing budget id, or `""` for unassigned.
+- `subBudgetCaps` keys must be existing budget ids. If `budgetRecommendation` is given, the caps must not exceed
+  `weeklyLimitCents = (monthlyIncomeCents - monthlyFixedCents) * 12 / 52`.
+- Existing local rules and manual per-transaction assignments always take precedence over an import.
+
+## Other UI hooks
+- CSV import: Settings > Export / Import > `#csvFile` (a file input; browser agents usually cannot fill it – ask the user to import the CSV, or use the Setup wizard `#rulesWizardBtn`).
+- Export current SETTING: `#exportRulesBtn` (start from it to keep stable ids when updating).
+- Example data: "Beispieldaten laden" on the empty Week screen.
