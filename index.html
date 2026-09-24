@@ -124,6 +124,7 @@
                         </div>
                     </div>
                     <div class="filter-controls">
+                        <label>Monat<select id="monthFilterSelect" aria-label="Monat"></select></label>
                         <label>Zeitraum<select id="weekFilterSelect" aria-label="Kalenderwoche"></select></label>
                         <label>Ansicht<select id="granularitySelect"><option value="week">Woche</option><option value="month" selected>Monat</option><option value="year">Jahr</option></select></label>
                         <label>Konto<select id="accountSelect"><option value="">Alle Konten</option></select></label>
@@ -2955,6 +2956,7 @@
         function render_all() {
             if (!ruleSet) return;
             populate_week_filter();
+            populate_month_filter();
             const accountSelect = document.getElementById('accountSelect');
             const accounts = [...new Set(module_data.map(account_key))].sort();
             accountSelect.replaceChildren(new Option('Alle Konten', ''), ...accounts.map(a => new Option(a,a)));
@@ -3937,6 +3939,17 @@
             select.value = weekFilterMonday ? String(weekFilterMonday.getTime()) : '';
         }
 
+        // Same keys the savings calendar uses: "YYYY-MM" for a chosen year,
+        // "all-MM" (that month across every year) otherwise.
+        function populate_month_filter() {
+            const select = document.getElementById('monthFilterSelect');
+            select.innerHTML = `<option value="">${t('filters.allMonths')}</option>` + Array.from({ length: 12 }, (_, month) => {
+                const key = `${currentYear || 'all'}-${String(month).padStart(2, '0')}`;
+                return `<option value="${key}">${new Date(2000, month, 1).toLocaleDateString(locale(), { month: 'long' })}</option>`;
+            }).join('');
+            select.value = monthFilter && [...select.options].some(o => o.value === monthFilter) ? monthFilter : '';
+        }
+
         function set_week_filter(monday) {
             weekFilterMonday = monday; monthFilter = null;
             render_all();
@@ -3947,6 +3960,7 @@
             render_all();
         }
 
+        document.getElementById('monthFilterSelect').addEventListener('change', (e) => set_month_filter(e.target.value || null));
         document.getElementById('weekFilterSelect').addEventListener('change', (e) => {
             set_week_filter(e.target.value ? new Date(parseInt(e.target.value, 10)) : null);
         });
