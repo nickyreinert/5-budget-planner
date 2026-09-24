@@ -1411,7 +1411,9 @@
         // Renames `old` to `next` everywhere it is stored, or (remove) merges
         // it into the existing category `next`.
         async function apply_category_change(old, next, remove) {
-            const affected = module_data.filter(r => r._cls?.category === old).map(tx_id);
+            // A plain rename follows the renamed rules by itself - only merging
+            // into another category pins the currently matched rows as overrides.
+            const affected = remove ? module_data.filter(r => r._cls?.category === old).map(tx_id) : [];
             const nextBudget = category_to_main(remove ? next : old);
             const nextGroup = ruleSet.rules.find(r => r.category === next)?.group;
             ruleSet.rules.forEach(r => {
@@ -2068,7 +2070,9 @@
             ];
 
             editor.innerHTML = groups.map((g, i) => {
-                const categories = allCategories.filter(c => (category_to_main(c) || '') === g.id);
+                // Categories with an auto-assignment rule first, plain ones after.
+                const categories = allCategories.filter(c => (category_to_main(c) || '') === g.id)
+                    .sort((a, b) => Number(!spending_rules_for(a).length) - Number(!spending_rules_for(b).length));
                 const expanded = expandedBudgetGroups.has(g.id);
                 const capCents = g.unassigned ? 0 : (subBudgetCaps[g.id] || 0);
                 return `

@@ -62,6 +62,9 @@ function matcher_text(tx, field) {
 }
 
 function matcher_matches(tx, matcher) {
+  // A matcher without a value (e.g. a freshly added row) matches nothing,
+  // instead of "contains ''" matching every transaction.
+  if (String(matcher.value ?? '').trim() === '') return false;
   if (matcher.field === 'amount') {
     const amount = Math.abs(tx.betrag_cents || 0) / 100;
     const value = Number(matcher.value);

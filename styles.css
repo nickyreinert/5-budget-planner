@@ -920,5 +920,5 @@ button.budget-totals-cell:hover { border-color: var(--accent); }
 .recurring-settings-section .budget-card .main-budget-editor-row .budgetcap-number { flex: 0 0 84px; }
 .recurring-settings-section #categoryMappingEditor { margin-top: 16px; }
 .main-budget.rg-card { margin: 8px 0; }
-.recurring-settings-section .cat-chip-row > span { font-weight: 600; }
+.recurring-settings-section .cat-chip-row > span { font-weight: 600; font-size: 13.333px; }
 .recurring-settings-section .cat-chip-toggle { border: 0; background: transparent; color: var(--text-muted); font-size: .65rem; }
