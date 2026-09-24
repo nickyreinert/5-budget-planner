@@ -577,6 +577,8 @@
     <dialog id="txEditDialog" class="review-dialog" aria-labelledby="txEditTitle">
         <h2 id="txEditTitle" data-i18n="txEdit.title">Buchung bearbeiten</h2>
         <label><span data-i18n="table.kategorie">Kategorie</span><button type="button" id="txEditCategory" class="category-picker-btn" data-category=""></button></label>
+        <label><span data-i18n="txEdit.budget">Hauptbudget</span><select id="txEditBudget"></select></label>
+        <p class="dialog-hint" data-i18n="txEdit.budgetHint">Budgets werden pro Kategorie geführt – die Zuordnung gilt für alle Buchungen dieser Kategorie.</p>
         <label><span data-i18n="txEdit.note">Notiz / Verwendungszweck</span><input type="text" id="txEditNote"></label>
         <label><span data-i18n="txEdit.date">Datum</span><input type="date" id="txEditDate"></label>
         <label><span data-i18n="txEdit.reportingDate">Budget-/Auswertungsdatum für wiederkehrende Buchungen</span><input type="date" id="txEditEffectiveDate"></label>
@@ -902,14 +904,26 @@
             const actionsCell = (canMarkRecurring || r._manualId)
                 ? `<button type="button" class="tx-actions-btn" data-tx-id="${txId}" data-manual-id="${r._manualId || ''}" data-recurring="${canMarkRecurring ? '1' : ''}" title="${t('txActions.title')}" aria-label="${t('txActions.title')}">⋮</button>`
                 : '';
-            return `<tr>
-                <td>${fmt_date(r.date)}${+reporting_date(r) !== +r.date ? `<small class="transaction-source">${t('txEdit.reportingDate')}: ${fmt_date(reporting_date(r))}</small>` : ''}<small class="transaction-source">${transaction_source_label(r)}</small></td>
-                <td class="tx-description">
-                    <button type="button" class="tx-name-btn" data-tx-id="${txId}" title="${t('txEdit.title')}">${escape_budget(r._displayName || r.name)}</button>
-                    <button type="button" class="tx-category-label" style="border-left:4px solid ${category_color(r._cls.category)}" data-tx-id="${txId}" title="${t('txEdit.quickRecategorize')}">${escape_budget(r._cls.category)}</button>
-                    ${r._mergeGroup ? `<button type="button" class="tx-merge-badge" data-tx-id="${txId}" title="${t('merge.badgeTitle', { count: r._mergeGroup.members.length })}" aria-label="${t('merge.badgeTitle', { count: r._mergeGroup.members.length })}">\u29c9 ${r._mergeGroup.members.length}</button>` : ''}
+            const reportingNote = +reporting_date(r) !== +r.date
+                ? `<span class="transaction-source">${t('txEdit.reportingDate')}: ${fmt_date(reporting_date(r))}</span>`
+                : '';
+            const mergeBadge = r._mergeGroup
+                ? `<button type="button" class="tx-merge-badge" data-tx-id="${txId}" title="${t('merge.badgeTitle', { count: r._mergeGroup.members.length })}" aria-label="${t('merge.badgeTitle', { count: r._mergeGroup.members.length })}">\u29c9 ${r._mergeGroup.members.length}</button>`
+                : '';
+            return `<tr class="tx-row" draggable="true" data-tx-id="${txId}" data-category="${escape_budget(r._cls.category)}">
+                <td class="tx-cell">
+                    <div class="tx-row-meta">
+                        <span class="tx-date">${fmt_date(r.date)}</span>
+                        <span class="transaction-source">${transaction_source_label(r)}</span>
+                        ${reportingNote}
+                        <span class="tx-amount">${amountCell}</span>
+                    </div>
+                    <div class="tx-row-main">
+                        <button type="button" class="tx-name-btn" data-tx-id="${txId}" title="${t('txEdit.title')}">${escape_budget(r._displayName || r.name)}</button>
+                        ${mergeBadge}
+                        <button type="button" class="tx-category-label" style="border-left:4px solid ${category_color(r._cls.category)}" data-tx-id="${txId}" title="${t('txEdit.quickRecategorize')}">${escape_budget(r._cls.category)}</button>
+                    </div>
                 </td>
-                <td class="num">${amountCell}</td>
                 <td class="delete-col">${actionsCell}</td>
             </tr>`;
         }
@@ -960,6 +974,14 @@
             });
             container.querySelectorAll('.tx-merge-badge').forEach(btn => {
                 btn.addEventListener('click', () => open_tx_edit_dialog(decodeURIComponent(btn.dataset.txId)));
+            });
+            container.querySelectorAll('tr.tx-row').forEach(row => {
+                row.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', row.dataset.category || '');
+                    e.dataTransfer.effectAllowed = 'move';
+                    row.classList.add('dragging');
+                });
+                row.addEventListener('dragend', () => row.classList.remove('dragging'));
             });
             container.querySelectorAll('.tx-actions-btn').forEach(btn => {
                 btn.addEventListener('click', () => open_tx_row_actions_dialog(btn));
@@ -1044,11 +1066,31 @@
             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         }
 
+        // Budgets are tracked per transaction category, not per booking - so
+        // both this dropdown and the drag & drop below re-file the whole
+        // category, which the dialog hint spells out.
+        function render_tx_budget_select(category) {
+            const select = document.getElementById('txEditBudget');
+            select.replaceChildren();
+            select.add(new Option(t('budgets.unassigned'), ''));
+            (ruleSet.mainCategories || []).forEach(m => select.add(new Option(m.label, m.id)));
+            select.value = (category && category_to_main(category)) || '';
+        }
+
+        function assign_category_to_budget(category, budgetId) {
+            ruleSet.categoryMappings ||= {};
+            if (ruleSet.categoryMappings[category] === budgetId) return;
+            ruleSet.categoryMappings[category] = budgetId;
+            persist_budgets();
+            reclassify();
+            render_all();
+            render_week();
+        }
+
         // Single dialog to edit a transaction's category, note (Verwendungszweck)
         // and date - replaces the old name-click-opens-category-popover-only
         // behavior, since users also need to fix a wrong note/date.
-        function open_tx_edit_dialog(txId) {
-            const row = module_data.find(r => tx_id(r) === txId);
+        function open_tx_edit_dialog(txId) {            const row = module_data.find(r => tx_id(r) === txId);
             if (!row) return;
             const dialog = document.getElementById('txEditDialog');
             const categoryButton = document.getElementById('txEditCategory');
@@ -1057,7 +1099,9 @@
             categoryButton.onclick = () => open_category_popover(categoryButton, collect_category_options(), (category) => {
                 categoryButton.dataset.category = category;
                 categoryButton.textContent = category;
+                render_tx_budget_select(category);
             });
+            render_tx_budget_select(row._cls?.category || '');
             document.getElementById('txEditNote').value = row.verwendungszweck || '';
             document.getElementById('txEditDate').value = iso_date_string(row.date);
             document.getElementById('txEditEffectiveDate').value = iso_date_string(reporting_date(row));
@@ -1073,8 +1117,7 @@
 
         // Shows every transaction the automatic detection folded into the same
         // booking, with a per-leg "Trennen" escape hatch - and the inverse
-        // "wieder zusammenführen" for a leg that was split out earlier.
-        function render_tx_merge_section(row, txId) {
+        // "wieder zusammenführen" for a leg that was split out earlier.        function render_tx_merge_section(row, txId) {
             const section = document.getElementById('txEditMergeSection');
             const list = document.getElementById('txEditMergeList');
             const hint = document.getElementById('txEditMergeHint');
@@ -1156,6 +1199,9 @@
                 tasks.push(save_effective_period_override(txId, effectiveDate).then(() => { effectivePeriodOverrides[txId] = effectiveDate; }));
             }
             await Promise.all(tasks);
+            if (document.getElementById('txEditBudget').value !== (category_to_main(category) || '')) {
+                assign_category_to_budget(category, document.getElementById('txEditBudget').value);
+            }
             reclassify();
             render_all();
             render_week();
@@ -1291,7 +1337,7 @@
                                     <span class="main-budget-value" title="${t('fixExpense.monthlyHint')}">${fmt_eur(totalCents)}</span>
                                 </span>
                             </summary>
-                            ${matches.length ? `<table class="transaction-rows"><colgroup><col style="width:23%"><col><col style="width:28%"><col style="width:20px"></colgroup>${group_rows_by_month(matches.slice().sort((a, b) => b.date - a.date), render_tx_row)}</table>` : `<p>${t('fixExpense.noMatches')}</p>`}
+                            ${matches.length ? `<table class="transaction-rows"><colgroup><col><col style="width:20px"></colgroup>${group_rows_by_month(matches.slice().sort((a, b) => b.date - a.date), render_tx_row)}</table>` : `<p>${t('fixExpense.noMatches')}</p>`}
                         </details>
                     `;
                 }).join('') : `<p>${t('fixExpense.noRows')}</p>`}
@@ -1396,10 +1442,22 @@
                         </span>
                     </summary>
                     <div class="budget-legend">${m.categories.map(c => `<span><i style="background:${category_color(c.category)}"></i>${escape_budget(c.category)} · ${fmt_eur(c.cents)}</span>`).join('')}</div>
-                    ${m.rows.length ? `<table class="transaction-rows"><colgroup><col style="width:23%"><col><col style="width:28%"><col style="width:20px"></colgroup>${m.rows.map(render_tx_row).join('')}</table>` : `<p>${t('week.noSpend')}</p>`}
+                    ${m.rows.length ? `<table class="transaction-rows"><colgroup><col><col style="width:20px"></colgroup>${m.rows.map(render_tx_row).join('')}</table>` : `<p>${t('week.noSpend')}</p>`}
                 </details>`;
             }).join('');
             wire_tx_rows(container);
+            container.querySelectorAll('details.main-budget').forEach(zone => {
+                const budgetId = zone.dataset.budget;
+                if (budgetId === '__unassigned') return;
+                zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+                zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+                zone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    zone.classList.remove('drag-over');
+                    const category = e.dataTransfer.getData('text/plain');
+                    if (category) assign_category_to_budget(category, budgetId);
+                });
+            });
         }
 
         // Same rolling window (last 6 months, capped by available data) used
@@ -1767,7 +1825,7 @@
         // separators + rendered rows, so several occurrences of the same
         // payee (a recurring monthly charge, say) read as distinct billing
         // periods instead of a confusing flat repeat of near-identical rows.
-        function group_rows_by_month(sortedRows, renderRow, columns = 4) {
+        function group_rows_by_month(sortedRows, renderRow, columns = 2) {
             let lastMonthKey = null;
             return sortedRows.map(r => {
                 const monthKey = `${r.date.getFullYear()}-${r.date.getMonth()}`;
