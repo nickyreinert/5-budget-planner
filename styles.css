@@ -410,8 +410,9 @@ dialog.setup-wizard:not([open]) { display: none; }
 .language-options input { margin: 0; }
 .csv-field { margin-bottom: 14px; }
 .csv-field label { display: block; font-size: 0.9em; font-weight: 600; margin-bottom: 5px; }
-.sync-include-field label { display: flex; align-items: center; gap: 8px; margin-bottom: 0; }
+.sync-include-field > label { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; margin-bottom: 0; }
 .sync-include-field input[type="checkbox"] { flex: 0 0 auto; margin: 0; }
+.sync-include-field > label span { min-width: 0; overflow-wrap: anywhere; }
 .sync-include-field small { margin-left: 26px; }
 .csv-field input, .csv-field select, .csv-field textarea { width: 100%; }
 .settings-action-row { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
