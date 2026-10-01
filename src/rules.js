@@ -9,7 +9,7 @@
 
 import { category_catalog, UNCATEGORIZED, ADDITIONAL_INCOME } from './categories.js';
 import { tx_id } from './data.js';
-import { budget_category } from './budgets.js';
+import { ensure_budget_coverage } from './budgets.js';
 
 const STORAGE_KEY = 'classificationRules';
 const FALLBACK_GROUP = 'unclassified';
@@ -28,7 +28,13 @@ export function get_stored_rule_set() {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) return null;
   try {
-    return JSON.parse(stored);
+    const settings = ensure_budget_coverage(JSON.parse(stored));
+    const normalized = JSON.stringify(settings);
+    if (normalized !== stored) {
+      try { localStorage.setItem(STORAGE_KEY, normalized); }
+      catch (error) { console.error('Failed to persist repaired classification rules', error); }
+    }
+    return settings;
   } catch (e) {
     console.error('Failed to parse stored classification rules', e);
     return null;
@@ -36,6 +42,7 @@ export function get_stored_rule_set() {
 }
 
 export function save_rule_set(ruleSet) {
+  ensure_budget_coverage(ruleSet);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(ruleSet));
 }
 
@@ -230,10 +237,10 @@ export function classify_all(rows, ruleSet) {
 // set, falling back to whatever group classify_all() had assigned.
 export function apply_manual_overrides(rows, overridesById, ruleSet) {
   if (!overridesById) return rows;
-  const ruleByCategory = {};
+  const ruleByCategory = Object.create(null);
   (ruleSet.rules || []).forEach(rule => {
     const cat = rule.category || rule.label;
-    if (cat && !(cat in ruleByCategory)) ruleByCategory[cat] = rule;
+    if (cat) (ruleByCategory[cat] ||= []).push(rule);
   });
   const allowed = new Set(category_catalog(ruleSet));
   rows.forEach(r => {
@@ -248,7 +255,8 @@ export function apply_manual_overrides(rows, overridesById, ruleSet) {
     // instead of needing a second occurrence before an interval can be
     // detected). Without this, `_cls.recurring` would always be empty here,
     // silently ignoring that override.
-    const rule = ruleByCategory[category];
+    const candidates = ruleByCategory[category] || [];
+    const rule = candidates.find(rule => rule.group === r._cls?.group) || candidates[0];
     const payee = String(r.name || r.Name || '').trim().toLocaleLowerCase();
     const intervalMonths = rule?.recurringOverrides?.[payee];
     r._cls = {

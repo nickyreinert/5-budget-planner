@@ -1,11 +1,94 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { budget_category, validate_budget_settings } from '../src/budgets.js';
+import { budget_category, assign_budget_category, ensure_budget_coverage, validate_budget_settings } from '../src/budgets.js';
 import { build_main_budget_report, category_color } from '../src/week.js';
 import { enrich_row, tx_id, apply_amount_overrides } from '../src/data.js';
-import { apply_manual_overrides, classify, classify_all, rule_matches } from '../src/rules.js';
+import { apply_manual_overrides, classify, classify_all, rule_matches, get_stored_rule_set, save_rule_set } from '../src/rules.js';
 const setting = () => JSON.parse(readFileSync(new URL('../examples/five-budgets.setting.json', import.meta.url)));
+
+test('recurring categories cannot resolve or acquire a spending budget through any mapping fallback', () => {
+  const category = 'Insurance.Legal';
+  const settings = {
+    mainCategories: [{ id: 'housing', label: category }],
+    categoryMappings: { [category]: 'housing' },
+    rules: [{ id: 'legal', category, group: 'fixed', budgetCategory: 'housing', recurring: { intervalMonths: 6 } }]
+  };
+  assert.equal(budget_category(settings, category), null);
+  assert.equal(assign_budget_category(settings, category, 'housing'), false);
+  delete settings.categoryMappings[category];
+  assert.equal(budget_category(settings, category), null);
+  settings.mainCategories[0].label = 'Housing';
+  assert.equal(budget_category(settings, category), null);
+  assert.equal(assign_budget_category(settings, category, ''), false);
+});
+
+test('legacy settings repair removes only mappings for non-budget categories and retains contract settings', () => {
+  const settings = {
+    mainCategories: [{ id: 'daily', label: 'Daily' }],
+    categoryMappings: { Insurance: 'daily', Salary: 'daily', Transfer: 'daily', Excluded: 'daily', Food: 'daily' },
+    rules: [
+      { id: 'insurance', category: 'Insurance', group: 'fixed', budgetCategory: 'daily', recurring: { intervalMonths: 6 } },
+      { id: 'salary', category: 'Salary', group: 'income', budgetCategory: 'daily' },
+      { id: 'transfer', category: 'Transfer', group: 'internal_transfer', budgetCategory: 'daily' },
+      { id: 'excluded', category: 'Excluded', group: 'essential', excludeFromTotals: true, budgetCategory: 'daily' },
+      { id: 'food', category: 'Food', group: 'essential', budgetCategory: 'daily' }
+    ]
+  };
+  ensure_budget_coverage(settings);
+  assert.deepEqual(settings.categoryMappings, { Food: 'daily', Unkategorisiert: '' });
+  assert.equal(settings.rules[0].category, 'Insurance');
+  assert.equal(settings.rules[0].recurring.intervalMonths, 6);
+  assert.ok(settings.rules.slice(0, 4).every(rule => !Object.hasOwn(rule, 'budgetCategory')));
+  assert.equal(settings.rules[4].budgetCategory, 'daily');
+  const normalized = structuredClone(settings);
+  ensure_budget_coverage(settings);
+  assert.deepEqual(settings, normalized);
+  assert.equal(assign_budget_category(settings, 'Food', ''), true);
+  assert.equal(assign_budget_category(settings, 'Food', 'missing'), false);
+  assert.equal(assign_budget_category(settings, 'Unknown category', 'daily'), false);
+});
+
+test('recurring and spending categories can share a name without sharing their budget role', () => {
+  const settings = {
+    mainCategories: [{ id: 'daily', label: 'Daily' }], categoryMappings: { Insurance: 'daily' },
+    rules: [{ category: 'Insurance', group: 'fixed', budgetCategory: 'daily' }, { category: 'Insurance', group: 'essential', budgetCategory: 'daily' }]
+  };
+  ensure_budget_coverage(settings);
+  assert.equal(budget_category(settings, 'Insurance', { group: 'fixed' }), null);
+  assert.equal(budget_category(settings, 'Insurance', { group: 'essential' }), 'daily');
+  assert.equal(settings.categoryMappings.Insurance, 'daily');
+  assert.equal(settings.rules[0].budgetCategory, undefined);
+  assert.equal(settings.rules[1].budgetCategory, 'daily');
+});
+
+test('loading and saving rules persist repaired legacy recurring mappings', () => {
+  const originalStorage = globalThis.localStorage;
+  let stored = JSON.stringify({ rules: [{ id: 'fixed', category: 'Insurance', group: 'fixed', budgetCategory: 'daily' }], mainCategories: [{ id: 'daily', label: 'Daily' }], categoryMappings: { Insurance: 'daily' } });
+  globalThis.localStorage = { getItem: () => stored, setItem: (_, value) => { stored = value; } };
+  try {
+    const settings = get_stored_rule_set();
+    assert.equal(JSON.parse(stored).categoryMappings.Insurance, undefined);
+    assert.equal(settings.rules[0].budgetCategory, undefined);
+    settings.categoryMappings.Insurance = 'daily';
+    save_rule_set(settings);
+    assert.equal(JSON.parse(stored).categoryMappings.Insurance, undefined);
+    assert.equal(JSON.parse(stored).rules[0].group, 'fixed');
+  } finally { globalThis.localStorage = originalStorage; }
+});
+
+test('stored contract classifications remain available if writing the repair fails', () => {
+  const originalStorage = globalThis.localStorage;
+  const originalError = console.error;
+  const stored = JSON.stringify({ rules: [{ id: 'fixed', category: 'Insurance', group: 'fixed', recurring: { intervalMonths: 12 } }], mainCategories: [], categoryMappings: { Insurance: '' } });
+  globalThis.localStorage = { getItem: () => stored, setItem: () => { throw new Error('Storage unavailable'); } };
+  console.error = () => {};
+  try {
+    const settings = get_stored_rule_set();
+    assert.equal(settings.rules[0].recurring.intervalMonths, 12);
+    assert.equal(settings.categoryMappings.Insurance, undefined);
+  } finally { globalThis.localStorage = originalStorage; console.error = originalError; }
+});
 
 test('both presets group essentials, dining, leisure, child expenses and mobility', () => {
   for (const file of ['default_rules.json', 'default_rules.en.json']) {

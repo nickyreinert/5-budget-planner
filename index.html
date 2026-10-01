@@ -637,9 +637,11 @@
 
     <dialog id="txEditDialog" class="review-dialog" aria-labelledby="txEditTitle">
         <h2 id="txEditTitle" data-i18n="txEdit.title">Buchung bearbeiten</h2>
-        <label><span data-i18n="table.kategorie">Kategorie</span><button type="button" id="txEditCategory" class="category-picker-btn" data-category=""></button></label>
-        <label><span data-i18n="txEdit.budget">Hauptbudget</span><select id="txEditBudget"></select></label>
-        <p class="dialog-hint" data-i18n="txEdit.budgetHint">Budgets werden pro Kategorie geführt – die Zuordnung gilt für alle Buchungen dieser Kategorie.</p>
+        <label><span id="txEditCategoryLabel" data-i18n="table.kategorie">Kategorie</span><button type="button" id="txEditCategory" class="category-picker-btn" data-category=""></button></label>
+        <div id="txEditBudgetField">
+            <label><span data-i18n="txEdit.budget">Hauptbudget</span><select id="txEditBudget"></select></label>
+            <p class="dialog-hint" data-i18n="txEdit.budgetHint">Budgets werden pro Kategorie geführt – die Zuordnung gilt für alle Buchungen dieser Kategorie.</p>
+        </div>
         <label><span data-i18n="txEdit.note">Notiz / Verwendungszweck</span><input type="text" id="txEditNote"></label>
         <label><span data-i18n="txEdit.date">Datum</span><input type="date" id="txEditDate"></label>
         <label><span data-i18n="txEdit.reportingDate">Budget-/Auswertungsdatum für wiederkehrende Buchungen</span><input type="date" id="txEditEffectiveDate"></label>
@@ -681,7 +683,7 @@
         import { load_footer } from './src/footer.js';
         import { init_section_highlight } from './src/highlight.js';
         import { csv_records, csv_import_ranges, reconcile_transactions, transaction_source_label, reconciliation_summary, get_manual_match_days, save_manual_match_days } from './src/transactions.js';
-        import { category_catalog, sort_categories, fixed_expense_categories, UNCATEGORIZED, ADDITIONAL_INCOME, split_category, join_category } from './src/categories.js';
+        import { category_catalog, sort_categories, fixed_expense_categories, is_budget_category, is_spending_classification, UNCATEGORIZED, ADDITIONAL_INCOME, split_category, join_category } from './src/categories.js';
         import { upsert_imported_entries, load_imported_entries, load_import_ranges, load_reconciliation_decisions, save_reconciliation_decision } from './src/db.js';
         import { apply_amount_overrides, apply_note_overrides, apply_date_overrides, is_real_cashflow } from './src/data.js';
         import { load_amount_overrides, save_amount_override, load_all_overrides, save_overrides, add_manual_entry, load_manual_entries, delete_manual_entry, load_note_overrides, save_note_override, load_date_overrides, save_date_override, load_effective_period_overrides, save_effective_period_override, clear_effective_period_override } from './src/db.js';
@@ -689,7 +691,7 @@
             build_budget_basis, build_week_report, build_sub_budget_report, build_main_budget_report, category_color,
             week_start, add_days, iso_week_number, top_categories, rule_monthly_equivalent, interval_months
         } from './src/week.js';
-        import { get_sub_budgets, save_sub_budgets, budget_category, validate_budget_settings, ensure_budget_coverage } from './src/budgets.js';
+        import { get_sub_budgets, save_sub_budgets, budget_category, assign_budget_category, validate_budget_settings, ensure_budget_coverage } from './src/budgets.js';
         import { push_digit, pop_digit, buffer_to_cents } from './src/keypad.js';
         import { transaction_to_row, transaction_key } from './src/gocardless.js';
         import { get_sync_settings, save_sync_settings, render_google_button, sign_out as sync_sign_out, current_session as current_sync_session, push_data as sync_push_data, pull_data as sync_pull_data } from './src/sync.js';
@@ -1024,7 +1026,7 @@
             const mergeBadge = r._mergeGroup
                 ? `<button type="button" class="tx-merge-badge" data-tx-id="${txId}" title="${t('merge.badgeTitle', { count: r._mergeGroup.members.length })}" aria-label="${t('merge.badgeTitle', { count: r._mergeGroup.members.length })}">\u29c9 ${r._mergeGroup.members.length}</button>`
                 : '';
-            return `<tr class="tx-row" draggable="true" data-tx-id="${txId}" data-category="${escape_budget(r._cls.category)}">
+            return `<tr class="tx-row" draggable="${is_spending_classification(r._cls)}" data-tx-id="${txId}" data-category="${escape_budget(r._cls.category)}">
                 <td class="tx-cell">
                     <div class="tx-row-meta">
                         <span class="tx-date">${fmt_date(r.date)}</span>
@@ -1182,18 +1184,24 @@
         // Budgets are tracked per transaction category, not per booking - so
         // both this dropdown and the drag & drop below re-file the whole
         // category, which the dialog hint spells out.
-        function render_tx_budget_select(category) {
+        function render_tx_budget_select(category, row) {
             const select = document.getElementById('txEditBudget');
+            const classification = category === row._cls?.category ? row._cls : null;
+            const allowed = row.in_out === 'out' && is_budget_category(ruleSet, category, classification);
+            document.getElementById('txEditBudgetField').hidden = !allowed;
+            select.disabled = !allowed;
             select.replaceChildren();
             select.add(new Option(t('budgets.unassigned'), ''));
-            (ruleSet.mainCategories || []).forEach(m => select.add(new Option(m.label, m.id)));
-            select.value = (category && category_to_main(category)) || '';
+            if (allowed) (ruleSet.mainCategories || []).forEach(m => select.add(new Option(m.label, m.id)));
+            select.value = allowed ? category_to_main(category, classification) || '' : '';
+            const recurring = classification ? classification.group === 'fixed' : !allowed && fixed_expense_categories(ruleSet).includes(category);
+            const label = document.getElementById('txEditCategoryLabel');
+            label.dataset.i18n = recurring ? 'txEdit.recurringCategory' : 'table.kategorie';
+            label.textContent = t(label.dataset.i18n);
         }
 
         function assign_category_to_budget(category, budgetId) {
-            ruleSet.categoryMappings ||= {};
-            if (ruleSet.categoryMappings[category] === budgetId) return;
-            ruleSet.categoryMappings[category] = budgetId;
+            if (!assign_budget_category(ruleSet, category, budgetId)) return;
             persist_budgets();
             reclassify();
             render_all();
@@ -1212,9 +1220,9 @@
             categoryButton.onclick = () => open_category_popover(categoryButton, collect_category_options(), (category) => {
                 categoryButton.dataset.category = category;
                 categoryButton.textContent = category;
-                render_tx_budget_select(category);
+                render_tx_budget_select(category, row);
             });
-            render_tx_budget_select(row._cls?.category || '');
+            render_tx_budget_select(row._cls?.category || '', row);
             document.getElementById('txEditNote').value = row.verwendungszweck || '';
             document.getElementById('txEditDate').value = iso_date_string(row.date);
             document.getElementById('txEditEffectiveDate').value = iso_date_string(reporting_date(row));
@@ -1355,8 +1363,10 @@
             }
             await Promise.all(tasks);
             if (row.source === 'manual') await merge_manual_entries();
-            if (document.getElementById('txEditBudget').value !== (category_to_main(category) || '')) {
-                assign_category_to_budget(category, document.getElementById('txEditBudget').value);
+            const budgetSelect = document.getElementById('txEditBudget');
+            const classification = category === row._cls?.category ? row._cls : null;
+            if (!budgetSelect.disabled && row.in_out === 'out' && is_budget_category(ruleSet, category, classification) && budgetSelect.value !== (category_to_main(category, classification) || '')) {
+                assign_category_to_budget(category, budgetSelect.value);
             }
             reclassify();
             render_all();
@@ -1899,14 +1909,11 @@
         // budget categories (ruleSet.mainCategories), not on every one of
         // the (many) fine-grained transaction categories. =====
 
-        // Maps a transaction category to its main budget category id via
-        // the classifying rule's budgetCategory field. Categories with no
-        // rule (bank-fallback, or a rule that never got one assigned) fall
-        // back to "sonstiges" - deliberately, not to a guessed lifestyle
-        // bucket: PayPal/Amazon/generic-online-shop style categories can be
-        // literally anything, so guessing would just be wrong on average.
-        function category_to_main(category) {
-            return budget_category(ruleSet, category);
+        // Only spending categories have a main budget. Recurring categories,
+        // income and transfers have separate roles; unmapped spending stays
+        // explicitly unassigned.
+        function category_to_main(category, classification = null) {
+            return budget_category(ruleSet, category, classification);
         }
 
         function persist_budgets() {
@@ -1984,7 +1991,7 @@
         function preview_rows_for_category(category) {
             const now = module_data.length ? build_budget_basis(module_data).refDate : new Date();
             const windowStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-            return category_transactions(module_data, category).filter(r => r.date >= windowStart && r.date <= now);
+            return category_transactions(module_data, category).filter(r => is_spending_classification(r._cls) && r.date >= windowStart && r.date <= now);
         }
 
         function format_month_year(date) {
@@ -2192,7 +2199,7 @@
             const cfg = RULE_GROUP_EDITORS.spending;
             const openPreviews = new Set([...editor.querySelectorAll('details[open]')].map(el => el.dataset.rule));
             const mains = ruleSet.mainCategories || [];
-            const allCategories = collect_category_options();
+            const allCategories = collect_category_options(true);
             const groups = [
                 ...mains.map(m => ({ id: m.id, label: m.label, unassigned: false })),
                 { id: UNASSIGNED_BUDGET_ID, label: t('budgets.unassigned'), unassigned: true }
@@ -2371,10 +2378,9 @@
             editor.querySelectorAll('.cat-add-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const targetId = btn.dataset.budget;
-                    const options = collect_category_options().filter(c => (category_to_main(c) || '') !== targetId);
+                    const options = collect_category_options(true).filter(c => (category_to_main(c) || '') !== targetId);
                     open_category_popover(btn, options, (category) => {
-                        ruleSet.categoryMappings ||= {};
-                        ruleSet.categoryMappings[category] = targetId;
+                        if (!assign_budget_category(ruleSet, category, targetId)) return;
                         persist_budgets(); render_sub_budget_settings();
                     });
                 });
@@ -2396,8 +2402,7 @@
                     if (!raw) return;
                     const category = JSON.parse(raw);
                     const targetId = dropzone.dataset.budget;
-                    ruleSet.categoryMappings ||= {};
-                    ruleSet.categoryMappings[category] = targetId;
+                    if (!assign_budget_category(ruleSet, category, targetId)) return;
                     expandedBudgetGroups.add(targetId);
                     persist_budgets(); render_sub_budget_settings();
                 });
@@ -2412,13 +2417,13 @@
             mapping.replaceChildren();
             const details = document.createElement('details'); details.open = wasOpen;
             const summary = document.createElement('summary'); summary.textContent = t('budgets.mappingTitle'); details.append(summary);
-            collect_category_options().forEach(category => {
+            collect_category_options(true).forEach(category => {
                 const row = document.createElement('div'); row.className = 'main-budget-editor-row';
                 const name = document.createElement('span'); name.textContent = category;
                 const select = document.createElement('select'); select.add(new Option(t('budgets.unassigned'), ''));
                 mains.forEach(m => select.add(new Option(m.label, m.id)));
                 select.value = category_to_main(category) || '';
-                select.onchange = () => { ruleSet.categoryMappings ||= {}; ruleSet.categoryMappings[category] = select.value; persist_budgets(); render_main_category_editor(); };
+                select.onchange = () => { if (!assign_budget_category(ruleSet, category, select.value)) return; persist_budgets(); render_main_category_editor(); };
                 row.append(favorite_button(category), name, select); details.append(row);
             });
             mapping.append(details);
@@ -2522,7 +2527,11 @@
         // basis changes here, not what's shown.
         function rule_all_matches(rule, amountFilter) {
             const category = rule.category || rule.label;
-            return category_transactions(module_data, category).filter(amountFilter);
+            return category_transactions(module_data, category).filter(row => {
+                const sameRole = rule.group === 'fixed' || rule.group === 'income'
+                    ? row._cls.group === rule.group : is_spending_classification(row._cls);
+                return sameRole && amountFilter(row);
+            });
         }
 
         function rule_matchers(rule) {
@@ -2597,7 +2606,7 @@
                 if (key === 'date') return row.date.getTime();
                 if (key === 'amount') return row.betrag_cents;
                 if (key === 'category') return row._cls?.category || '';
-                if (key === 'budget') return (ruleSet.mainCategories || []).find(item => item.id === category_to_main(row._cls?.category))?.label || '–';
+                if (key === 'budget') return (ruleSet.mainCategories || []).find(item => item.id === category_to_main(row._cls?.category, row._cls))?.label || '–';
                 if (key === 'direction') return row.in_out === 'in' ? 'Einnahme' : 'Ausgabe';
                 return row.name || '';
             };
@@ -3061,7 +3070,7 @@
             return rows;
         }
         function drill_budget_label(row) {
-            return (ruleSet.mainCategories || []).find(item => item.id === category_to_main(row._cls?.category))?.label || '–';
+            return (ruleSet.mainCategories || []).find(item => item.id === category_to_main(row._cls?.category, row._cls))?.label || '–';
         }
         function render_drill_transaction_rows() {
             const rows = drillTxState.visible = drill_visible_rows();

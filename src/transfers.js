@@ -301,7 +301,7 @@ function meaningful_rule_classification(cls) {
 function inherited_classification(cls, purchase, ruleSet) {
   const inherited = { ...cls, excluded: false };
   const rules = ruleSet?.rules || [];
-  const rule = (cls.ruleId && rules.find(r => r.id === cls.ruleId)) || rules.find(r => (r.category || r.label) === cls.category);
+  const rule = (cls.ruleId && rules.find(r => r.id === cls.ruleId)) || rules.find(r => (r.category || r.label) === cls.category && r.group === cls.group);
   const payee = String(purchase.name || purchase.Name || '').trim().toLocaleLowerCase();
   const intervalMonths = Number(rule?.recurringOverrides?.[payee]);
   // Interval controls now name the visible merchant. Reapply that merchant's

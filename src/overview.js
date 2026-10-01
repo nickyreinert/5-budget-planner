@@ -1,5 +1,6 @@
 import { is_real_cashflow, transaction_display_name } from './data.js';
 import { budget_category } from './budgets.js';
+import { is_spending_classification } from './categories.js';
 import { week_start, add_days, iso_week_number, category_color } from './week.js';
 import { account_key, is_paypal_account } from './transfers.js';
 import { t, locale } from './i18n.js';
@@ -37,8 +38,8 @@ export function build_timeline(rows, settings, kind, granularity = 'month', dril
     const cls = row._cls || {}, category = cls.category || 'Unkategorisiert';
     let key, label, cents, color;
     if (kind === 'budget') {
-      if (row.betrag_cents >= 0 || cls.group === 'fixed') continue;
-      const id = budget_category(settings, category) || '__unassigned';
+      if (row.betrag_cents >= 0 || !is_spending_classification(cls)) continue;
+      const id = budget_category(settings, category, cls) || '__unassigned';
       if (drill && id !== drill) continue;
       const main = (settings.mainCategories || []).find(m => m.id === id);
       key = drill ? category : id; label = drill ? category : main?.label || t('charts.unassigned'); color = drill ? category_color(category) : main?.color || category_color(id);

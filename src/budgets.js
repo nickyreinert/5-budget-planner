@@ -4,6 +4,8 @@
 // categories with a cap here appear there - this is what keeps that list
 // curated instead of showing every category that ever occurred.
 
+import { is_budget_category, is_spending_classification, category_catalog } from './categories.js';
+
 const STORAGE_KEY = 'subBudgetCaps';
 
 // { [category]: weeklyCapCents }
@@ -24,7 +26,8 @@ export function save_sub_budgets(caps) {
 
 // Exact historical mappings take precedence over rule defaults. Empty means
 // deliberately unassigned; unknown purchases must not be guessed into a budget.
-export function budget_category(settings, category) {
+export function budget_category(settings, category, classification = null) {
+  if (!is_budget_category(settings, category, classification)) return null;
   const mains = settings.mainCategories || [];
   if (Object.hasOwn(settings.categoryMappings || {}, category)) {
     const id = settings.categoryMappings[category];
@@ -32,8 +35,19 @@ export function budget_category(settings, category) {
   }
   const main = mains.find(m => (m.entryCategory || m.label) === category);
   if (main) return main.id;
-  const rule = (settings.rules || []).find(r => (r.category || r.label) === category);
+  const rule = (settings.rules || []).find(r => (r.category || r.label) === category && is_spending_classification({ group: r.group, excluded: r.excludeFromTotals }));
   return mains.some(m => m.id === rule?.budgetCategory) ? rule.budgetCategory : null;
+}
+
+// Every UI assignment path uses the same boundary, including drag and drop.
+export function assign_budget_category(settings, category, budgetId) {
+  if (typeof budgetId !== 'string') return false;
+  if (!category_catalog(settings, true).includes(category)) return false;
+  if (budgetId && !(settings.mainCategories || []).some(main => main.id === budgetId)) return false;
+  settings.categoryMappings ||= {};
+  if (settings.categoryMappings[category] === budgetId) return false;
+  settings.categoryMappings[category] = budgetId;
+  return true;
 }
 
 // Validate the complete budget payload before callers persist any of it.
@@ -114,10 +128,19 @@ export function validate_budget_settings(settings, { checkSuggestionCaps = true 
 export function ensure_budget_coverage(settings, rows = []) {
   settings.mainCategories ||= [];
   settings.categoryMappings ||= {};
-  const variableRules = (settings.rules || []).filter(r => !['fixed', 'income', 'internal_transfer'].includes(r.group) && !r.excludeFromTotals);
+  // Repair legacy/imported mappings without removing the recurring rules or
+  // their transaction categories. Shared names remain scoped by row.group.
+  for (const category of Object.keys(settings.categoryMappings)) {
+    if (!is_budget_category(settings, category)) delete settings.categoryMappings[category];
+  }
+  for (const rule of settings.rules || []) {
+    if (!is_spending_classification({ group: rule.group, excluded: rule.excludeFromTotals })) delete rule.budgetCategory;
+  }
+  const variableRules = (settings.rules || []).filter(r => is_spending_classification({ group: r.group, excluded: r.excludeFromTotals }));
   const categories = new Set([...variableRules.map(r => r.category),
-    ...rows.filter(r => r.betrag_cents < 0 && !r._cls?.excluded && r._cls?.group !== 'fixed').map(r => r._cls?.category || 'Unkategorisiert'), 'Unkategorisiert']);
+    ...rows.filter(r => r.betrag_cents < 0 && is_spending_classification(r._cls)).map(r => r._cls?.category || 'Unkategorisiert'), 'Unkategorisiert']);
   for (const category of categories) {
+    if (!is_budget_category(settings, category)) continue;
     if (!budget_category(settings, category) && !Object.hasOwn(settings.categoryMappings, category)) settings.categoryMappings[category] = '';
   }
   settings.categoryMappings.Unkategorisiert = '';

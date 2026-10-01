@@ -149,6 +149,14 @@ recommendations. Amounts are integer cents. Rules can identify salary,
 recurring contracts, transfers, and transaction purposes using JavaScript
 regular expressions.
 
+Recurring-cost categories (`group: "fixed"`) describe contracts and are separate
+from spending categories. Only non-recurring spending categories can have a
+`categoryMappings` or `budgetCategory` assignment. The app removes old budget
+assignments from recurring, income, and transfer categories when settings are
+loaded or saved. Recurring payments reduce the available budget through their
+monthly fixed-cost value; their transactions never consume a spending budget.
+Category names alone do not determine the role: the classification group does.
+
 The first import can replace the bundled defaults. Later imports show proposed
 additions, edits, and deletions before saving. Local rules and manual
 per-transaction assignments take precedence over imported suggestions. Export

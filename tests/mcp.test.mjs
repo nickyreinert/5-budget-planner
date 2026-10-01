@@ -22,6 +22,15 @@ test('MCP reads existing rule and manual classifications with transaction IDs', 
   assert.equal(transactions(settings, data, { category: 'Unkategorisiert' }).rows[0].id, 'csv:2');
 });
 
+test('AI category exports never present recurring categories as spending-budget assignments', () => {
+  const settings = { rules: [{ id: 'insurance', category: 'Insurance.Legal', group: 'fixed', namePattern: 'Contract' }], mainCategories: [{ id: 'housing', label: 'Housing' }], categoryMappings: { 'Insurance.Legal': 'housing' } };
+  const data = { importedEntries: [entry('csv:contract', 'Contract provider')], manualEntries: [], overrides: {} };
+  const category = categories(settings, data).find(item => item.category === 'Insurance.Legal');
+  assert.equal(category.budget, null);
+  assert.equal(category.examples.length, 1);
+  assert.equal(classified_rows(settings, data)[0].category, 'Insurance.Legal');
+});
+
 test('rule proposal matches unknown rows without changing prior classifications', () => {
   const { candidate, affected } = propose_rule(settings, data, { category: 'Wohnen', field: 'name', text: 'LANDLORD', exact: true });
   assert.equal(affected.length, 1);

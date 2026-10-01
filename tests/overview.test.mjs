@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { build_timeline, filter_overview_rows, period_start, relative_deviation } from '../src/overview.js';
-import { build_budget_basis, salary_monthly_cents } from '../src/week.js';
+import { build_budget_basis, salary_monthly_cents, build_main_budget_report } from '../src/week.js';
 import { ensure_budget_coverage, budget_category } from '../src/budgets.js';
 import { enrich_row, category_transactions, transaction_display_name, tx_id } from '../src/data.js';
 import { classify_all } from '../src/rules.js';
@@ -39,6 +39,26 @@ test('unknown and savings/reserve expenses stay visibly unassigned until mapped'
 test('explicit recurring interval includes a new annual contract immediately', () => {
   const rows=[row(3,300000,'Gehalt','income'),row(3,-12000,'Insurance','fixed',{recurring:{intervalMonths:12}})];
   assert.equal(build_budget_basis(rows).fixedCents,1000);
+});
+
+test('a stale budget mapping cannot double-count recurring payments or mix same-named category roles', () => {
+  const settings = {
+    mainCategories: [{ id: 'daily', label: 'Daily' }], categoryMappings: { Insurance: 'daily' },
+    rules: [{ id: 'fixed', category: 'Insurance', group: 'fixed' }, { id: 'variable', category: 'Insurance', group: 'essential' }]
+  };
+  const recurring = row(9, -27000, 'Insurance', 'fixed', { recurring: { intervalMonths: 6 } });
+  const purchase = row(9, -2500, 'Insurance');
+  const rows = [recurring, purchase, row(9, 300000, 'Gehalt', 'income')];
+  const basis = build_budget_basis(rows);
+  assert.equal(basis.fixedCents, 4500);
+  assert.equal(basis.freeCents, 295500);
+  const budgets = build_main_budget_report(rows, new Date(2026, 8, 14), settings.mainCategories, {}, category => budget_category(settings, category));
+  assert.equal(budgets[0].spentCents, 2500);
+  assert.deepEqual(budgets[0].rows, [purchase]);
+  const spending = build_timeline(rows, settings, 'budget', 'month', 'daily');
+  assert.deepEqual(spending.series[0].values, [2500]);
+  const contracts = build_timeline(rows, settings, 'fixed');
+  assert.deepEqual(contracts.series[0].values, [27000]);
 });
 
 test('explicit other income overrides a salary-looking category name', () => {

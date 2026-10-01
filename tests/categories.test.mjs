@@ -23,6 +23,29 @@ test('recurring-contract picker only offers reusable fixed-expense categories', 
   assert.deepEqual(fixed_expense_categories(ruleSet, ['Insurance']), ['Insurance', 'Rent']);
 });
 
+test('spending pickers exclude legacy recurring mappings, including matching main-budget names', () => {
+  const settings = { rules: [{ category: 'Insurance', group: 'fixed' }], mainCategories: [{ id: 'housing', label: 'Insurance' }], categoryMappings: { Insurance: 'housing', Food: 'housing' } };
+  assert.ok(category_catalog(settings).includes('Insurance'));
+  assert.ok(!category_catalog(settings, true).includes('Insurance'));
+  assert.ok(category_catalog(settings, true).includes('Food'));
+  assert.deepEqual(fixed_expense_categories(settings), ['Insurance']);
+});
+
+test('manual overrides retain the classified role when recurring and spending categories have identical names', () => {
+  const settings = { rules: [
+    { id: 'contract', category: 'Insurance', group: 'fixed', namePattern: 'Contract provider', recurring: { intervalMonths: 6 } },
+    { id: 'purchase', category: 'Insurance', group: 'essential', namePattern: 'One-off purchase' }
+  ] };
+  const rows = ['Contract provider', 'One-off purchase'].map(Name => enrich_row({ Datum: '01.09.2026', Name, Betrag: '-270.00' }));
+  classify_all(rows, settings);
+  apply_manual_overrides(rows, Object.fromEntries(rows.map(row => [tx_id(row), 'Insurance'])), settings);
+  assert.deepEqual(rows.map(row => row._cls.group), ['fixed', 'essential']);
+  assert.equal(rows[0]._cls.recurring.intervalMonths, 6);
+  assert.equal(rows[1]._cls.recurring, undefined);
+  assert.ok(category_catalog(settings, true).includes('Insurance'));
+  assert.deepEqual(fixed_expense_categories(settings), ['Insurance']);
+});
+
 test('bank labels and obsolete overrides cannot introduce unknown categories', () => {
   const row = enrich_row({ Datum: '20.09.2026', Name: 'Unknown', Kategorie: 'Crypto', Betrag: '-10' });
   assert.equal(classify(row, settings).category, 'Unkategorisiert');

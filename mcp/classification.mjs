@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { classify, classify_all, apply_manual_overrides } from '../src/rules.js';
-import { validate_budget_settings } from '../src/budgets.js';
+import { validate_budget_settings, budget_category, ensure_budget_coverage } from '../src/budgets.js';
 import { tx_id, apply_amount_overrides, apply_note_overrides, apply_date_overrides } from '../src/data.js';
 import { category_catalog, UNCATEGORIZED, ADDITIONAL_INCOME } from '../src/categories.js';
 import { reconcile_transactions } from '../src/transactions.js';
@@ -14,6 +14,7 @@ export async function load_exports(settingsPath, dataPath) {
   const settings = JSON.parse(await readFile(settingsPath, 'utf8'));
   const data = JSON.parse(await readFile(dataPath, 'utf8'));
   validate_budget_settings(settings, { checkSuggestionCaps: false });
+  ensure_budget_coverage(settings);
   if (!Array.isArray(data.importedEntries) || !Array.isArray(data.manualEntries) || !data.overrides || typeof data.overrides !== 'object') {
     throw new Error('Invalid data export: expected importedEntries, manualEntries and overrides');
   }
@@ -50,7 +51,7 @@ export function categories(settings, data) {
   const rows = classified_rows(settings, data);
   return category_catalog(settings).map(category => ({
     category,
-    budget: (settings.mainCategories || []).find(main => main.id === settings.categoryMappings?.[category])?.label || null,
+    budget: (settings.mainCategories || []).find(main => main.id === budget_category(settings, category))?.label || null,
     examples: rows.filter(row => row.category === category).slice(0, 5).map(({ name, purpose, amountCents }) => ({ name, purpose, amountCents }))
   }));
 }
