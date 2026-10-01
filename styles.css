@@ -936,7 +936,9 @@ button.budget-totals-cell:hover { border-color: var(--accent); }
    - or the one holding the focus - is tinted slightly, its siblings fade back. */
 .rg-card, .rg-item { transition: opacity .15s ease, background-color .15s ease; }
 .rg-dim { opacity: .55; }
+.main-budget-progress:not(:has(> .main-budget:hover)) > .main-budget.rg-dim { opacity: 1; }
 .rg-card.rg-active { background: color-mix(in srgb, var(--group-color) 6%, var(--surface)); }
+.main-budget-progress:not(:has(> .main-budget:hover)) > .main-budget.rg-active { background: var(--surface); }
 .rg-item.rg-active { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
 .recurring-settings-section .rg-item { margin-inline: -6px; padding-inline: 6px; border-radius: var(--radius-sm); }
 .recurring-settings-section .fixexpense-group > .rg-item { margin-inline: 0; padding-inline: 0; }

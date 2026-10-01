@@ -15,7 +15,7 @@ const key = el => el.dataset.rgKey || el.dataset.budget || el.dataset.parent || 
 
 function path_of(target) {
   const path = [];
-  for (let el = target.closest?.(SECTION); el; el = el.parentElement?.closest(SECTION)) path.unshift(el);
+  for (let el = target?.closest?.(SECTION); el; el = el.parentElement?.closest(SECTION)) path.unshift(el);
   return path;
 }
 
