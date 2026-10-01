@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classified_rows, categories, transactions, propose_rule, propose_assignments } from '../mcp/classification.mjs';
+import { classified_rows, categories, transactions, propose_rule, propose_rules, propose_assignments } from '../mcp/classification.mjs';
 
 const settings = {
   groups: [{ id: 'discretionary', label: 'Budget' }],
@@ -28,11 +28,25 @@ test('rule proposal matches unknown rows without changing prior classifications'
   assert.equal(affected[0].id, 'csv:2');
   assert.equal(candidate.rules.length, 2);
   assert.equal(classified_rows(candidate, data)[1].category, 'Wohnen');
-  assert.throws(() => propose_rule(settings, data, { category: 'Wohnen', field: 'name', text: 'MARKET' }), /already categorized/);
+  assert.throws(() => propose_rule(settings, data, { category: 'Wohnen', field: 'name', text: 'MARKET' }), /already classified/);
+  assert.equal(propose_rules(settings, data, [{ category: 'Wohnen', field: 'name', text: 'LANDLORD' }]).proposals.length, 1);
+  const withRefund = { ...data, importedEntries: [...data.importedEntries, entry('csv:4', 'LANDLORD REFUND', '10.00')] };
+  assert.throws(() => propose_rule(settings, withRefund, { category: 'Wohnen', field: 'name', text: 'LANDLORD' }), /income or refunds/);
 });
 
 test('individual assignments cannot overwrite manual labels or invent categories', () => {
   assert.deepEqual(propose_assignments(settings, data, [{ id: 'csv:2', category: 'Essen' }]), { overrides: { 'csv:2': 'Essen' } });
   assert.throws(() => propose_assignments(settings, data, [{ id: 'csv:3', category: 'Essen' }]), /already has a manual/);
   assert.throws(() => propose_assignments(settings, data, [{ id: 'csv:2', category: 'NotExisting' }]), /Unknown category/);
+});
+
+test('MCP reconciles manual duplicates and applies edited amounts and notes before matching', () => {
+  const changed = {
+    importedEntries: [entry('csv:1', 'MARKET')],
+    manualEntries: [{ ...entry('manual:1', 'Cash'), _txId: 'manual:1', Kategorie: 'Wohnen', source: 'manual' }],
+    overrides: { 'csv:1': 'Wohnen' }, amountOverrides: { 'csv:1': -2500 }, noteOverrides: { 'csv:1': 'edited purpose' }
+  };
+  const rows = classified_rows(settings, changed);
+  assert.equal(rows.length, 1);
+  assert.deepEqual([rows[0].category, rows[0].amountCents, rows[0].purpose], ['Wohnen', -2500, 'edited purpose']);
 });

@@ -64,15 +64,15 @@ export function validate_budget_settings(settings, { checkSuggestionCaps = true 
       for (const months of Object.values(r.recurringOverrides)) if (![1,3,6,12].includes(months)) fail('recurringOverrides values must be 1, 3, 6 or 12');
     }
     if (r.matchers !== undefined) {
-      if (!Array.isArray(r.matchers) || !r.matchers.length) fail('matchers must be a non-empty array');
+      if (!Array.isArray(r.matchers)) fail('matchers must be an array');
       for (const matcher of r.matchers) {
         if (!matcher || !['any', 'name', 'purpose', 'category', 'amount'].includes(matcher.field)) fail('Invalid matcher field');
         if (typeof matcher.exclude !== 'undefined' && typeof matcher.exclude !== 'boolean') fail('Invalid matcher exclusion');
         if (matcher.field === 'amount') {
-          if (!['gt', 'lt'].includes(matcher.operator) || !Number.isFinite(Number(matcher.value))) fail('Invalid amount matcher');
+          if (!['gt', 'lt', 'equals'].includes(matcher.operator) || (String(matcher.value ?? '').trim() && !Number.isFinite(Number(matcher.value)))) fail('Invalid amount matcher');
         } else {
-          if (!['contains', 'regex'].includes(matcher.operator) || typeof matcher.value !== 'string' || !matcher.value.trim()) fail('Invalid text matcher');
-          if (matcher.operator === 'regex') new RegExp(matcher.value, 'i');
+          if (!['contains', 'regex', 'equals'].includes(matcher.operator) || typeof matcher.value !== 'string') fail('Invalid text matcher');
+          if (matcher.operator === 'regex' && matcher.value.trim()) new RegExp(matcher.value, 'i');
         }
       }
     }

@@ -119,6 +119,54 @@ additions, edits, and deletions before saving. Local rules and manual
 per-transaction assignments take precedence over imported suggestions. Export
 your settings before intentionally replacing local changes.
 
+## Claude MCP (local exports)
+
+Claude Desktop or Claude Code can inspect existing classifications and suggest
+categories for new CSV transactions through the local MCP server. This also
+works when the app is hosted on Vercel: the server runs on **your computer**,
+not on Vercel, and never gets access to browser storage automatically.
+
+1. Import your CSV in the app. In Settings > Export/Import, download both
+	 **SETTING exportieren** (`5ive_classification_settings.json`) and
+	 **Daten exportieren** (`5ive_data_export.json`). Store these files privately.
+2. Run `npm install --prefix mcp` in this repository. Add this stdio server
+	 to Claude's MCP configuration, replacing all paths with absolute paths:
+
+	 ```json
+	 {
+		 "mcpServers": {
+			 "5ive-budgets": {
+				 "command": "node",
+				 "args": [
+					 "/absolute/path/to/moneyMoneyAnalyzer/mcp/server.mjs",
+					 "/absolute/path/to/5ive_classification_settings.json",
+					 "/absolute/path/to/5ive_data_export.json",
+					 "/absolute/path/to/private-output-folder"
+				 ]
+			 }
+		 }
+	 }
+	 ```
+
+3. Ask Claude to use `list_categories`, `list_rules`, and `list_transactions`
+	 (filter by `Unkategorisiert`) to compare new purchases with earlier ones.
+	 Use `propose_rules` for repeated, clearly identifiable merchants; use
+	 `propose_assignments` for individual purchases with known purposes. Leave
+	 ambiguous transactions unclassified. Rules are limited to existing expense
+	 categories and must not take over previously classified entries.
+4. Import `5ive_mcp_settings_proposal.json` via **SETTING importieren** and
+	 review each proposed change. Import `5ive_mcp_assignments.json` via
+	 **Daten importieren** and confirm. The latter adds only category overrides,
+	 without replacing your CSV bookings. Export fresh files before the next
+	 session. Use a fresh empty output folder for each proposal batch; the MCP
+	 server never overwrites existing proposal files.
+
+Claude receives financial details returned by the tools. Keep the export and
+output folders outside the public site/repository; decide whether to share
+that data with your Claude account. The server assumes the default CSV option
+to ignore bank-provided categories; if you disabled that option, verify the
+proposals carefully in the app before importing.
+
 ## Optional bank sync
 
 GoCardless synchronization is provided through the optional proxy in

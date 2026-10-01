@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { load_exports, categories, transactions, propose_rule, propose_assignments, write_proposal, proposalName, assignmentsName } from './classification.mjs';
+import { load_exports, categories, transactions, propose_rules, propose_assignments, write_proposal, proposalName, assignmentsName } from './classification.mjs';
 
 const [settingsPath, dataPath, outputDirectory] = process.argv.slice(2);
 if (!settingsPath || !dataPath || !outputDirectory) {
@@ -40,14 +40,19 @@ server.registerTool('list_transactions', {
   return transactions(settings, data, filters);
 }));
 
-server.registerTool('propose_rule', {
-  description: 'Create ONE importable settings proposal for a literal name/purpose matcher. Rejects changes to already classified transactions. Import via Settings > Export/Import > Import SETTING and review changes. Output file must not already exist.',
-  inputSchema: { category: z.string(), field: z.enum(['name', 'purpose']), text: z.string(), exact: z.boolean().default(false) }
-}, run(async input => {
+server.registerTool('list_rules', {
+  description: 'Read existing classification rules and their matcher patterns before suggesting new rules. Highest priority wins; manual transaction assignments win over rules.',
+  inputSchema: {}
+}, run(async () => (await load()).settings.rules));
+
+server.registerTool('propose_rules', {
+  description: 'Create ONE importable settings file with up to 50 new literal name/purpose rules. Rejects interception of already classified transactions. Review via Settings > Export/Import > Import SETTING. Output file must not already exist.',
+  inputSchema: { rules: z.array(z.object({ category: z.string(), field: z.enum(['name', 'purpose']), text: z.string(), exact: z.boolean().default(false) })).min(1).max(50) }
+}, run(async ({ rules }) => {
   const { settings, data } = await load();
-  const { candidate, rule, affected } = propose_rule(settings, data, input);
+  const { candidate, proposals } = propose_rules(settings, data, rules);
   const path = await write_proposal(outputDir, proposalName, candidate);
-  return { path, rule, affected, instruction: 'Import this SETTING JSON in the app and review the proposed changes.' };
+  return { path, proposals, instruction: 'Import this SETTING JSON in the app and review the proposed changes.' };
 }));
 
 server.registerTool('propose_assignments', {

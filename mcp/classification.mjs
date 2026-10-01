@@ -1,10 +1,11 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { classify } from '../src/rules.js';
+import { classify, classify_all, apply_manual_overrides } from '../src/rules.js';
 import { validate_budget_settings } from '../src/budgets.js';
-import { enrich_row, tx_id } from '../src/data.js';
+import { tx_id, apply_amount_overrides, apply_note_overrides, apply_date_overrides } from '../src/data.js';
 import { category_catalog, UNCATEGORIZED, ADDITIONAL_INCOME } from '../src/categories.js';
+import { reconcile_transactions } from '../src/transactions.js';
 
 const proposalName = '5ive_mcp_settings_proposal.json';
 const assignmentsName = '5ive_mcp_assignments.json';
@@ -19,19 +20,24 @@ export async function load_exports(settingsPath, dataPath) {
   return { settings, data };
 }
 
+function prepared_rows(data) {
+  const rows = reconcile_transactions(data.importedEntries, data.manualEntries, data.amountOverrides || {});
+  rows.forEach(row => { row._ignoreCsvCategories = row.source === 'csv'; });
+  apply_amount_overrides(rows, data.amountOverrides || {});
+  apply_note_overrides(rows, data.noteOverrides || {});
+  apply_date_overrides(rows, data.dateOverrides || {});
+  return rows;
+}
+
 export function classified_rows(settings, data) {
-  return [...data.importedEntries, ...data.manualEntries].map(record => {
-    const row = enrich_row({ ...record, _txId: record._txId || record.id, _ignoreCsvCategories: true });
-    const id = tx_id(row);
-    const manualCategory = data.overrides[id] || data.overrides[record.legacyId];
-    const classification = classify(row, settings);
-    return {
-      id, date: row.Datum, name: row.Name, purpose: row.Verwendungszweck,
-      amountCents: row.betrag_cents, account: row._account || '',
-      category: manualCategory || classification.category,
-      source: manualCategory ? 'manual' : classification.source
-    };
-  });
+  const rows = prepared_rows(data);
+  classify_all(rows, settings);
+  apply_manual_overrides(rows, data.overrides, settings);
+  return rows.map(row => ({
+    id: tx_id(row), date: row.Datum, name: row.Name, purpose: row.Verwendungszweck,
+    amountCents: row.betrag_cents, account: row._account || '',
+    category: row._cls.category, source: row._cls.source
+  }));
 }
 
 export function categories(settings, data) {
@@ -54,9 +60,11 @@ export function transactions(settings, data, { category, search, offset = 0, lim
 
 export function propose_rule(settings, data, { category, field, text, exact = false }) {
   if (!category_catalog(settings).includes(category)) throw new Error('Choose an existing category');
+  if ([UNCATEGORIZED, ADDITIONAL_INCOME].includes(category)) throw new Error('Choose a specific existing expense category');
   if (!['name', 'purpose'].includes(field) || typeof text !== 'string' || !text.trim() || text.length > 200) throw new Error('Provide a name or purpose and nonempty text (max 200 chars)');
   const template = settings.rules.find(rule => (rule.category || rule.label) === category);
   if (!template && !Object.hasOwn(settings.categoryMappings || {}, category)) throw new Error('Category has no mapping or rule');
+  if (template && ['fixed', 'income', 'internal_transfer'].includes(template.group)) throw new Error('Recurring, income and transfer rules require manual review in the app');
   const escaped = text.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const rule = {
     id: `mcp_${randomUUID()}`, label: category, category,
@@ -70,12 +78,32 @@ export function propose_rule(settings, data, { category, field, text, exact = fa
   const candidate = { ...settings, rules: [...settings.rules, rule] };
   validate_budget_settings(candidate, { checkSuggestionCaps: false });
   const after = classified_rows(candidate, data);
+  const matched = prepared_rows(data).filter(row => classify(row, candidate).ruleId === rule.id);
+  if (matched.some(row => row.betrag_cents >= 0)) {
+    throw new Error('Rule would classify income or refunds as expenses; use narrower text');
+  }
+  const previousById = new Map(before.map(row => [row.id, row]));
+  if (matched.some(row => previousById.get(tx_id(row))?.source !== 'none')) {
+    throw new Error('Rule would match already classified transactions; use narrower text or per-transaction assignments');
+  }
   const affected = after.filter((row, index) => row.category !== before[index].category);
   if (!affected.length) throw new Error('This rule does not change any imported transaction');
-  const previousById = new Map(before.map(row => [row.id, row]));
-  const conflicts = affected.filter(row => ![UNCATEGORIZED, ADDITIONAL_INCOME].includes(previousById.get(row.id)?.category));
+  const beforeById = new Map(before.map(row => [row.id, row]));
+  const conflicts = affected.filter(row => ![UNCATEGORIZED, ADDITIONAL_INCOME].includes(beforeById.get(row.id)?.category));
   if (conflicts.length) throw new Error(`Rule would reclassify ${conflicts.length} already categorized transactions; use narrower text or per-transaction assignments`);
   return { candidate, rule, affected: affected.map(({ id, name, amountCents }) => ({ id, name, amountCents })) };
+}
+
+export function propose_rules(settings, data, requests) {
+  if (!Array.isArray(requests) || !requests.length || requests.length > 50) throw new Error('Provide 1..50 rules');
+  let candidate = settings;
+  const proposals = [];
+  for (const request of requests) {
+    const result = propose_rule(candidate, data, request);
+    candidate = result.candidate;
+    proposals.push({ rule: result.rule, affected: result.affected });
+  }
+  return { candidate, proposals };
 }
 
 export function propose_assignments(settings, data, pairs) {

@@ -29,6 +29,14 @@ test('invalid recurring intervals, duplicate IDs and overspending recommendation
   s.budgetRecommendation={monthlyIncomeCents:300000,monthlyFixedCents:200000,weeklyLimitCents:30000};assert.throws(()=>validate_budget_settings(s));
 });
 
+test('settings validator accepts app-authored equals and unfinished matcher rows', () => {
+  const settings = structuredClone(baseline);
+  settings.rules[0].matchers = [{ field: 'name', operator: 'equals', value: 'Market' }, { field: 'amount', operator: 'equals', value: '' }];
+  assert.equal(validate_budget_settings(settings), settings);
+  settings.rules[0].matchers = [];
+  assert.equal(validate_budget_settings(settings), settings);
+});
+
 test('budget order imports unless the user has manually reordered budgets', () => {
  const base={...structuredClone(baseline),mainCategories:[{id:'a',label:'A'},{id:'b',label:'B'},{id:'c',label:'C'}]};
  const incoming=structuredClone(base);incoming.mainCategories.reverse();
