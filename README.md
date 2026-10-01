@@ -131,9 +131,9 @@ not on Vercel, and never gets access to browser storage automatically.
 	 **Aktuelle Daten exportieren** (`5ive_data_export.json`). Store these files privately.
 2. Run `npm install --prefix mcp` in this repository. In Settings > AI, choose
 	 which read and proposal tools Claude may use. Download the permissions file
-	 (`5ive_mcp_permissions.json`) into a private output folder, enter the absolute
-	 paths in the AI tab and copy the generated MCP configuration into your client.
-	 For manual configuration, replace these paths with your own absolute paths:
+	 (`5ive_mcp_permissions.json`) into a private output folder. Configure your
+	 MCP client once with the absolute paths to the server, exports, output folder
+	 and permissions file:
 
 	 ```json
 	 {
@@ -161,7 +161,7 @@ not on Vercel, and never gets access to browser storage automatically.
 		 previously classified entries.
 4. Import `5ive_mcp_settings_proposal.json` via **SETTING-Vorschlag importieren**
 	 in the AI tab and review each proposed change. Import
-	 `5ive_mcp_assignments.json` via **Zuordnungs-Vorschlag importieren** and confirm.
+	 `5ive_mcp_assignments.json` via **Kategorisierungsvorschlag importieren** and confirm.
 	 The latter adds only category overrides,
 	 without replacing your CSV bookings. Export fresh files before the next
 	 session. Use a fresh empty output folder for each proposal batch; the MCP

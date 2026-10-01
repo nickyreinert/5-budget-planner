@@ -401,7 +401,6 @@ dialog.setup-wizard:not([open]) { display: none; }
 .mcp-tool-list input { grid-row: span 2; margin: 2px 0 0; }
 .mcp-tool-list small { grid-column: 2; font-family: inherit; }
 #settingsTab-ai .settings-action-row { justify-content: flex-start; flex-wrap: wrap; }
-#settingsTab-ai #mcpConfigSnippet { min-height: 145px; margin-top: 6px; }
 /* Mirrors the wizard's sticky summary card: sits right under the already-
    sticky .settings-tabs bar (53px measured height) so the totals stay in
    view while the intro text/editable list below scroll away underneath. */

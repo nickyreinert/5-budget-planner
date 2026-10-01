@@ -66,7 +66,7 @@
         <div class="pager-track" id="pagerTrack">
             <div id="tab-week" class="tab-pane">
                 <div id="weekEmptyState" class="empty-state" hidden>
-                    <p data-i18n="week.emptyStateText">Noch keine Daten. Importiere eine CSV oder starte mit Beispieldaten.</p>
+                    <p data-i18n="week.emptyStateText">Noch keine Buchungen vorhanden. Richte deine Budgets mit dem Setup-Assistenten ein oder importiere deine Bankhistorie.</p>
                     <div class="empty-state-actions">
                         <button type="button" id="emptyWizardBtn" class="primary" data-i18n="wizard.startButton">Setup-Assistent starten</button>
                         <button type="button" id="emptyLoadSampleBtn" data-i18n="filters.loadSample">Beispieldaten laden</button>
@@ -74,7 +74,7 @@
                     </div>
                 </div>
 
-                <div id="weekContent">
+                <div id="weekContent" hidden>
                     <div class="week-hero">
                         <div class="week-hero-progress" id="weekHeroProgress" role="meter" aria-valuemin="0" aria-valuemax="100">
                             <div class="week-hero-fill" id="weekHeroFill"></div>
@@ -438,7 +438,7 @@
                         <p data-i18n="ai.mcpImportHint">Nach der Prüfung Vorschläge manuell importieren:</p>
                         <div class="settings-action-row">
                             <button type="button" id="mcpImportSettingsBtn" data-i18n="ai.importSettings">SETTING-Vorschlag importieren</button>
-                            <button type="button" id="mcpImportAssignmentsBtn" data-i18n="ai.importAssignments">Zuordnungs-Vorschlag importieren</button>
+                            <button type="button" id="mcpImportAssignmentsBtn" data-i18n="ai.importAssignments">Kategorisierungsvorschlag importieren</button>
                         </div>
                         <p data-i18n="ai.mcpPrivacy">Finanzdaten aus den Exporten werden an das verbundene LLM übertragen. Lege Exporte und Vorschläge außerhalb des öffentlichen Website-Ordners ab.</p>
                         <div class="mcp-tool-list">
@@ -446,18 +446,11 @@
                             <label><input type="checkbox" class="mcp-tool" value="list_transactions" checked> list_transactions <small data-i18n="ai.listTransactions">Transaktionen lesen und durchsuchen</small></label>
                             <label><input type="checkbox" class="mcp-tool" value="list_rules" checked> list_rules <small data-i18n="ai.listRules">Klassifizierungsregeln lesen</small></label>
                             <label><input type="checkbox" class="mcp-tool" value="propose_rules"> propose_rules <small data-i18n="ai.proposeRules">Neue Regeln als Importdatei vorschlagen</small></label>
-                            <label><input type="checkbox" class="mcp-tool" value="propose_assignments"> propose_assignments <small data-i18n="ai.proposeAssignments">Einzelne Buchungen als Importdatei zuordnen</small></label>
+                            <label><input type="checkbox" class="mcp-tool" value="propose_assignments"> propose_assignments <small data-i18n="ai.proposeAssignments">Kategorien für einzelne Buchungen vorschlagen</small></label>
                         </div>
-                        <p data-i18n="ai.mcpPathsIntro">Lokale absolute Pfade für die MCP-Konfiguration eingeben:</p>
-                        <div class="csv-field"><label for="mcpServerPath" data-i18n="ai.serverPath">Pfad zu mcp/server.mjs</label><input id="mcpServerPath" type="text" placeholder="/path/to/moneyMoneyAnalyzer/mcp/server.mjs"></div>
-                        <div class="csv-field"><label for="mcpSettingsPath" data-i18n="ai.settingsPath">Pfad zum SETTING-Export</label><input id="mcpSettingsPath" type="text" placeholder="/private/5ive_classification_settings.json"></div>
-                        <div class="csv-field"><label for="mcpDataPath" data-i18n="ai.dataPath">Pfad zum Daten-Export</label><input id="mcpDataPath" type="text" placeholder="/private/5ive_data_export.json"></div>
-                        <div class="csv-field"><label for="mcpOutputPath" data-i18n="ai.outputPath">Privater Ordner für Vorschläge und Berechtigungen</label><input id="mcpOutputPath" type="text" placeholder="/private/5ive-proposals"></div>
                         <button type="button" id="mcpDownloadPermissionsBtn" data-i18n="ai.downloadPermissions">Berechtigungen herunterladen</button>
-                        <label for="mcpConfigSnippet" data-i18n="ai.configLabel">MCP-Konfiguration für deinen Client</label>
-                        <textarea id="mcpConfigSnippet" readonly class="llm-prompt-example" aria-describedby="mcpConfigHint"></textarea>
-                        <button type="button" id="mcpCopyConfigBtn" data-i18n="ai.copyConfig">Konfiguration kopieren</button>
-                        <p id="mcpConfigHint" data-i18n="ai.mcpHint">Installiere zuerst die Abhängigkeiten mit npm install --prefix mcp. Lege die heruntergeladene Berechtigungsdatei im angegebenen privaten Ausgabeordner ab und starte den MCP-Client nach Änderungen neu. Vorschläge müssen weiterhin über Export / Import bestätigt werden.</p>
+                        <p data-i18n="ai.mcpHint">Die Freigaben gelten nur für einen entsprechend eingerichteten lokalen MCP-Client; nach Änderungen neu starten.</p>
+                        <a href="./README.md#claude-mcp-local-exports" data-i18n="ai.mcpSetup">Einmalige MCP-Einrichtung</a>
                     </section>
                 </div>
 
@@ -1355,12 +1348,10 @@
         function render_week() {
             const hasData = module_data.length > 0;
             document.getElementById('weekEmptyState').hidden = hasData;
-            document.getElementById('weekContent').hidden = false;
+            document.getElementById('weekContent').hidden = !hasData;
+            if (!hasData) return;
             render_quick_add_tiles();
             render_main_budget_progress();
-            document.querySelector('#weekContent .week-hero').hidden = !hasData;
-            document.querySelector('#weekContent .week-basis').hidden = !hasData;
-            if (!hasData) return;
 
             document.getElementById('weekLabel').textContent = t('week.label', {
                 week: iso_week_number(weekMonday)
@@ -4497,29 +4488,20 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
         document.getElementById('mcpExportDataBtn').addEventListener('click', () => document.getElementById('exportDataBtn').click());
         document.getElementById('mcpImportSettingsBtn').addEventListener('click', () => document.getElementById('importRulesBtn').click());
         document.getElementById('mcpImportAssignmentsBtn').addEventListener('click', () => document.getElementById('importDataBtn').click());
-        const mcpPathFields = ['mcpServerPath', 'mcpSettingsPath', 'mcpDataPath', 'mcpOutputPath'];
         const mcpPermissionsName = '5ive_mcp_permissions.json';
-        let storedMcpConfig = {};
-        try { storedMcpConfig = JSON.parse(localStorage.getItem('aiMcpConfig') || '{}') || {}; } catch (error) { /* Ignore invalid local preferences. */ }
-        mcpPathFields.forEach(id => { document.getElementById(id).value = storedMcpConfig[id] || ''; });
+        let storedMcpPermissions = null;
+        try {
+            storedMcpPermissions = JSON.parse(localStorage.getItem('aiMcpPermissions') || localStorage.getItem('aiMcpConfig') || 'null')?.allowedTools;
+        } catch (error) { storedMcpPermissions = null; }
+        localStorage.removeItem('aiMcpConfig');
         document.querySelectorAll('.mcp-tool').forEach(input => {
-            if (Array.isArray(storedMcpConfig.allowedTools)) input.checked = storedMcpConfig.allowedTools.includes(input.value);
+            if (Array.isArray(storedMcpPermissions)) input.checked = storedMcpPermissions.includes(input.value);
         });
-        function update_mcp_config() {
-            const paths = Object.fromEntries(mcpPathFields.map(id => [id, document.getElementById(id).value.trim()]));
+        function save_mcp_permissions() {
             const allowedTools = [...document.querySelectorAll('.mcp-tool:checked')].map(input => input.value);
-            localStorage.setItem('aiMcpConfig', JSON.stringify({ ...paths, allowedTools }));
-            const output = paths.mcpOutputPath.replace(/[\\/]+$/, '');
-            const separator = output.includes('\\') ? '\\' : '/';
-            const config = Object.values(paths).every(Boolean) ? {
-                mcpServers: { '5ive-budgets': { command: 'node', args: [paths.mcpServerPath, paths.mcpSettingsPath, paths.mcpDataPath,
-                    output, output + separator + mcpPermissionsName] } }
-            } : null;
-            document.getElementById('mcpConfigSnippet').value = config ? JSON.stringify(config, null, 2) : '';
-            document.getElementById('mcpCopyConfigBtn').disabled = !config;
+            localStorage.setItem('aiMcpPermissions', JSON.stringify({ allowedTools }));
         }
-        mcpPathFields.forEach(id => document.getElementById(id).addEventListener('input', update_mcp_config));
-        document.querySelectorAll('.mcp-tool').forEach(input => input.addEventListener('change', update_mcp_config));
+        document.querySelectorAll('.mcp-tool').forEach(input => input.addEventListener('change', save_mcp_permissions));
         document.getElementById('mcpDownloadPermissionsBtn').addEventListener('click', () => {
             const allowedTools = [...document.querySelectorAll('.mcp-tool:checked')].map(input => input.value);
             const url = URL.createObjectURL(new Blob([JSON.stringify({ allowedTools }, null, 2)], { type: 'application/json' }));
@@ -4527,12 +4509,6 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             link.href = url; link.download = mcpPermissionsName; link.click();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
         });
-        document.getElementById('mcpCopyConfigBtn').addEventListener('click', async () => {
-            const snippet = document.getElementById('mcpConfigSnippet');
-            try { await navigator.clipboard.writeText(snippet.value); }
-            catch (error) { snippet.select(); }
-        });
-        update_mcp_config();
 
         // ===== CSV IMPORT CONFIG (delimiter, line break, encoding, column mapping) =====
 
