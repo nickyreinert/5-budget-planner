@@ -244,3 +244,39 @@ test('recurring previews retain legacy interval overrides when a bank-only colle
   assert.equal(rule_monthly_equivalent([bank], { 'paypal europe': 6 }).totalCents, 4500);
   assert.equal(rule_monthly_equivalent([bank], { 'fixture insurance': 3, 'paypal europe': 6 }).totalCents, 9000);
 });
+
+import { weekly_spending_limit, build_spending_plan, build_main_budget_report } from '../src/week.js';
+const mains = [{ id: 'food', label: 'Food' }, { id: 'fun', label: 'Fun' }];
+test('configured caps drive weekly allowance including explicit zero, ignoring deleted budget caps', () => {
+  assert.equal(weekly_spending_limit(mains, { food: 10000, fun: 5000, removed: 999999 }, 36000), 15000);
+  assert.equal(weekly_spending_limit(mains, { food: 0 }, 36000), 0);
+  assert.equal(weekly_spending_limit(mains, {}, 36000), 36000);
+});
+
+test('remaining plan uses current-month budget spending across a month boundary', () => {
+  const monday = new Date(2026, 8, 28), today = new Date(2026, 9, 1);
+  const rows = [tx('2026-09-30', -1000, 'September', 'discretionary', 'Food'), tx('2026-10-01', -1200, 'October', 'discretionary', 'Food'),
+    tx('2026-10-01', -10000, 'Insurance', 'fixed', 'Insurance'), tx('2026-10-01', 300000, 'Salary', 'income', 'Salary')];
+  const ignored = tx('2026-10-01', -800, 'Failed', 'discretionary', 'Food'); ignored._ignored = true; rows.push(ignored);
+  const plan = build_spending_plan(rows, monday, mains, { food: 10000, fun: 5000 }, today);
+  assert.equal(plan.weeklyCents, 15000);
+  assert.equal(plan.spentCents, 2200);
+  assert.equal(plan.remainingCents, 12800);
+  assert.equal(plan.monthlyRemainingCents, Math.round(15000 * 31 / 7) - 1200);
+  assert.equal(build_spending_plan(rows, monday, mains, { food: 12000, fun: 5000 }, today).remainingCents, 14800);
+  assert.equal(build_spending_plan(rows, monday, mains, { food: 10000 }, new Date(2026, 10, 1)).monthlySpentCents, 1000);
+});
+
+test('ignored bookings stay in main-budget and week lists with zero contribution, restored bookings count again', () => {
+  const monday = new Date(2026, 8, 28);
+  const active = tx('2026-09-30', -1200, 'Shop', 'discretionary', 'Food');
+  const ignored = tx('2026-10-01', -800, 'Failed', 'discretionary', 'Food'); ignored._ignored = true;
+  const report = build_main_budget_report([ignored, active], monday, mains, { food: 10000 }, () => 'food');
+  assert.equal(report[0].spentCents, 1200);
+  assert.deepEqual(report[0].rows, [active, ignored]);
+  const week = build_week_report([ignored, active], monday, { includeIgnored: true });
+  assert.equal(week.spentCents, 1200);
+  assert.deepEqual(week.categories[0].rows, [active, ignored]);
+  ignored._ignored = false;
+  assert.equal(build_week_report([ignored, active], monday).spentCents, 2000);
+});

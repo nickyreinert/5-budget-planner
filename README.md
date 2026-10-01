@@ -210,6 +210,16 @@ not on Vercel, and never gets access to browser storage automatically.
 	 session. Use a fresh empty output folder for each proposal batch; the MCP
 	 server never overwrites existing proposal files.
 
+For duplicate-category cleanup, enable `propose_category_maintenance`. It accepts
+an `operations` array: `create` (`category`, optional `budgetId`), `rename` or
+`merge` (`category`, `target`), `move` (`ids`, `target`), and `delete` (`category`,
+unused only). Renames and merges update both rules and existing transaction
+assignments. Moves can deliberately replace earlier manual assignments. Recurring,
+income, transfer and spending categories must retain their separate roles.
+Import `5ive_mcp_category_maintenance.json` via **Kategorie-Bereinigung importieren**
+in Settings > AI, inspect the affected bookings, then apply it. A proposal made
+against outdated exports is rejected; export fresh settings and data to retry.
+
 The permissions file controls only MCP clients started with that fifth argument;
 restart the client to apply changes. Older four-argument configurations still
 expose all tools. The browser cannot connect to or monitor a running local MCP

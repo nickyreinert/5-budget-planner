@@ -2,7 +2,7 @@
 // All other outgoing payments belong to budgets; other income stays in cashflow.
 // Legacy reserve_monthly_cents remains available for historical reporting.
 
-import { is_real_cashflow, transaction_display_name } from './data.js';
+import { is_real_cashflow, is_visible_transaction, transaction_display_name, transaction_list_order } from './data.js';
 import { reporting_date } from './recurrence.js';
 
 const DAY_MS = 86400000;
@@ -238,23 +238,23 @@ export function build_budget_basis(rows) {
 
 // Weekly spend per category for the week starting at `monday`. Spend paid
 // from reserves is reported separately and not counted against the budget.
-export function build_week_report(rows, monday) {
+export function build_week_report(rows, monday, { includeIgnored = false } = {}) {
   const end = add_days(monday, 7);
   const byCategory = {};
   let reserveCents = 0;
   rows.forEach(r => {
-    if (!is_real_cashflow(r) || r.date < monday || r.date >= end) return;
+    if (!(includeIgnored ? is_visible_transaction(r) : is_real_cashflow(r)) || r.date < monday || r.date >= end) return;
     const group = (r._cls && r._cls.group) || 'unclassified';
 
     if (NON_WEEKLY_GROUPS.has(group)) return;
     if (r.in_out === 'in') return; // Other income never increases the weekly allowance.
     const category = (r._cls && r._cls.category) || 'Unklassifiziert';
     const entry = byCategory[category] = byCategory[category] || { category, group, cents: 0, rows: [] };
-    entry.cents -= r.betrag_cents;
+    if (!r._ignored) entry.cents -= r.betrag_cents;
     entry.rows.push(r);
   });
   const categories = Object.values(byCategory).sort((a, b) => b.cents - a.cents);
-  categories.forEach(c => c.rows.sort((a, b) => a.date - b.date));
+  categories.forEach(c => c.rows.sort(transaction_list_order));
   return {
     categories,
     spentCents: categories.reduce((sum, c) => sum + c.cents, 0),
@@ -321,7 +321,7 @@ export function top_categories(rows, sinceDate, n) {
 // Main budgets summarize the same weekly transactions as the overall total.
 // Keep zero-spend budgets visible; keep unmapped spend visible in its own row.
 export function build_main_budget_report(rows, monday, mains, caps, categoryToMain) {
-  const { categories } = build_week_report(rows, monday);
+  const { categories } = build_week_report(rows, monday, { includeIgnored: true });
   const buckets = mains.map(m => ({ ...m, capCents: caps[m.id] || 0, categories: [] }));
   const unassigned = { id: '__unassigned', label: 'Nicht zugeordnet', capCents: 0, categories: [] };
   const monthStart = new Date(monday.getFullYear(), monday.getMonth(), 1);
@@ -348,11 +348,33 @@ export function build_main_budget_report(rows, monday, mains, caps, categoryToMa
     const monthlyRemainingCents = m.capCents ? Math.round(priorWeeks.reduce((sum, week) =>
       sum + m.capCents * week.daysInMonth / 7 - (week.spentByBudget[m.id] || 0), 0) +
       m.capCents * currentDaysInMonth / 7 -
-      m.categories.flatMap(c => c.rows).reduce((sum, row) => sum + (row.date < nextMonth ? -row.betrag_cents : 0), 0)) : null;
+      m.categories.flatMap(c => c.rows).reduce((sum, row) => sum + (is_real_cashflow(row) && row.date < nextMonth ? -row.betrag_cents : 0), 0)) : null;
     return { ...m, spentCents, monthlyRemainingCents, remainingCents: m.capCents - spentCents,
       pct: m.capCents ? Math.max(0, Math.min(100, spentCents / m.capCents * 100)) : 0,
-      rows: m.categories.flatMap(c => c.rows).sort((a, b) => b.date - a.date) };
+      rows: m.categories.flatMap(c => c.rows).sort(transaction_list_order) };
   });
+}
+
+// User-set spending limits drive the main view. The income-derived allowance
+// remains the fallback while no limits have been configured.
+export function weekly_spending_limit(mains, caps, fallbackCents = 0) {
+  const configured = mains.filter(main => Object.hasOwn(caps, main.id) && Number.isSafeInteger(caps[main.id]) && caps[main.id] >= 0);
+  return configured.length ? configured.reduce((sum, main) => sum + caps[main.id], 0) : Math.max(0, fallbackCents);
+}
+
+export function build_spending_plan(rows, monday, mains, caps, today = new Date()) {
+  const basis = build_budget_basis(rows);
+  const weeklyCents = weekly_spending_limit(mains, caps, basis.weeklyCents);
+  const report = build_week_report(rows, monday);
+  const monthDate = today >= monday && today < add_days(monday, 7) ? today : monday;
+  const start = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+  const end = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1);
+  const days = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
+  const monthlyCents = Math.round(weeklyCents * days / 7);
+  const monthlySpentCents = rows.filter(row => row.date >= start && row.date < end && row.betrag_cents < 0 && is_real_cashflow(row) && !NON_WEEKLY_GROUPS.has(row._cls?.group))
+    .reduce((sum, row) => sum - row.betrag_cents, 0);
+  return { basis, weeklyCents, spentCents: report.spentCents, remainingCents: weeklyCents - report.spentCents,
+    monthlyCents, monthlySpentCents, monthlyRemainingCents: monthlyCents - monthlySpentCents };
 }
 
 export function category_color(category) {

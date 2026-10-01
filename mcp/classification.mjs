@@ -3,12 +3,14 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { classify, classify_all, apply_manual_overrides } from '../src/rules.js';
 import { validate_budget_settings, budget_category, ensure_budget_coverage } from '../src/budgets.js';
-import { tx_id, apply_amount_overrides, apply_note_overrides, apply_date_overrides } from '../src/data.js';
+import { tx_id, apply_amount_overrides, apply_note_overrides, apply_date_overrides, apply_ignored_transactions } from '../src/data.js';
 import { category_catalog, UNCATEGORIZED, ADDITIONAL_INCOME } from '../src/categories.js';
 import { reconcile_transactions } from '../src/transactions.js';
+import { plan_category_maintenance, category_maintenance_revision, category_role } from '../src/category_maintenance.js';
 
 const proposalName = '5ive_mcp_settings_proposal.json';
 const assignmentsName = '5ive_mcp_assignments.json';
+const categoryMaintenanceName = '5ive_mcp_category_maintenance.json';
 
 export async function load_exports(settingsPath, dataPath) {
   const settings = JSON.parse(await readFile(settingsPath, 'utf8'));
@@ -32,6 +34,7 @@ function prepared_rows(data) {
   apply_amount_overrides(rows, data.amountOverrides || {});
   apply_note_overrides(rows, data.noteOverrides || {});
   apply_date_overrides(rows, data.dateOverrides || {});
+  apply_ignored_transactions(rows, data.ignoredTransactions || {});
   return rows;
 }
 
@@ -42,7 +45,7 @@ export function classified_rows(settings, data) {
   return rows.map(row => ({
     id: tx_id(row), date: `${String(row.date.getDate()).padStart(2, '0')}.${String(row.date.getMonth() + 1).padStart(2, '0')}.${row.date.getFullYear()}`, name: row.Name, purpose: row.Verwendungszweck,
     amountCents: row.betrag_cents, account: row._account || '', currency: row.Währung || 'EUR',
-    category: row._cls.category, source: row._cls.source,
+    category: row._cls.category, group: row._cls.group, source: row._cls.source, ignored: !!row._ignored,
     transactionSource: row.source, reconciliation: row._reconciliation || null
   }));
 }
@@ -51,6 +54,7 @@ export function categories(settings, data) {
   const rows = classified_rows(settings, data);
   return category_catalog(settings).map(category => ({
     category,
+    role: (() => { try { return category_role(settings, category); } catch { return 'multiple'; } })(),
     budget: (settings.mainCategories || []).find(main => main.id === budget_category(settings, category))?.label || null,
     examples: rows.filter(row => row.category === category).slice(0, 5).map(({ name, purpose, amountCents }) => ({ name, purpose, amountCents }))
   }));
@@ -134,4 +138,13 @@ export async function write_proposal(directory, name, payload) {
   return path;
 }
 
-export { proposalName, assignmentsName };
+export function propose_category_maintenance(settings, data, operations) {
+  const rows = prepared_rows(data);
+  classify_all(rows, settings); apply_manual_overrides(rows, data.overrides, settings);
+  const plan = plan_category_maintenance(settings, rows, data.overrides || {}, operations);
+  return { kind: 'category-maintenance', version: 1, operations,
+    revision: category_maintenance_revision(settings, rows, data.overrides || {}),
+    preview: plan.changes.map(change => ({ ...change, count: change.affectedIds.length })) };
+}
+
+export { proposalName, assignmentsName, categoryMaintenanceName };

@@ -118,3 +118,21 @@ test('MCP preserves ambiguous duplicates and honors an exported explicit match',
   assert.equal(reviewed.find(row => row.id === 'csv:b').category, 'Wohnen');
   assert.equal(reviewed.find(row => row.id === 'csv:b').reconciliation.status, 'matched');
 });
+
+import { propose_category_maintenance } from '../mcp/classification.mjs';
+import { category_maintenance_revision } from '../src/category_maintenance.js';
+import { reconcile_transactions } from '../src/transactions.js';
+import { classify_all, apply_manual_overrides } from '../src/rules.js';
+import { apply_ignored_transactions } from '../src/data.js';
+test('MCP maintenance intentionally moves manual labels and records ignored status in its reviewed revision', () => {
+  const exported = { ...data, ignoredTransactions: { 'csv:3': true } };
+  assert.equal(classified_rows(settings, exported).find(row => row.id === 'csv:3').ignored, true);
+  const proposal = propose_category_maintenance(settings, exported, [{ action: 'move', ids: ['csv:3'], target: 'Essen' }]);
+  assert.deepEqual(proposal.preview[0].affectedIds, ['csv:3']);
+  const browserRows = reconcile_transactions(exported.importedEntries, exported.manualEntries);
+  browserRows.forEach(row => { row._ignoreCsvCategories = true; });
+  classify_all(browserRows, settings); apply_manual_overrides(browserRows, exported.overrides, settings);
+  apply_ignored_transactions(browserRows, exported.ignoredTransactions);
+  assert.equal(proposal.revision, category_maintenance_revision(settings, browserRows, exported.overrides));
+  assert.equal(data.overrides['csv:3'], 'Wohnen');
+});

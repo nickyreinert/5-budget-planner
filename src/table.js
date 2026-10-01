@@ -1,5 +1,6 @@
 // --- table.js ---
-import { expense_matches_path, tx_id, is_real_cashflow, transaction_display_name } from './data.js';
+import { expense_matches_path, tx_id, is_visible_transaction, transaction_display_name } from './data.js';
+import { compact_screen, fit_picker_dialogs } from './pickers.js';
 import { transaction_source_label } from './transactions.js';
 import { t } from './i18n.js';
 
@@ -11,6 +12,7 @@ let filterState = {};
 let selectedIds = new Set();
 let lastDisplayIds = [];
 let popoverEl = null;
+let pickerDialog = null;
 
 function esc(str) {
   return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -21,7 +23,7 @@ export function render_table(rows, tbodySelector, current_path, leakCategoryFilt
   tbody.innerHTML = '';
 
   // Filter transactions based on mode
-  let display = rows.filter(r => r.in_out === 'out' && is_real_cashflow(r));
+  let display = rows.filter(r => r.in_out === 'out' && is_visible_transaction(r));
 
   if (leakCategoryFilter) {
     // Money-flow quick filter: jump straight to one rule-engine category,
@@ -74,8 +76,10 @@ export function render_table(rows, tbodySelector, current_path, leakCategoryFilt
     });
   }
 
+  display.sort((a, b) => Number(!!a._ignored) - Number(!!b._ignored));
   display.forEach(r => {
     const tr = document.createElement('tr');
+    tr.classList.toggle('tx-row-ignored', !!r._ignored);
     const euro = (r.betrag_cents / 100).toFixed(2);
     const cls = r._cls ? r._cls.category : '';
     const id = tx_id(r);
@@ -183,7 +187,7 @@ function ensure_popover() {
     });
   }, 0);
   window.addEventListener('scroll', event => {
-    if (justOpened || popoverEl.hidden) return;
+    if (justOpened || popoverEl.hidden || pickerDialog?.open) return;
     const target = event.target;
     if (target === popoverEl || popoverEl.contains(target)) return;
     close_popover();
@@ -194,6 +198,7 @@ function ensure_popover() {
 // Exported so a global Escape-key handler can dismiss it too.
 export function close_popover() {
   if (popoverEl) popoverEl.hidden = true;
+  if (pickerDialog?.open) pickerDialog.close();
 }
 
 // Opens the shared category dropdown below `anchorBtn`, with a quick-filter
@@ -206,7 +211,17 @@ export function open_category_popover(anchorBtn, categoryOptions, onPick, { onCr
   // A modal dialog lives in the browser's top layer. Move the shared picker
   // into that dialog while it is in use; a body child would otherwise open
   // behind the dialog and look as though the trigger did nothing.
-  const overlayParent = anchorBtn.closest('dialog') || document.body;
+  const compact = compact_screen();
+  if (compact && !pickerDialog) {
+    pickerDialog = document.createElement('dialog');
+    pickerDialog.className = 'selection-dialog category-selection-dialog';
+    pickerDialog.dataset.responsivePicker = '';
+    pickerDialog.innerHTML = '<header><h2></h2><button type="button" class="picker-close" autofocus>×</button></header>';
+    document.body.append(pickerDialog);
+    pickerDialog.querySelector('button').onclick = close_popover;
+    pickerDialog.addEventListener('close', () => { if (popoverEl) popoverEl.hidden = true; });
+  }
+  const overlayParent = compact ? pickerDialog : anchorBtn.closest('dialog') || document.body;
   if (pop.parentElement !== overlayParent) overlayParent.appendChild(pop);
   pop._anchor = anchorBtn;
   const filterInput = pop.querySelector('.category-popover-filter');
@@ -242,8 +257,8 @@ export function open_category_popover(anchorBtn, categoryOptions, onPick, { onCr
     ).join('') || `<div class="category-popover-empty">${esc(t('table.noCategoryMatch'))}</div>`;
     listEl.querySelectorAll('.category-popover-item').forEach(btn => {
       btn.addEventListener('click', () => {
-        onPick(btn.dataset.category);
         close_popover();
+        onPick(btn.dataset.category);
       });
     });
   }
@@ -253,13 +268,18 @@ export function open_category_popover(anchorBtn, categoryOptions, onPick, { onCr
   renderList('');
 
   const rect = anchorBtn.getBoundingClientRect();
-  pop.style.position = 'fixed';
-  pop.style.left = Math.min(rect.left, window.innerWidth - 280) + 'px';
-  pop.style.top = (rect.bottom + 4) + 'px';
+  pop.classList.toggle('category-popover-modal', compact);
+  pop.style.position = compact ? 'static' : 'fixed';
+  pop.style.left = compact ? '' : Math.max(8, Math.min(rect.left, window.innerWidth - 280)) + 'px';
+  pop.style.top = compact ? '' : (rect.bottom + 4) + 'px';
   pop.hidden = false;
   justOpened = true;
   setTimeout(() => { justOpened = false; }, 150);
-  filterInput.focus();
+  if (compact) {
+    pickerDialog.querySelector('h2').textContent = t('quickEntry.moreGridTitle');
+    pickerDialog.querySelector('button').setAttribute('aria-label', t('modal.close'));
+    pickerDialog.showModal(); pickerDialog.querySelector('button').focus(); fit_picker_dialogs();
+  } else filterInput.focus();
 }
 
 // Initialize sorting and filtering

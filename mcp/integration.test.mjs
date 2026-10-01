@@ -27,7 +27,7 @@ test('Claude MCP client reads categories and creates importable proposals', asyn
     await writeFile(dataPath, JSON.stringify(data));
     client = new Client({ name: 'test-client', version: '1.0.0' });
     await client.connect(new StdioClientTransport({ command: process.execPath, args: [join(import.meta.dirname, 'server.mjs'), settingsPath, dataPath, directory] }));
-    assert.deepEqual((await client.listTools()).tools.map(tool => tool.name), ['list_categories', 'list_transactions', 'list_rules', 'propose_rules', 'propose_assignments']);
+    assert.deepEqual((await client.listTools()).tools.map(tool => tool.name), ['list_categories', 'list_transactions', 'list_rules', 'propose_rules', 'propose_assignments', 'propose_category_maintenance']);
     const listed = await client.callTool({ name: 'list_transactions', arguments: { category: 'Unkategorisiert' } });
     assert.equal(JSON.parse(listed.content[0].text).rows[0].id, 'csv:2');
     const proposed = await client.callTool({ name: 'propose_rules', arguments: { rules: [{ category: 'Food', field: 'name', text: 'BAKERY' }] } });
@@ -36,6 +36,13 @@ test('Claude MCP client reads categories and creates importable proposals', asyn
     const assignments = await client.callTool({ name: 'propose_assignments', arguments: { assignments: [{ id: 'csv:2', category: 'Food' }] } });
     assert.equal(assignments.isError, undefined);
     assert.deepEqual(JSON.parse(await readFile(join(directory, '5ive_mcp_assignments.json'), 'utf8')), { overrides: { 'csv:2': 'Food' } });
+    const cleanup = await client.callTool({ name: 'propose_category_maintenance', arguments: { operations: [{ action: 'rename', category: 'Food', target: 'Groceries' }] } });
+    assert.equal(cleanup.isError, undefined);
+    const proposal = JSON.parse(await readFile(join(directory, '5ive_mcp_category_maintenance.json'), 'utf8'));
+    assert.equal(proposal.kind, 'category-maintenance');
+    assert.deepEqual(proposal.preview[0].affectedIds, ['csv:1']);
+    assert.deepEqual(JSON.parse(await readFile(settingsPath, 'utf8')), settings);
+    assert.deepEqual(JSON.parse(await readFile(dataPath, 'utf8')), data);
   } finally {
     await client?.close();
     await rm(directory, { recursive: true, force: true });
@@ -60,6 +67,8 @@ test('MCP permissions expose only selected tools', async () => {
     assert.equal(listed.isError, undefined);
     const denied = await client.callTool({ name: 'propose_rules', arguments: { rules: [] } });
     assert.equal(denied.isError, true);
+    const cleanupDenied = await client.callTool({ name: 'propose_category_maintenance', arguments: { operations: [{ action: 'create', category: 'Test' }] } });
+    assert.equal(cleanupDenied.isError, true);
   } finally {
     await client?.close();
     await rm(directory, { recursive: true, force: true });

@@ -16,6 +16,7 @@ const AMOUNT_PREFIX = 'amount:';
 const NOTE_PREFIX = 'note:';
 const DATE_PREFIX = 'date:';
 const PERIOD_PREFIX = 'period:';
+const IGNORE_PREFIX = 'ignore:';
 const STORE = 'categoryOverrides';
 const MANUAL_STORE = 'manualEntries';
 
@@ -58,7 +59,7 @@ export async function load_all_overrides() {
       const cursor = e.target.result;
       if (cursor) {
         const key = String(cursor.key);
-        const isNamespaced = key.startsWith(AMOUNT_PREFIX) || key.startsWith(NOTE_PREFIX) || key.startsWith(DATE_PREFIX) || key.startsWith(PERIOD_PREFIX);
+      const isNamespaced = key.startsWith(AMOUNT_PREFIX) || key.startsWith(NOTE_PREFIX) || key.startsWith(DATE_PREFIX) || key.startsWith(PERIOD_PREFIX) || key.startsWith(IGNORE_PREFIX);
         if (!isNamespaced && typeof cursor.value === 'string') overrides[cursor.key] = cursor.value;
         cursor.continue();
       } else {
@@ -118,7 +119,7 @@ export async function delete_manual_entry(id, txId) {
     tx.objectStore(RECONCILIATION_STORE).delete(id);
     if (txId) {
       const store = tx.objectStore(STORE);
-      [txId, AMOUNT_PREFIX + txId, NOTE_PREFIX + txId, DATE_PREFIX + txId, PERIOD_PREFIX + txId].forEach(key => store.delete(key));
+      [txId, AMOUNT_PREFIX + txId, NOTE_PREFIX + txId, DATE_PREFIX + txId, PERIOD_PREFIX + txId, IGNORE_PREFIX + txId].forEach(key => store.delete(key));
     }
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
@@ -277,7 +278,7 @@ export async function upsert_imported_entries(records, ranges = []) {
         if (!request.result || request.result._account || oldCurrency !== newCurrency) { migrate_decision_ids(); return; }
         imports.delete(record.legacyId);
         redirects.set(record.legacyId, record.id);
-        for (const prefix of ['', AMOUNT_PREFIX, NOTE_PREFIX, DATE_PREFIX, PERIOD_PREFIX]) {
+        for (const prefix of ['', AMOUNT_PREFIX, NOTE_PREFIX, DATE_PREFIX, PERIOD_PREFIX, IGNORE_PREFIX]) {
           const old = overrides.get(prefix + record.legacyId);
           old.onsuccess = () => { if (old.result !== undefined) { overrides.put(old.result, prefix + record.id); overrides.delete(prefix + record.legacyId); } };
         }
@@ -295,6 +296,33 @@ export async function load_imported_entries() {
     const req = db.transaction(IMPORT_STORE, 'readonly').objectStore(IMPORT_STORE).getAll();
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
+  });
+}
+
+export async function load_ignored_transactions() {
+  const db = await open_db();
+  return new Promise((resolve, reject) => {
+    const result = {};
+    const req = db.transaction(STORE, 'readonly').objectStore(STORE).openCursor();
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (!cursor) return resolve(result);
+      const key = String(cursor.key);
+      if (key.startsWith(IGNORE_PREFIX) && typeof cursor.value === 'boolean') result[key.slice(IGNORE_PREFIX.length)] = cursor.value;
+      cursor.continue();
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function save_ignored_transaction(id, ignored) {
+  if (typeof id !== 'string' || !id || typeof ignored !== 'boolean') throw new Error('Invalid ignored transaction');
+  const db = await open_db();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(ignored, IGNORE_PREFIX + id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
   });
 }
 

@@ -94,8 +94,7 @@
                     <div id="mainBudgetProgress" class="main-budget-progress" aria-label="Budgets dieser Woche"></div>
                     <div id="weekReconciliationNotice" class="reconciliation-notice" hidden></div>
                     <div class="quickadd">
-                        <div class="category-search-label" data-i18n="week.addExpense">Ausgabe hinzufügen</div><div class="quickadd-tiles" id="quickAddTiles"></div>
-                        <button type="button" id="quickAddMoreBtn" class="quickadd-more">Alle Kategorien durchsuchen</button>
+                        <button type="button" id="quickAddMoreBtn" class="quickadd-plus" data-i18n-aria-label="week.addExpense" aria-label="Ausgabe hinzufügen"><span aria-hidden="true">＋</span><small data-i18n="week.addExpense">Ausgabe hinzufügen</small></button>
                     </div>
 
                     <details class="week-basis">
@@ -193,18 +192,18 @@
     </div>
 
     <!-- Full category search, also available from the app shortcut -->
-    <div id="categoryGridModal" class="modal">
+    <dialog id="categoryGridModal" class="category-grid-dialog" data-responsive-picker aria-labelledby="categoryGridTitle">
         <div class="modal-content category-grid-content">
             <div class="modal-header">
-                <h2 data-i18n="quickEntry.moreGridTitle">Kategorie wählen</h2>
-                <span class="close" id="closeCategoryGrid">&times;</span>
+                <h2 id="categoryGridTitle" data-i18n="quickEntry.moreGridTitle">Kategorie wählen</h2>
+                <button type="button" id="closeCategoryGrid" autofocus data-i18n-aria-label="modal.close" aria-label="Schließen">×</button>
             </div>
             <div class="modal-body">
                 <input type="text" id="categoryGridSearch" data-i18n-placeholder="quickEntry.searchCategories" placeholder="Kategorie suchen...">
                 <div class="category-grid" id="categoryGrid"></div>
             </div>
         </div>
-    </div>
+    </dialog>
 
     <!-- Settings Modal -->
     <div id="rulesModal" class="modal">
@@ -447,7 +446,10 @@
                         <div class="settings-action-row">
                             <button type="button" id="mcpImportSettingsBtn" data-i18n="ai.importSettings">SETTING-Vorschlag importieren</button>
                             <button type="button" id="mcpImportAssignmentsBtn" data-i18n="ai.importAssignments">Kategorisierungsvorschlag importieren</button>
+                            <button type="button" id="mcpImportCategoriesBtn" data-i18n="ai.importCategories">Kategorie-Bereinigung importieren</button>
+                            <input type="file" id="mcpCategoryFile" accept=".json" hidden>
                         </div>
+                        <p id="mcpCategoryStatus" role="status"></p>
                         <p data-i18n="ai.mcpPrivacy">Finanzdaten aus den Exporten werden an das verbundene LLM übertragen. Lege Exporte und Vorschläge außerhalb des öffentlichen Website-Ordners ab.</p>
                         <div class="mcp-tool-list">
                             <label><input type="checkbox" class="mcp-tool" value="list_categories" checked> list_categories <small data-i18n="ai.listCategories">Kategorien, Budgets und Beispiele lesen</small></label>
@@ -455,6 +457,7 @@
                             <label><input type="checkbox" class="mcp-tool" value="list_rules" checked> list_rules <small data-i18n="ai.listRules">Klassifizierungsregeln lesen</small></label>
                             <label><input type="checkbox" class="mcp-tool" value="propose_rules"> propose_rules <small data-i18n="ai.proposeRules">Neue Regeln als Importdatei vorschlagen</small></label>
                             <label><input type="checkbox" class="mcp-tool" value="propose_assignments"> propose_assignments <small data-i18n="ai.proposeAssignments">Kategorien für einzelne Buchungen vorschlagen</small></label>
+                            <label><input type="checkbox" class="mcp-tool" value="propose_category_maintenance"> propose_category_maintenance <small data-i18n="ai.proposeCategoryMaintenance">Kategorien zusammenführen, umbenennen und Buchungen verschieben</small></label>
                         </div>
                         <button type="button" id="mcpDownloadPermissionsBtn" data-i18n="ai.downloadPermissions">Berechtigungen herunterladen</button>
                         <p data-i18n="ai.mcpHint">Die Freigaben gelten nur für einen entsprechend eingerichteten lokalen MCP-Client; nach Änderungen neu starten.</p>
@@ -666,9 +669,18 @@
         <h2 id="txActionsTitle" data-i18n="txActions.title">Aktionen</h2>
         <div class="tx-row-actions-list">
             <button type="button" id="txRowActionRecurring" class="tx-row-action-btn" data-i18n="recurringExpense.markTitle">↻ Als wiederkehrende Ausgabe markieren</button>
+            <button type="button" id="txRowActionIgnore" class="tx-row-action-btn"></button>
             <button type="button" id="txRowActionDelete" class="tx-row-action-btn tx-row-action-danger" data-i18n="txActions.delete">× Löschen</button>
         </div>
         <div class="dialog-actions"><button type="button" id="cancelTxRowActions" data-i18n="modal.cancel">Abbrechen</button></div>
+    </dialog>
+
+    <dialog id="categoryMaintenanceDialog" class="review-dialog" aria-labelledby="categoryMaintenanceTitle">
+        <h2 id="categoryMaintenanceTitle" data-i18n="ai.categoryReviewTitle">Kategorie-Bereinigung prüfen</h2>
+        <p data-i18n="ai.categoryReviewHint">Regeln und Buchungen werden gemeinsam aktualisiert. Die Originalbuchungen bleiben erhalten.</p>
+        <div id="categoryMaintenanceChanges"></div>
+        <p id="categoryMaintenanceError" role="alert"></p>
+        <div class="dialog-buttons"><button type="button" id="cancelCategoryMaintenance" data-i18n="modal.cancel">Abbrechen</button><button type="button" id="applyCategoryMaintenance" data-i18n="ai.applyCategoryMaintenance">Bereinigung anwenden</button></div>
     </dialog>
 
     <script type="module">
@@ -685,14 +697,18 @@
         import { csv_records, csv_import_ranges, reconcile_transactions, transaction_source_label, reconciliation_summary, get_manual_match_days, save_manual_match_days } from './src/transactions.js';
         import { category_catalog, sort_categories, fixed_expense_categories, is_budget_category, is_spending_classification, UNCATEGORIZED, ADDITIONAL_INCOME, split_category, join_category } from './src/categories.js';
         import { upsert_imported_entries, load_imported_entries, load_import_ranges, load_reconciliation_decisions, save_reconciliation_decision } from './src/db.js';
-        import { apply_amount_overrides, apply_note_overrides, apply_date_overrides, is_real_cashflow } from './src/data.js';
+        import { apply_amount_overrides, apply_note_overrides, apply_date_overrides, apply_ignored_transactions, is_real_cashflow, transaction_list_order } from './src/data.js';
+        import { load_ignored_transactions, save_ignored_transaction } from './src/db.js';
         import { load_amount_overrides, save_amount_override, load_all_overrides, save_overrides, add_manual_entry, load_manual_entries, delete_manual_entry, load_note_overrides, save_note_override, load_date_overrides, save_date_override, load_effective_period_overrides, save_effective_period_override, clear_effective_period_override } from './src/db.js';
         import {
             build_budget_basis, build_week_report, build_sub_budget_report, build_main_budget_report, category_color,
-            week_start, add_days, iso_week_number, top_categories, rule_monthly_equivalent, interval_months
+            week_start, add_days, iso_week_number, top_categories, rule_monthly_equivalent, interval_months, build_spending_plan, weekly_spending_limit
         } from './src/week.js';
         import { get_sub_budgets, save_sub_budgets, budget_category, assign_budget_category, validate_budget_settings, ensure_budget_coverage } from './src/budgets.js';
         import { push_digit, pop_digit, buffer_to_cents } from './src/keypad.js';
+        import { init_responsive_selects, fit_picker_dialogs } from './src/pickers.js';
+        import { plan_category_maintenance, category_maintenance_revision } from './src/category_maintenance.js';
+        init_responsive_selects();
         import { transaction_to_row, transaction_key } from './src/gocardless.js';
         import { get_sync_settings, save_sync_settings, render_google_button, sign_out as sync_sign_out, current_session as current_sync_session, push_data as sync_push_data, pull_data as sync_pull_data } from './src/sync.js';
         import { find_internal_transfer_pairs, apply_internal_transfer_pairs, find_reversal_pairs, apply_reversal_pairs, get_reversal_max_days, clear_merge_groups, get_merge_split_ids, save_merge_split_ids, get_transfer_max_days, save_transfer_max_days, reconcile_paypal, account_key } from './src/transfers.js';
@@ -713,6 +729,7 @@
         let noteOverrides = {};
         let dateOverrides = {};
         let effectivePeriodOverrides = {};
+        let ignoredTransactions = {};
         let subBudgetCaps = {};
         // Which budget groups have their assigned-categories list expanded in
         // Settings > Budgets - purely a UI state, not persisted.
@@ -761,6 +778,7 @@
             apply_reversal_pairs(module_data, find_reversal_pairs(module_data, get_reversal_max_days(), splitIds));
             apply_manual_overrides(module_data, overridesById, ruleSet);
             reconcile_paypal(module_data, Math.max(7, get_transfer_max_days()), splitIds, ruleSet);
+            apply_ignored_transactions(module_data, ignoredTransactions);
             ensure_budget_coverage(ruleSet, module_data);
             apply_effective_periods(module_data, effectivePeriodOverrides);
         }
@@ -811,7 +829,7 @@
                 event.preventDefault(); event.stopPropagation();
                 favoriteCategories = active ? favoriteCategories.filter(c => c !== category) : [...favoriteCategories, category];
                 localStorage.setItem('favoriteCategories', JSON.stringify(favoriteCategories));
-                render_quick_add_tiles();
+                refresh_category_picker();
                 render_category_grid(document.getElementById('categoryGridSearch').value);
                 render_sub_budget_settings();
             });
@@ -885,7 +903,7 @@
             settingsBaseline = structuredClone(ruleSet);
             ruleSet._manualRuleIds = [];
             if (get_stored_rule_set()) save_rule_set(ruleSet);
-            render_quick_add_tiles();
+            refresh_category_picker();
             if (module_data.length > 0) reclassify();
             if (modal.style.display === 'block') {
                 modalOpenSnapshot = settings_snapshot();
@@ -1017,7 +1035,7 @@
             const canMarkRecurring = r.in_out === 'out' && r._cls?.group !== 'fixed';
             // One combined "..." trigger instead of separate small icon
             // buttons - opens a dialog with the same actions full-size.
-            const actionsCell = (canMarkRecurring || r._manualId)
+            const actionsCell = (r.in_out === 'out' || r._manualId)
                 ? `<button type="button" class="tx-actions-btn" data-tx-id="${txId}" data-manual-id="${r._manualId || ''}" data-recurring="${canMarkRecurring ? '1' : ''}" title="${t('txActions.title')}" aria-label="${t('txActions.title')}">⋮</button>`
                 : '';
             const reportingNote = +reporting_date(r) !== +r.date
@@ -1026,11 +1044,11 @@
             const mergeBadge = r._mergeGroup
                 ? `<button type="button" class="tx-merge-badge" data-tx-id="${txId}" title="${t('merge.badgeTitle', { count: r._mergeGroup.members.length })}" aria-label="${t('merge.badgeTitle', { count: r._mergeGroup.members.length })}">\u29c9 ${r._mergeGroup.members.length}</button>`
                 : '';
-            return `<tr class="tx-row" draggable="${is_spending_classification(r._cls)}" data-tx-id="${txId}" data-category="${escape_budget(r._cls.category)}">
+            return `<tr class="tx-row${r._ignored ? ' tx-row-ignored' : ''}" draggable="${!r._ignored && is_spending_classification(r._cls)}" data-tx-id="${txId}" data-category="${escape_budget(r._cls.category)}">
                 <td class="tx-cell">
                     <div class="tx-row-meta">
                         <span class="tx-date">${fmt_date(r.date)}</span>
-                        <span class="transaction-source${['unassigned', 'ambiguous'].includes(r._reconciliation?.status) ? ' reconciliation-warning' : ''}">${escape_budget(transaction_source_label(r))}</span>
+                        <span class="transaction-source${['unassigned', 'ambiguous'].includes(r._reconciliation?.status) ? ' reconciliation-warning' : ''}">${r._ignored ? escape_budget(t('txActions.ignored')) + ' · ' : ''}${escape_budget(transaction_source_label(r))}</span>
                         ${reportingNote}
                         <span class="tx-amount">${amountCell}</span>
                     </div>
@@ -1052,6 +1070,7 @@
             delete noteOverrides[txId];
             delete dateOverrides[txId];
             delete effectivePeriodOverrides[txId];
+            delete ignoredTransactions[txId];
             await merge_manual_entries();
             reclassify();
             render_all();
@@ -1062,6 +1081,14 @@
             const dialog = document.getElementById('txRowActionsDialog');
             const txId = decodeURIComponent(btn.dataset.txId);
             const manualId = btn.dataset.manualId;
+            const row = module_data.find(row => tx_id(row) === txId);
+            const ignore = document.getElementById('txRowActionIgnore');
+            ignore.textContent = t(row?._ignored ? 'txActions.restore' : 'txActions.ignore');
+            ignore.onclick = async () => {
+                await save_ignored_transaction(txId, !row._ignored);
+                ignoredTransactions[txId] = !row._ignored;
+                reclassify(); render_all(); render_week(); dialog.close();
+            };
             document.getElementById('txRowActionRecurring').hidden = !btn.dataset.recurring;
             document.getElementById('txRowActionDelete').hidden = !manualId;
             document.getElementById('txRowActionRecurring').onclick = () => { dialog.close(); open_recurring_expense_dialog(txId); };
@@ -1434,7 +1461,7 @@
             document.getElementById('weekEmptyState').hidden = hasData;
             document.getElementById('weekContent').hidden = !hasData;
             if (!hasData) return;
-            render_quick_add_tiles();
+            refresh_category_picker();
             render_main_budget_progress();
             render_reconciliation_notice('weekReconciliationNotice', module_data.filter(r => reporting_date(r) >= weekMonday && reporting_date(r) < add_days(weekMonday, 7)));
 
@@ -1452,15 +1479,16 @@
             }).join('');
 
             const basis = build_budget_basis(module_data);
-            const report = build_week_report(module_data, weekMonday);
-            const leftCents = basis.weeklyCents - report.spentCents;
+            const plan = build_spending_plan(module_data, weekMonday, ruleSet.mainCategories || [], subBudgetCaps);
+            const report = { spentCents: plan.spentCents };
+            const leftCents = plan.remainingCents;
             const over = leftCents < 0;
 
             const amountEl = document.getElementById('weekLeftAmount');
             amountEl.textContent = fmt_eur_int(leftCents);
             amountEl.style.color = over ? 'var(--danger)' : 'var(--success)';
 
-            const usedPct = basis.weeklyCents > 0 ? Math.min(100, Math.max(0, report.spentCents / basis.weeklyCents * 100)) : (report.spentCents > 0 ? 100 : 0);
+            const usedPct = plan.weeklyCents > 0 ? Math.min(100, Math.max(0, report.spentCents / plan.weeklyCents * 100)) : (report.spentCents > 0 ? 100 : 0);
             const heroProgressEl = document.getElementById('weekHeroProgress');
             const heroFillEl = document.getElementById('weekHeroFill');
             heroFillEl.style.width = usedPct + '%';
@@ -1469,13 +1497,8 @@
             heroFillEl.style.background = over ? 'rgba(231,76,60,0.35)' : usedPct >= 75 ? 'rgba(243,156,18,0.35)' : 'rgba(46,204,113,0.3)';
             heroProgressEl.setAttribute('aria-valuenow', Math.round(usedPct));
 
-            const lastWeekReport = build_week_report(module_data, add_days(weekMonday, -7));
-            const lastWeekLeftoverCents = basis.weeklyCents - lastWeekReport.spentCents;
-            const monthLeftoverCents = weeks_in_month_up_to(weekMonday).reduce((sum, m) =>
-                sum + (basis.weeklyCents - build_week_report(module_data, m).spentCents), 0);
+            const monthLeftoverCents = plan.monthlyRemainingCents;
             document.getElementById('weekHeroStats').innerHTML = `
-                <span>${t('week.spentThisWeek')} <b>${fmt_eur_int(report.spentCents)}</b></span>
-                <span>${t('week.leftoverLastWeek')} <b class="${lastWeekLeftoverCents < 0 ? 'budget-over' : ''}">${fmt_eur_int(lastWeekLeftoverCents)}</b></span>
                 <span>${t('week.leftoverThisMonth')} <b class="${monthLeftoverCents < 0 ? 'budget-over' : ''}">${fmt_eur_int(monthLeftoverCents)}</b></span>
             `;
 
@@ -1489,6 +1512,7 @@
                     <tr><td>− ${t('week.fixed')} ${settings_link_button('fixexpense')}</td><td class="num">${fmt_eur(basis.fixedCents)}</td></tr>
                     <tr><td>= ${t('week.free')}</td><td class="num">${fmt_eur(basis.freeCents)}</td></tr>
                     <tr><td><b>${t('week.weekly')}</b> ${settings_link_button('budgets')}</td><td class="num"><b>${fmt_eur(basis.weeklyCents)}</b></td></tr>
+                    <tr><td>${t('budgets.limitWeekly')} ${settings_link_button('budgets')}</td><td class="num">${fmt_eur(plan.weeklyCents)}</td></tr>
                 </table>
                 <h4>${t('week.contractsTitle')}</h4>
                 ${fixedRules.length ? fixedRules.map(rule => {
@@ -1504,7 +1528,7 @@
                                     <span class="main-budget-value" title="${t('fixExpense.monthlyHint')}">${fmt_eur(totalCents)}</span>
                                 </span>
                             </summary>
-                            ${matches.length ? `<table class="transaction-rows"><colgroup><col><col style="width:20px"></colgroup>${group_rows_by_month(matches.slice().sort((a, b) => b.date - a.date), render_tx_row)}</table>` : `<p>${t('fixExpense.noMatches')}</p>`}
+                            ${matches.length ? `<table class="transaction-rows"><colgroup><col><col style="width:20px"></colgroup>${group_rows_by_month(matches.slice().sort(transaction_list_order), render_tx_row)}</table>` : `<p>${t('fixExpense.noMatches')}</p>`}
                         </details>
                     `;
                 }).join('') : `<p>${t('fixExpense.noRows')}</p>`}
@@ -1583,21 +1607,8 @@
         document.getElementById('removeCategoryBtn').onclick = () => change_category(true).catch(e => { document.getElementById('categoryActionError').textContent = e.message; });
         document.getElementById('closeCategoryActions').onclick = () => document.getElementById('categoryActionsDialog').close();
 
-        function render_quick_add_tiles() {
-            const container = document.getElementById('quickAddTiles');
-            container.replaceChildren();
-            collect_category_options(true).forEach(category => {
-                const card = document.createElement('div'); card.className = 'category-card';
-                const button = document.createElement('button');
-                button.type = 'button'; button.className = 'quickadd-tile'; button.style.borderColor = category_color(category);
-                const label = document.createElement('span'); label.className = 'quickadd-tile-label'; label.textContent = category;
-                button.append(label);
-                button.addEventListener('click', () => open_keypad(category));
-                wire_category_actions(card, category);
-                card.append(button, favorite_button(category));
-                container.append(card);
-            });
-            if (!container.childElementCount) container.textContent = t('table.noCategoryMatch');
+        function refresh_category_picker() {
+            if (document.getElementById('categoryGridModal').open) render_category_grid(document.getElementById('categoryGridSearch').value);
         }
 
         function render_main_budget_progress() {
@@ -1759,7 +1770,8 @@
         // Searchable full-screen category picker, also used by the app shortcut.
         function render_category_grid(query) {
             const q = (query || '').toLowerCase().trim();
-            const options = collect_category_options(true).filter(c => c.toLowerCase().includes(q));
+            const favorites = new Set(favoriteCategories);
+            const options = collect_category_options(true).filter(c => c.toLowerCase().includes(q)).sort((a, b) => Number(favorites.has(b)) - Number(favorites.has(a)));
             const grid = document.getElementById('categoryGrid');
             grid.replaceChildren();
             options.forEach(category => {
@@ -1777,11 +1789,13 @@
         function open_category_grid() {
             document.getElementById('categoryGridSearch').value = '';
             render_category_grid('');
-            document.getElementById('categoryGridModal').style.display = 'block';
+            document.getElementById('categoryGridModal').showModal();
+            fit_picker_dialogs();
+            if (!matchMedia('(max-width: 700px)').matches) document.getElementById('categoryGridSearch').focus();
         }
 
         function close_category_grid() {
-            document.getElementById('categoryGridModal').style.display = 'none';
+            document.getElementById('categoryGridModal').close();
         }
 
         document.getElementById('quickAddMoreBtn').addEventListener('click', open_category_grid);
@@ -1957,7 +1971,7 @@
             save_sub_budgets(subBudgetCaps);
             lastSettingsSnapshot = settings_snapshot();
             render_active_settings_tab();
-            render_quick_add_tiles();
+            refresh_category_picker();
             if (module_data.length) { reclassify(); render_all(); render_week(); }
         }
         document.getElementById('addMainCategory').addEventListener('click', () => {
@@ -1991,7 +2005,7 @@
         function preview_rows_for_category(category) {
             const now = module_data.length ? build_budget_basis(module_data).refDate : new Date();
             const windowStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-            return category_transactions(module_data, category).filter(r => is_spending_classification(r._cls) && r.date >= windowStart && r.date <= now);
+            return category_transactions(module_data, category, { includeIgnored: true }).filter(r => is_spending_classification(r._cls) && r.date >= windowStart && r.date <= now);
         }
 
         function format_month_year(date) {
@@ -2004,7 +2018,7 @@
         // periods instead of a confusing flat repeat of near-identical rows.
         function group_rows_by_month(sortedRows, renderRow, columns = 2) {
             let lastMonthKey = null;
-            return sortedRows.map(r => {
+            return [...sortedRows].sort(transaction_list_order).map(r => {
                 const monthKey = `${r.date.getFullYear()}-${r.date.getMonth()}`;
                 const header = monthKey !== lastMonthKey ? `<tr class="tx-month-header"><td colspan="${columns}">${format_month_year(r.date)}</td></tr>` : '';
                 lastMonthKey = monthKey;
@@ -2018,7 +2032,7 @@
         // without leaving this list.
         function tx_preview_row_html(r, amountValue) {
             return `
-                <tr>
+                <tr class="${r._ignored ? 'tx-row-ignored' : ''}">
                     <td>${fmt_date(r.date)}<small class="transaction-source">${transaction_source_label(r)}</small></td>
                     <td><button type="button" class="tx-preview-name-btn" data-tx-id="${encodeURIComponent(tx_id(r))}">${escape_budget(transaction_display_name(r))}</button></td>
                     <td class="num">${fmt_eur(amountValue(r))}</td>
@@ -2221,9 +2235,13 @@
                         <button type="button" class="remove-btn" data-budget="${escape_budget(g.id)}" title="Budget entfernen" ${g.unassigned ? 'disabled' : ''}>×</button>
                     </div>
                     <div class="main-budget-group-categories budget-card-body" data-budget="${escape_budget(g.id)}" ${expanded ? '' : 'hidden'}>
-                        ${categories.map(c => {
-                            const rules = spending_rules_for(c);
-                            if (rules.length) return rules.map((rule, n) => build_rule_row_html('spending', rule, c, { openPreviews }).html.replace('<input value=', n ? '<input readonly value=' : '<input value=')).join('');
+                        <section class="budget-category-section">
+                            <h4>${t('budgets.ruleCategoriesTitle')}</h4><p>${t('budgets.ruleCategoriesHint')}</p>
+                            ${categories.filter(c => spending_rules_for(c).length).map(c => spending_rules_for(c).map((rule, n) => build_rule_row_html('spending', rule, c, { openPreviews }).html.replace('<input value=', n ? '<input readonly value=' : '<input value=')).join('')).join('') || `<p>${t('budgets.noAutomaticCategories')}</p>`}
+                        </section>
+                        <section class="budget-category-section">
+                            <h4>${t('budgets.manualCategoriesTitle')}</h4><p>${t('budgets.manualCategoriesHint')}</p>
+                            ${categories.filter(c => !spending_rules_for(c).length).map(c => {
                             const chipJson = escape_budget(JSON.stringify(c));
                             const chipExpanded = expandedCatChips.has(c);
                             const rows = chipExpanded ? preview_rows_for_category(c) : [];
@@ -2240,7 +2258,8 @@
                                 </div>` : ''}
                             `;
                         }).join('') || `<p class="cat-chip-empty">${t('budgets.noCategoriesInGroup')}</p>`}
-                        ${!g.unassigned ? `<div class="budget-card-actions"><button type="button" class="cat-new-btn" data-budget="${escape_budget(g.id)}">${t('budgets.newCategory')}</button><button type="button" class="cat-add-btn" data-budget="${escape_budget(g.id)}">+ ${t('budgets.addCategory')}</button></div>` : ''}
+                        </section>
+                        ${!g.unassigned ? `<div class="budget-card-actions"><div><button type="button" class="cat-new-btn" data-budget="${escape_budget(g.id)}">${t('budgets.newCategory')}</button><small>${t('budgets.newCategoryHint')}</small></div><div><button type="button" class="cat-add-btn" data-budget="${escape_budget(g.id)}">${t('budgets.addCategory')}</button><small>${t('budgets.addCategoryHint')}</small></div></div>` : ''}
                     </div>
                   </div>
                 `;
@@ -2288,12 +2307,12 @@
                     const id = input.dataset.budget;
                     const capCents = Math.max(0, Math.round((parseFloat(input.value) || 0) * 100));
                     if (!Number.isSafeInteger(capCents)) return;
-                    if (capCents > 0) subBudgetCaps[id] = capCents; else delete subBudgetCaps[id];
+                    if (input.value.trim()) subBudgetCaps[id] = capCents; else delete subBudgetCaps[id];
                     save_sub_budgets(subBudgetCaps);
                     ruleSet.subBudgetCaps = { ...subBudgetCaps };
                     save_rule_set(ruleSet);
-                    render_quick_add_tiles();
-                    render_main_budget_progress();
+                    render_week();
+                    render_budget_summary();
                 });
                 // One undo checkpoint per edit session (on blur/enter), not
                 // one per keystroke - the 'input' handler above already
@@ -2429,9 +2448,9 @@
             mapping.append(details);
         }
 
-        function render_sub_budget_settings() {
+        function render_budget_summary() {
             const panel = document.getElementById('budgetRecommendation');
-            const total = Object.values(subBudgetCaps).reduce((sum,v) => sum + v,0);
+            const total = weekly_spending_limit(ruleSet.mainCategories || [], subBudgetCaps, 0);
             const basis = build_budget_basis(module_data);
             const monthlyTotal = Math.round(total * 52 / 12);
             const savingsMonthly = basis.freeCents - monthlyTotal;
@@ -2442,8 +2461,9 @@
                 <div class="budget-totals-cell"><span>${t('budgets.savingsMonthly')}</span><strong>${fmt_eur(savingsMonthly)}</strong></div>
             </div>
             ${total > Math.max(0,basis.weeklyCents) && module_data.length ? '<p class="budget-warning">Die Limits übersteigen das verfügbare Wochenbudget.</p>' : ''}`;
-            render_main_category_editor();
         }
+
+        function render_sub_budget_settings() { render_budget_summary(); render_main_category_editor(); }
 
         // Settings > Allgemein: preview of the pairs the internal-transfer
         // heuristic currently detects, so changing the day window shows its
@@ -2527,7 +2547,7 @@
         // basis changes here, not what's shown.
         function rule_all_matches(rule, amountFilter) {
             const category = rule.category || rule.label;
-            return category_transactions(module_data, category).filter(row => {
+            return category_transactions(module_data, category, { includeIgnored: true }).filter(row => {
                 const sameRole = rule.group === 'fixed' || rule.group === 'income'
                     ? row._cls.group === rule.group : is_spending_classification(row._cls);
                 return sameRole && amountFilter(row);
@@ -4319,7 +4339,7 @@
         saveBtn.addEventListener('click', () => {
             ruleSet._manualRuleIds = manual_rule_ids(ruleSet, settingsBaseline);
             save_rule_set(ruleSet);
-            render_quick_add_tiles();
+            refresh_category_picker();
             modalOpenSnapshot = settings_snapshot();
             if (module_data.length > 0) {
                 reclassify();
@@ -4524,6 +4544,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
                     noteOverrides = await load_note_overrides();
                     dateOverrides = await load_date_overrides();
                     effectivePeriodOverrides = await load_effective_period_overrides();
+                    ignoredTransactions = await load_ignored_transactions();
                     await merge_manual_entries();
                     reclassify();
                     render_all();
@@ -4578,6 +4599,60 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
         document.getElementById('mcpExportDataBtn').addEventListener('click', () => document.getElementById('exportDataBtn').click());
         document.getElementById('mcpImportSettingsBtn').addEventListener('click', () => document.getElementById('importRulesBtn').click());
         document.getElementById('mcpImportAssignmentsBtn').addEventListener('click', () => document.getElementById('importDataBtn').click());
+        document.getElementById('mcpImportCategoriesBtn').onclick = () => document.getElementById('mcpCategoryFile').click();
+        document.getElementById('cancelCategoryMaintenance').onclick = () => document.getElementById('categoryMaintenanceDialog').close();
+        document.getElementById('mcpCategoryFile').addEventListener('change', async event => {
+            const file = event.target.files[0]; event.target.value = '';
+            if (!file) return;
+            const status = document.getElementById('mcpCategoryStatus');
+            status.textContent = '';
+            document.getElementById('categoryMaintenanceError').textContent = '';
+            try {
+                const proposal = JSON.parse(await file.text());
+                if (proposal.kind !== 'category-maintenance' || proposal.version !== 1) throw new Error(t('importexport.invalidDataFile'));
+                const current = { ...ruleSet, subBudgetCaps };
+                if (proposal.revision !== category_maintenance_revision(current, module_data, overridesById)) throw new Error(t('ai.categoryProposalStale'));
+                const plan = plan_category_maintenance(current, module_data, overridesById, proposal.operations);
+                const changes = document.getElementById('categoryMaintenanceChanges'); changes.replaceChildren();
+                plan.changes.forEach(change => {
+                    const section = document.createElement('section'); section.className = 'category-maintenance-change';
+                    const heading = document.createElement('h3');
+                    heading.textContent = `${t('ai.categoryAction.' + change.action)}: ${[change.category, change.target].filter(Boolean).join(' → ')}`;
+                    const count = document.createElement('p'); count.textContent = t('ai.categoryMovedCount', { count: change.affectedIds.length });
+                    section.append(heading, count);
+                    if (change.affectedIds.length) {
+                        const details = document.createElement('details'), summary = document.createElement('summary'), list = document.createElement('ul');
+                        summary.textContent = t('ai.categoryShowTransactions');
+                        change.affectedIds.forEach(id => {
+                            const row = module_data.find(row => tx_id(row) === id);
+                            const item = document.createElement('li'); item.textContent = `${fmt_date(row.date)} · ${transaction_display_name(row)} · ${fmt_eur(row.betrag_cents)}`; list.append(item);
+                        });
+                        details.append(summary, list); section.append(details);
+                    }
+                    changes.append(section);
+                });
+                const dialog = document.getElementById('categoryMaintenanceDialog');
+                document.getElementById('applyCategoryMaintenance').onclick = async () => {
+                    try {
+                        if (proposal.revision !== category_maintenance_revision({ ...ruleSet, subBudgetCaps }, module_data, overridesById)) throw new Error(t('ai.categoryProposalStale'));
+                        await save_overrides(Object.entries(plan.overrides));
+                        overridesById = plan.overrides;
+                        ruleSet = plan.settings;
+                        subBudgetCaps = ruleSet.subBudgetCaps || subBudgetCaps;
+                        favoriteCategories = [...new Set(favoriteCategories.map(category => {
+                            const seen = new Set();
+                            while (plan.redirects[category] && !seen.has(category)) { seen.add(category); category = plan.redirects[category]; }
+                            return category;
+                        }).filter(category => category_catalog(ruleSet).includes(category)))];
+                        localStorage.setItem('favoriteCategories', JSON.stringify(favoriteCategories));
+                        persist_budgets(); render_sub_budget_settings();
+                        modalOpenSnapshot = settings_snapshot(); lastSettingsSnapshot = modalOpenSnapshot; settingsUndoStack = []; update_undo_button();
+                        status.textContent = t('ai.categoryApplied'); dialog.close();
+                    } catch (error) { document.getElementById('categoryMaintenanceError').textContent = error.message; }
+                };
+                dialog.showModal();
+            } catch (error) { status.textContent = error.message; }
+        });
         const mcpPermissionsName = '5ive_mcp_permissions.json';
         let storedMcpPermissions = null;
         try {
@@ -4892,12 +4967,14 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
                 amountOverrides: await load_amount_overrides(),
                 noteOverrides: await load_note_overrides(),
                 dateOverrides: await load_date_overrides(),
-                effectivePeriodOverrides: await load_effective_period_overrides()
+                effectivePeriodOverrides: await load_effective_period_overrides(),
+                ignoredTransactions: await load_ignored_transactions()
             };
         }
 
         async function apply_synced_transactions(data) {
             if (!data) return;
+            if (data.ignoredTransactions && (typeof data.ignoredTransactions !== 'object' || Array.isArray(data.ignoredTransactions) || Object.values(data.ignoredTransactions).some(value => typeof value !== 'boolean'))) throw new Error('Invalid ignored transactions');
             // Legacy backups do not prove coverage between isolated bookings.
             await upsert_imported_entries(Array.isArray(data.importedEntries) ? data.importedEntries : [], Array.isArray(data.importRanges) ? data.importRanges : []);
             if (Array.isArray(data.manualEntries)) for (const entry of data.manualEntries) await add_manual_entry(entry);
@@ -4910,6 +4987,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             if (data.amountOverrides) for (const [id, cents] of Object.entries(data.amountOverrides)) await save_amount_override(id, cents);
             if (data.noteOverrides) for (const [id, note] of Object.entries(data.noteOverrides)) await save_note_override(id, note);
             if (data.dateOverrides) for (const [id, isoDate] of Object.entries(data.dateOverrides)) await save_date_override(id, isoDate);
+            if (data.ignoredTransactions) for (const [id, ignored] of Object.entries(data.ignoredTransactions)) await save_ignored_transaction(id, ignored);
             if (data.effectivePeriodOverrides) for (const [id, isoDate] of Object.entries(data.effectivePeriodOverrides)) await save_effective_period_override(id, isoDate);
         }
 
@@ -4950,6 +5028,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
                     noteOverrides = await load_note_overrides();
                     dateOverrides = await load_date_overrides();
                     effectivePeriodOverrides = await load_effective_period_overrides();
+                    ignoredTransactions = await load_ignored_transactions();
                 }
                 await merge_manual_entries();
                 reclassify();
@@ -5016,7 +5095,6 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             }
             if (e.key === 'Escape') {
                 if (categoryPopover && !categoryPopover.hidden) { close_popover(); e.preventDefault(); return; }
-                if (document.getElementById('categoryGridModal').style.display === 'block') { close_category_grid(); e.preventDefault(); return; }
                 if (document.getElementById('keypadModal').style.display === 'block') { close_keypad(); e.preventDefault(); return; }
                 if (modal.style.display === 'block') { close_settings_modal_and_revert(); e.preventDefault(); return; }
                 return;
@@ -5070,6 +5148,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             noteOverrides = await load_note_overrides();
             dateOverrides = await load_date_overrides();
             effectivePeriodOverrides = await load_effective_period_overrides();
+                    ignoredTransactions = await load_ignored_transactions();
             subBudgetCaps = get_sub_budgets();
 
             // Merge quick-entries and reclassify unconditionally - even with

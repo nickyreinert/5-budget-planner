@@ -2,7 +2,7 @@
 <html lang="en"><meta charset="utf-8"><title>Storage integration tests</title>
 <body><h1>Storage integration tests</h1><pre id="result">Running…</pre>
 <script type="module">
-import { load_manual_entries, load_all_overrides, upsert_imported_entries, load_imported_entries, add_manual_entry, delete_manual_entry, save_overrides, save_amount_override, load_amount_overrides, load_import_ranges, load_reconciliation_decisions, save_reconciliation_decision } from '../src/db.js';
+import { load_manual_entries, load_all_overrides, upsert_imported_entries, load_imported_entries, add_manual_entry, delete_manual_entry, save_overrides, save_amount_override, load_amount_overrides, load_import_ranges, load_reconciliation_decisions, save_reconciliation_decision, save_ignored_transaction, load_ignored_transactions } from '../src/db.js';
 import { csv_records, reconcile_transactions } from '../src/transactions.js';
 import { enrich_row } from '../src/data.js';
 // Real IndexedDB, isolated from the app's database and removed after the test.
@@ -43,6 +43,12 @@ try {
   check(merged.length === 2 && merged.some(r => r._matchedManualId === 'legacy-manual'), 'manual/import booking counts once');
   await add_manual_entry({ ...raw, id: 'new-manual', _txId: 'manual:new', source: 'manual' });
   await save_overrides([['manual:new', 'Food']]);
+  await save_ignored_transaction('manual:new', true);
+  check((await load_ignored_transactions())['manual:new'] === true, 'ignore persists across database reloads');
+  check(Object.keys(await load_all_overrides()).every(key => !key.startsWith('ignore:')), 'ignore flags never appear as category assignments');
+  await save_ignored_transaction('manual:new', false);
+  check((await load_ignored_transactions())['manual:new'] === false, 'explicit restore is retained');
+  await rejects(() => save_ignored_transaction('manual:new', 'true'), 'ignore requires a boolean');
   await save_reconciliation_decision('new-manual', { kind: 'cash' });
   check((await load_reconciliation_decisions())['new-manual'].kind === 'cash', 'cash decision persists');
   await save_reconciliation_decision('new-manual', { kind: 'separate' });
@@ -58,6 +64,7 @@ try {
   await delete_manual_entry('new-manual', 'manual:new');
   check((await load_manual_entries()).length === 1, 'delete removes only the requested manual record');
   check(!(await load_all_overrides())['manual:new'], 'delete removes its override');
+  check(!Object.hasOwn(await load_ignored_transactions(), 'manual:new'), 'manual deletion clears its ignore flag');
   const remainingDecisions = await load_reconciliation_decisions();
   check(!Object.hasOwn(remainingDecisions, 'new-manual'), 'manual deletion clears its reconciliation decision');
   check(remainingDecisions['legacy-manual'].kind === 'cash', 'manual deletion preserves other decisions');
@@ -68,12 +75,15 @@ try {
   check((await load_imported_entries()).some(record => record.id === usd.id && record.Währung === 'USD'), 'foreign-currency import remains a distinct booking');
   await save_overrides([[records[0].id,'Groceries']]);
   await save_amount_override(records[0].id,-2500);
+  await save_ignored_transaction(records[0].id, true);
   await save_reconciliation_decision('legacy-manual', { kind: 'match', importedId: records[0].id });
   const withAccount = csv_records([enrich_row({...raw,Account:'DKB Giro'})])[0];
   await upsert_imported_entries([withAccount]);
   check((await load_imported_entries()).length === 3, 'source-account reimport upgrades legacy record instead of duplicating');
   check((await load_all_overrides())[withAccount.id] === 'Groceries', 'category override follows upgraded identity');
   check((await load_amount_overrides())[withAccount.id] === -2500, 'amount override follows upgraded identity');
+  check((await load_ignored_transactions())[withAccount.id] === true, 'ignore flag follows upgraded identity');
+  check(!Object.hasOwn(await load_ignored_transactions(), records[0].id), 'ignore flag leaves the old identity');
   const migratedDecision = (await load_reconciliation_decisions())['legacy-manual'];
   check(migratedDecision.kind === 'match' && migratedDecision.importedId === withAccount.id, 'explicit match follows upgraded imported identity');
   await upsert_imported_entries([withAccount]);

@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { load_exports, categories, transactions, propose_rules, propose_assignments, write_proposal, proposalName, assignmentsName } from './classification.mjs';
+import { load_exports, categories, transactions, propose_rules, propose_assignments, propose_category_maintenance, write_proposal, proposalName, assignmentsName, categoryMaintenanceName } from './classification.mjs';
 
 const [settingsPath, dataPath, outputDirectory, permissionsPath] = process.argv.slice(2);
 if (!settingsPath || !dataPath || !outputDirectory) {
@@ -14,7 +14,7 @@ if (!settingsPath || !dataPath || !outputDirectory) {
 const settingsFile = resolve(settingsPath);
 const dataFile = resolve(dataPath);
 const outputDir = resolve(outputDirectory);
-const toolNames = ['list_categories', 'list_transactions', 'list_rules', 'propose_rules', 'propose_assignments'];
+const toolNames = ['list_categories', 'list_transactions', 'list_rules', 'propose_rules', 'propose_assignments', 'propose_category_maintenance'];
 const permissions = permissionsPath ? JSON.parse(await readFile(resolve(permissionsPath), 'utf8')) : null;
 if (permissions && (!Array.isArray(permissions.allowedTools) || permissions.allowedTools.some(name => !toolNames.includes(name)))) {
   throw new Error('MCP permissions require an allowedTools array of known tool names');
@@ -70,6 +70,16 @@ if (enabled('propose_assignments')) server.registerTool('propose_assignments', {
   const proposal = propose_assignments(settings, data, assignments);
   const path = await write_proposal(outputDir, assignmentsName, proposal);
   return { path, count: Object.keys(proposal.overrides).length, instruction: 'Review and import this data JSON via Settings > AI > Import assignment proposal.' };
+}));
+
+if (enabled('propose_category_maintenance')) server.registerTool('propose_category_maintenance', {
+  description: 'Propose category cleanup: create a spending category, rename or merge categories, move explicit transaction IDs (including existing manual assignments), or delete an unused category. Keeps recurring and spending roles separate. Writes ONE proposal for review in Settings > AI > Import category cleanup. Never edits the app directly.',
+  inputSchema: { operations: z.array(z.object({ action: z.enum(['create', 'rename', 'merge', 'delete', 'move']), category: z.string().optional(), target: z.string().optional(), budgetId: z.string().optional(), ids: z.array(z.string()).min(1).max(1000).optional() })).min(1).max(50) }
+}, run(async ({ operations }) => {
+  const { settings, data } = await load();
+  const proposal = propose_category_maintenance(settings, data, operations);
+  const path = await write_proposal(outputDir, categoryMaintenanceName, proposal);
+  return { path, preview: proposal.preview, instruction: 'Review and apply this JSON via Settings > AI > Import category cleanup.' };
 }));
 
 await load();

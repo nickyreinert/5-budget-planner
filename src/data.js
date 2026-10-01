@@ -61,13 +61,30 @@ export function transaction_display_name(row) {
 // transaction elsewhere. They must be excluded from every sum, otherwise
 // income and expenses both get inflated by the same internal amount.
 export function is_real_cashflow(r) {
+  return !r._ignored && is_visible_transaction(r);
+}
+
+export function is_visible_transaction(r) {
   return !(r._cls && r._cls.excluded);
+}
+
+export function apply_ignored_transactions(rows, ignored = {}) {
+  rows.forEach(row => {
+    const ids = [tx_id(row), row._matchedManualTxId, row._matchedBankTxId].filter(Boolean);
+    const id = ids.find(id => Object.hasOwn(ignored, id));
+    row._ignored = id !== undefined && ignored[id] === true;
+  });
+  return rows;
+}
+
+export function transaction_list_order(a, b) {
+  return Number(!!a._ignored) - Number(!!b._ignored) || b.date - a.date;
 }
 
 // Spending/category lists show the payment that contributes to their totals.
 // The linked settlement and funding bookings remain in the merge details.
-export function category_transactions(rows, category) {
-  return rows.filter(row => is_real_cashflow(row) && row._cls?.category === category);
+export function category_transactions(rows, category, { includeIgnored = false } = {}) {
+  return rows.filter(row => (includeIgnored ? is_visible_transaction(row) : is_real_cashflow(row)) && row._cls?.category === category);
 }
 
 // The whole app drills through one shared 3-level expense tree, built from

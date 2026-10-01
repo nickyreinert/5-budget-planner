@@ -2,7 +2,7 @@
 // Minimal offline app-shell cache: the app itself is entirely client-side
 // (localStorage-backed, no backend), so caching the static shell is enough
 // to let it load without a network connection after the first visit.
-const CACHE_NAME = 'money-money-analyzer-20261001-category-scopes';
+const CACHE_NAME = 'money-money-analyzer-20261001-clean-week';
 const APP_SHELL = [
   './',
   './index.html',
@@ -13,6 +13,8 @@ const APP_SHELL = [
   './src/data.js',
   './src/transactions.js',
   './src/categories.js',
+  './src/category_maintenance.js',
+  './src/pickers.js',
   './src/db.js',
   './src/charts.js',
   './src/overview.js',

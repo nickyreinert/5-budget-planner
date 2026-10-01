@@ -171,6 +171,9 @@ input[type="file"]::file-selector-button:hover { background: var(--accent-soft);
 .quickadd-tile-bar { width: 80%; height: 4px; background: var(--surface-muted); border-radius: 2px; overflow: hidden; margin-top: 2px; }
 .quickadd-tile-bar-fill { display: block; height: 100%; border-radius: 2px; transition: width 0.2s; }
 .quickadd-more { width: 100%; background: var(--surface-muted); border: none; color: var(--text-muted); font-weight: 600; }
+.quickadd-plus { width: 100%; min-height: 94px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; border: 2px dashed var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--accent); }
+.quickadd-plus > span { font-size: 2.8rem; line-height: 1.1; }
+.quickadd-plus > small { font-size: .85rem; color: var(--text-muted); }
 
 /* "…weitere Kategorie" grid modal: smaller square tiles, scrollable, searchable */
 .category-grid-content { max-width: 420px; }
@@ -179,6 +182,39 @@ input[type="file"]::file-selector-button:hover { background: var(--accent-soft);
 .category-grid-tile { min-height: 64px; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; border-radius: var(--radius-sm); background: var(--surface-muted); font-size: 0.78em; padding: 6px; white-space: normal; line-height: 1.25; }
 .category-grid-tile:hover { border-color: var(--accent); background: var(--accent-soft); }
 .category-grid-empty { grid-column: 1 / -1; color: var(--text-muted); font-style: italic; text-align: center; }
+.category-grid-dialog { width: min(840px, calc(100vw - 32px)); height: min(850px, calc(100dvh - 32px)); max-width: none; max-height: none; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--text); }
+.category-grid-dialog .category-grid-content { width: 100%; max-width: none; height: 100%; margin: 0; display: flex; flex-direction: column; }
+.category-grid-dialog .modal-body { display: flex; flex-direction: column; flex: 1; min-height: 0; max-height: none; overflow: hidden; padding-top: 16px; }
+.category-grid-dialog #categoryGridSearch { flex-shrink: 0; }
+.category-grid-dialog .category-grid { grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); max-height: none; overflow-y: auto; align-content: start; flex: 1; min-height: 0; }
+.category-grid-dialog .category-grid-tile { width: 100%; min-height: 90px; font-size: .9rem; }
+.category-grid-dialog::backdrop, .selection-dialog::backdrop { background: rgba(0,0,0,.55); }
+.selection-dialog { padding: 16px; width: min(480px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--text); }
+.selection-dialog[open] { display: flex; flex-direction: column; gap: 12px; }
+.selection-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; }
+.selection-dialog h2 { margin: 0; font-size: 1.1rem; }
+.picker-search { width: 100%; flex-shrink: 0; }
+.picker-options { display: grid; gap: 8px; overflow: auto; min-height: 0; }
+.picker-options button { text-align: left; min-height: 48px; }
+.picker-options button.active { border-color: var(--accent); background: var(--accent-soft); }
+.category-popover.category-popover-modal { width: 100%; min-height: 0; flex: 1; display: flex; flex-direction: column; border: 0; box-shadow: none; padding: 0; }
+[hidden] { display: none !important; }
+.category-popover-modal .category-popover-list { max-height: none; overflow: auto; min-height: 0; }
+.category-popover-modal .category-popover-filter, .category-popover-modal .category-popover-create { flex-shrink: 0; }
+.tx-row-ignored { opacity: .55; }
+.tx-row-ignored .tx-name-btn, .tx-row-ignored .tx-amount-btn, .tx-row-ignored .tx-category-label { color: var(--text-muted); }
+.budget-category-section + .budget-category-section { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.budget-category-section h4 { margin: 0 0 4px; font-size: .9rem; }
+.budget-category-section > p { margin: 0 0 12px; color: var(--text-muted); font-size: .8rem; line-height: 1.4; }
+.budget-card-actions > div { flex: 1; }
+.budget-card-actions small { display: block; color: var(--text-muted); font-size: .75rem; margin-top: 5px; }
+.category-maintenance-change { border-top: 1px solid var(--border); padding: 12px 0; }
+.category-maintenance-change h3 { font-size: 1rem; margin: 0 0 6px; }
+#categoryMaintenanceChanges { overflow: auto; max-height: 50dvh; }
+@media (max-width: 700px) {
+  dialog[data-responsive-picker][open] { position: fixed; top: var(--picker-top, 12px); left: 12px; right: 12px; margin: 0; width: calc(100vw - 24px); height: var(--picker-height, calc(100dvh - 24px)); max-height: var(--picker-height, calc(100dvh - 24px)); box-sizing: border-box; }
+  .category-grid-dialog .category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 /* ===== Collapsible section: how the weekly budget is calculated ===== */
 .week-basis { background: var(--surface); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); padding: 4px 14px; margin-bottom: 10px; }
