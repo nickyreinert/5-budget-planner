@@ -56,23 +56,23 @@
   "mainCategories": [
     {
       "id": "lebensmittel",
-      "label": "Groceries",
+      "label": "Groceries & Drugstore",
       "color": "#3498db"
+    },
+    {
+      "id": "restaurant",
+      "label": "Restaurant & Delivery",
+      "color": "#e67e22"
     },
     {
       "id": "freizeit",
       "label": "Leisure",
-      "color": "#e67e22"
+      "color": "#9b59b6"
     },
     {
       "id": "kids",
-      "label": "Kids Entertainment",
+      "label": "Kid",
       "color": "#e84393"
-    },
-    {
-      "id": "tech",
-      "label": "Games & Tech",
-      "color": "#9b59b6"
     },
     {
       "id": "mobilitaet",
@@ -290,7 +290,7 @@
       "label": "Gaming (Steam, PSN, Xbox, Nintendo, Epic)",
       "category": "Gaming",
       "group": "discretionary",
-      "budgetCategory": "tech",
+      "budgetCategory": "freizeit",
       "namePattern": "Steam|steampowered|PlayStation|Sony Interactive Entertainment|Nintendo|Xbox|Epic Games",
       "verwendungPattern": "",
       "kategoriePattern": "Steam",
@@ -313,7 +313,7 @@
       "label": "App & Play Store Purchases",
       "category": "App & Play Store Purchases",
       "group": "discretionary",
-      "budgetCategory": "tech",
+      "budgetCategory": "freizeit",
       "namePattern": "Google Play|Google Payment|Apple\\.com|iTunes|App Store",
       "verwendungPattern": "",
       "kategoriePattern": "",
@@ -325,7 +325,7 @@
       "label": "Food Delivery",
       "category": "Food Delivery",
       "group": "discretionary",
-      "budgetCategory": "freizeit",
+      "budgetCategory": "restaurant",
       "namePattern": "Lieferando|\\bWolt\\b|Uber Eats|Takeaway",
       "verwendungPattern": "",
       "kategoriePattern": "Lieferando|Wolt",
@@ -337,7 +337,7 @@
       "label": "Restaurants, Bars & Cafés",
       "category": "Restaurants, Bars & Cafés",
       "group": "discretionary",
-      "budgetCategory": "freizeit",
+      "budgetCategory": "restaurant",
       "namePattern": "Restaurant|Café|Backerei|Bäckerei|Gastro|Gelateria|McDonald",
       "verwendungPattern": "",
       "kategoriePattern": "\\bBar$|Snacks",
@@ -426,14 +426,25 @@
   "categoryMappings": {
     "Groceries": "lebensmittel",
     "Drugstore": "lebensmittel",
-    "Restaurant": "freizeit",
-    "Food Delivery": "freizeit",
+    "Drinks": "lebensmittel",
+    "Restaurant": "restaurant",
+    "Food Delivery": "restaurant",
+    "Restaurants, Bars & Cafés": "restaurant",
+    "Alcohol": "restaurant",
+    "Fast Food": "restaurant",
     "Cinema": "freizeit",
+    "Sports": "freizeit",
+    "Hobbies": "freizeit",
+    "Party": "freizeit",
     "Outing with Kids": "kids",
-    "Tech gadgets": "tech",
+    "Tech gadgets": "freizeit",
     "Groceries & Drugstore": "lebensmittel",
-    "Gaming": "tech",
-    "Car: Repairs, Rental & Accessories": "",
+    "Gaming": "freizeit",
+    "App & Play Store Purchases": "freizeit",
+    "Fuel": "mobilitaet",
+    "Public Transport & Rail": "mobilitaet",
+    "Car Sharing": "mobilitaet",
+    "Car: Repairs, Rental & Accessories": "mobilitaet",
     "Flights": "",
     "Housing: Furnishings": "",
     "Donations": "",

@@ -7,6 +7,16 @@ import { enrich_row, tx_id, apply_amount_overrides } from '../src/data.js';
 import { apply_manual_overrides, classify, classify_all, rule_matches } from '../src/rules.js';
 const setting = () => JSON.parse(readFileSync(new URL('../examples/five-budgets.setting.json', import.meta.url)));
 
+test('both presets group essentials, dining, leisure, child expenses and mobility', () => {
+  for (const file of ['default_rules.json', 'default_rules.en.json']) {
+    const preset = validate_budget_settings(JSON.parse(readFileSync(new URL(`../src/${file}`, import.meta.url))));
+    assert.deepEqual(preset.mainCategories.map(m => m.id), ['lebensmittel', 'restaurant', 'freizeit', 'kids', 'mobilitaet']);
+    const categories = file.includes('.en.')
+      ? [['Drugstore', 'lebensmittel'], ['Food Delivery', 'restaurant'], ['Gaming', 'freizeit'], ['Outing with Kids', 'kids'], ['Fuel', 'mobilitaet']]
+      : [['Drogerie', 'lebensmittel'], ['Lieferdienste', 'restaurant'], ['Gaming', 'freizeit'], ['Ausflug mit Kind', 'kids'], ['Tanken', 'mobilitaet']];
+    for (const [category, budget] of categories) assert.equal(budget_category(preset, category), budget);
+  }
+});
 test('example settings round-trip five budgets with an unassigned fallback, mappings and limits', () => {
   const s = setting(); s.subBudgetCaps = { lebensmittel: 5000 };
   const imported = validate_budget_settings(JSON.parse(JSON.stringify(s)));
@@ -38,6 +48,20 @@ test('budget bars include uncapped and empty budgets, other income excluded and 
   assert.equal(report[0].spentCents, 3000); assert.equal(report[0].pct, 60); assert.equal(report[0].rows.length, 2);
   assert.equal(report[1].spentCents, 0); assert.equal(report.length, 6);
   assert.equal(report.at(-1).spentCents, 700);
+});
+test('budget carry uses prior weeks of the selected month, including only the first week days in that month', () => {
+  const s = setting();
+  const row = (day, cents) => ({ date: new Date(2026, 9, day), betrag_cents: -cents, in_out: 'out', _cls: { category: 'Drogerie', group: 'essential' } });
+  const rows = [
+    { ...row(2, 1000), date: new Date(2026, 8, 30) },
+    row(2, 1000), row(6, 13000), row(13, 2000)
+  ];
+  const report = monday => build_main_budget_report(rows, monday, s.mainCategories, { lebensmittel: 7000 }, c => budget_category(s, c));
+  assert.equal(report(new Date(2026, 9, 5))[0].carriedCents, 3000);
+  assert.equal(report(new Date(2026, 9, 12))[0].carriedCents, -3000);
+  assert.equal(report(new Date(2026, 9, 12))[0].spentCents, 2000);
+  assert.equal(report(new Date(2026, 10, 2))[0].carriedCents, 1000);
+  assert.equal(report(new Date(2026, 9, 12))[1].carriedCents, null);
 });
 test('amount corrections retain identity, classification and reload behavior', () => {
   const source = { Datum: '20.09.2026', Name: 'Example', Verwendungszweck: 'Test', Betrag: '-10.00', Kategorie: '' };

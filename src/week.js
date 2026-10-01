@@ -323,6 +323,18 @@ export function build_main_budget_report(rows, monday, mains, caps, categoryToMa
   const { categories } = build_week_report(rows, monday);
   const buckets = mains.map(m => ({ ...m, capCents: caps[m.id] || 0, categories: [] }));
   const unassigned = { id: '__unassigned', label: 'Nicht zugeordnet', capCents: 0, categories: [] };
+  const monthStart = new Date(monday.getFullYear(), monday.getMonth(), 1);
+  const priorWeeks = [];
+  for (let start = week_start(monthStart); start < monday; start = add_days(start, 7)) {
+    const daysInMonth = Math.max(0, (add_days(start, 7) - Math.max(+start, +monthStart)) / DAY_MS);
+    const spentByBudget = {};
+    build_week_report(rows, start).categories.forEach(category => {
+      const budgetId = categoryToMain(category.category);
+      const spent = category.rows.reduce((sum, row) => sum + (row.date >= monthStart ? -row.betrag_cents : 0), 0);
+      spentByBudget[budgetId] = (spentByBudget[budgetId] || 0) + spent;
+    });
+    priorWeeks.push({ daysInMonth, spentByBudget });
+  }
   categories.forEach(c => {
     const bucket = buckets.find(m => m.id === categoryToMain(c.category)) || unassigned;
     bucket.categories.push(c);
@@ -330,7 +342,9 @@ export function build_main_budget_report(rows, monday, mains, caps, categoryToMa
   buckets.push(unassigned);
   return buckets.map(m => {
     const spentCents = m.categories.reduce((sum, c) => sum + c.cents, 0);
-    return { ...m, spentCents, remainingCents: m.capCents - spentCents,
+    const carriedCents = m.capCents ? Math.round(priorWeeks.reduce((sum, week) =>
+      sum + m.capCents * week.daysInMonth / 7 - (week.spentByBudget[m.id] || 0), 0)) : null;
+    return { ...m, spentCents, carriedCents, remainingCents: m.capCents - spentCents,
       pct: m.capCents ? Math.max(0, Math.min(100, spentCents / m.capCents * 100)) : 0,
       rows: m.categories.flatMap(c => c.rows).sort((a, b) => b.date - a.date) };
   });

@@ -1492,6 +1492,7 @@
                             <span class="main-budget-arrow" aria-hidden="true"></span>
                             <i class="rg-dot" aria-hidden="true"></i>
                             <strong>${escape_budget(m.label)}</strong>
+                            ${m.carriedCents === null ? '' : `<span class="main-budget-carry ${m.carriedCents < 0 ? 'negative' : m.carriedCents > 0 ? 'positive' : ''}" title="${escape_budget(t('week.budgetCarry'))}" aria-label="${escape_budget(t('week.budgetCarry'))}: ${escape_budget(fmt_eur(m.carriedCents))}">${m.carriedCents > 0 ? '+' : ''}${fmt_eur(m.carriedCents)}</span>`}
                             <span class="main-budget-value${over ? ' budget-over' : ''}">${fmt_eur(m.spentCents)}${m.capCents ? ' / ' + fmt_eur(m.capCents) : ''}</span>
                         </span>
                         <span class="main-budget-track" role="meter" aria-label="${escape_budget(m.label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${m.pct}" aria-valuetext="${escape_budget(fmt_eur(m.spentCents))}">
