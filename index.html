@@ -93,7 +93,7 @@
 
                     <div id="mainBudgetProgress" class="main-budget-progress" aria-label="Budgets dieser Woche"></div>
                     <div class="quickadd">
-                        <div class="category-search-label">Ausgabe hinzufügen</div><div class="quickadd-tiles" id="quickAddTiles"></div>
+                        <div class="category-search-label" data-i18n="week.addExpense">Ausgabe hinzufügen</div><div class="quickadd-tiles" id="quickAddTiles"></div>
                         <button type="button" id="quickAddMoreBtn" class="quickadd-more">Alle Kategorien durchsuchen</button>
                     </div>
 
@@ -4809,6 +4809,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
                 if (modal.style.display === 'block') render_transfer_preview();
                 render_week();
                 if (module_data.length > 0) {
+                    populate_year_buttons();
                     render_all();
                 }
             });
