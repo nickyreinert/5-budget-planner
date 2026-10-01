@@ -126,11 +126,14 @@ categories for new CSV transactions through the local MCP server. This also
 works when the app is hosted on Vercel: the server runs on **your computer**,
 not on Vercel, and never gets access to browser storage automatically.
 
-1. Import your CSV in the app. In Settings > Export/Import, download both
-	 **SETTING exportieren** (`5ive_classification_settings.json`) and
-	 **Daten exportieren** (`5ive_data_export.json`). Store these files privately.
-2. Run `npm install --prefix mcp` in this repository. Add this stdio server
-	 to Claude's MCP configuration, replacing all paths with absolute paths:
+1. Import your CSV in the app. In Settings > AI, download both
+	 **Aktuelles SETTING exportieren** (`5ive_classification_settings.json`) and
+	 **Aktuelle Daten exportieren** (`5ive_data_export.json`). Store these files privately.
+2. Run `npm install --prefix mcp` in this repository. In Settings > AI, choose
+	 which read and proposal tools Claude may use. Download the permissions file
+	 (`5ive_mcp_permissions.json`) into a private output folder, enter the absolute
+	 paths in the AI tab and copy the generated MCP configuration into your client.
+	 For manual configuration, replace these paths with your own absolute paths:
 
 	 ```json
 	 {
@@ -141,7 +144,8 @@ not on Vercel, and never gets access to browser storage automatically.
 					 "/absolute/path/to/moneyMoneyAnalyzer/mcp/server.mjs",
 					 "/absolute/path/to/5ive_classification_settings.json",
 					 "/absolute/path/to/5ive_data_export.json",
-					 "/absolute/path/to/private-output-folder"
+					 "/absolute/path/to/private-output-folder",
+					 "/absolute/path/to/private-output-folder/5ive_mcp_permissions.json"
 				 ]
 			 }
 		 }
@@ -151,17 +155,22 @@ not on Vercel, and never gets access to browser storage automatically.
 3. Ask Claude to use `list_categories`, `list_rules`, and `list_transactions`
 	 (filter by `Unkategorisiert`) to compare new purchases with earlier ones.
 	 Use `propose_rules` for repeated, clearly identifiable merchants; use
-	 `propose_assignments` for individual purchases with known purposes. Leave
-	 ambiguous transactions unclassified. Rules are limited to existing expense
-	 categories and must not take over previously classified entries.
-4. Import `5ive_mcp_settings_proposal.json` via **SETTING importieren** and
-	 review each proposed change. Import `5ive_mcp_assignments.json` via
-	 **Daten importieren** and confirm. The latter adds only category overrides,
+	 `propose_assignments` for individual purchases with known purposes (enable
+		 proposal tools in the AI tab first). Leave ambiguous transactions unclassified.
+		 Rules are limited to existing expense categories and must not take over
+		 previously classified entries.
+4. Import `5ive_mcp_settings_proposal.json` via **SETTING-Vorschlag importieren**
+	 in the AI tab and review each proposed change. Import
+	 `5ive_mcp_assignments.json` via **Zuordnungs-Vorschlag importieren** and confirm.
+	 The latter adds only category overrides,
 	 without replacing your CSV bookings. Export fresh files before the next
 	 session. Use a fresh empty output folder for each proposal batch; the MCP
 	 server never overwrites existing proposal files.
 
-Claude receives financial details returned by the tools. Keep the export and
+The permissions file controls only MCP clients started with that fifth argument;
+restart the client to apply changes. Older four-argument configurations still
+expose all tools. The browser cannot connect to or monitor a running local MCP
+process. Claude receives financial details returned by the tools. Keep the export and
 output folders outside the public site/repository; decide whether to share
 that data with your Claude account. The server assumes the default CSV option
 to ignore bank-provided categories; if you disabled that option, verify the

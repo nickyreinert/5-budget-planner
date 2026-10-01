@@ -218,6 +218,7 @@
                     <button class="settings-tab-btn" data-settings-tab="fixexpense" data-i18n="settingsTabs.fixexpense">Fix Expense</button>
                     <button class="settings-tab-btn" data-settings-tab="budgets" data-i18n="settingsTabs.budgets">Budgets</button>
                     <button class="settings-tab-btn" data-settings-tab="importexport" data-i18n="settingsTabs.importexport">Export / Import</button>
+                    <button class="settings-tab-btn" data-settings-tab="ai" data-i18n="settingsTabs.ai">AI</button>
                     <button class="settings-tab-btn" data-settings-tab="sync" data-i18n="settingsTabs.sync">Sync</button>
                 </div>
 
@@ -327,6 +328,8 @@
                         <label data-i18n="csv.pickFile">Datei auswählen</label>
                         <input type="file" id="csvFile" accept=".csv">
                     </div>
+                    <details class="settings-disclosure">
+                    <summary data-i18n="csv.accountSection">Konten & Kategorien</summary>
                     <div class="csv-field">
                         <label><input type="checkbox" id="csvIgnoreCategories" checked> <span data-i18n="csv.ignoreCategories">Kategorien aus CSV-Importen ignorieren</span></label>
                         <small data-i18n="csv.ignoreCategoriesHint">Gilt auch für vorhandene CSV-Buchungen und wird automatisch gespeichert. Kategorien und Budgets stammen aus deinem SETTING-JSON.</small>
@@ -334,6 +337,11 @@
                     <div class="csv-grid">
                         <div class="csv-field"><label for="csvColAccount">Spalte für eigenes Konto</label><input id="csvColAccount" placeholder="Kontoname / Account"><small>Kontoname des exportierten Kontos, nicht das Empfängerkonto.</small></div>
                         <div class="csv-field"><label for="csvAccountName">Konto für diese Datei (falls keine Kontospalte)</label><input id="csvAccountName" placeholder="z. B. DKB Giro oder PayPal"><small>Bei getrennten Exporten vor dem Import setzen. Bei gemischten Exporten ist eine Kontospalte erforderlich.</small></div>
+                    </div>
+                    </details>
+                    <details class="settings-disclosure">
+                    <summary data-i18n="csv.formatSection">Format & Spaltenzuordnung</summary>
+                    <div class="csv-grid">
                         <div class="csv-field">
                             <label data-i18n="csv.delimiterLabel">Trennzeichen (Spalten):</label>
                             <select id="csvDelimiter">
@@ -384,13 +392,13 @@
                         <button id="csvResetDefaultsBtn" data-i18n="csv.resetDefaults">↺ Standardwerte laden</button>
                         <span id="csvSavedNote" style="display:none; color:#2ecc71; margin-left:10px;" data-i18n="csv.savedNote">Einstellungen gespeichert. Beim nächsten Laden einer Datei werden sie verwendet.</span>
                     </div>
+                    </details>
 
                     </section><section class="settings-section">
                         <button id="loadDefaultRulesBtn" data-i18n="importexport.loadDefault">↺ Standardregeln laden</button>
                         <button id="exportRulesBtn" data-i18n="importexport.export">SETTING exportieren</button>
                         <button id="importRulesBtn" data-i18n="importexport.import">SETTING importieren</button>
                         <p><a href="./examples/five-budgets.setting.json" download>Beispiel: 5 Budgets importieren</a></p>
-                        <p>Transaktionskategorie wählen → Betrag eingeben → bestätigen. Die Zuordnung zum Hauptbudget erfolgt automatisch. Export / Import enthält auch Budgetnamen, Reihenfolge, Kategoriezuordnungen und Wochenlimits.</p>
                         <input type="file" id="importRulesFile" accept=".json" style="display: none;">
                         <p id="settingsImportStatus" role="status" aria-live="polite"></p>
                         <div id="importPasteDetails">
@@ -398,13 +406,12 @@
                             <textarea id="importPasteText" class="import-paste-text" data-i18n-placeholder="importexport.pastePlaceholder" placeholder="JSON hier einfügen ..."></textarea>
                             <button type="button" id="importPasteBtn" class="primary" data-i18n="importexport.pasteImport">Eingefügtes SETTING importieren</button>
                     </div>
-                    </section><section class="settings-section">
-                        <p style="margin: 0 0 10px 0; color: #555;" data-i18n="importexport.dataIntro">Alles außer dem SETTING: importierte Buchungen, manuelle Einträge, Kategorie-Korrekturen und sonstige Überschreibungen - als eigene Datei, um z. B. in einen anderen Browser umzuziehen (ohne Google-Konto/Cloud, siehe Tab "Sync").</p>
-                        <button id="exportDataBtn" data-i18n="importexport.exportData">Daten exportieren</button>
-                        <button id="importDataBtn" data-i18n="importexport.importData">Daten importieren</button>
-                        <input type="file" id="importDataFile" accept=".json" style="display: none;">
-                        <p id="dataImportStatus" role="status" aria-live="polite"></p>
-                    </section><section class="settings-section">
+                    </section>
+                </div>
+
+                <div id="settingsTab-ai" class="settings-tab-pane" hidden>
+                    <section class="settings-section">
+                        <h3 data-i18n="ai.manualTitle">Mit einem LLM auswerten</h3>
                         <p style="margin: 0 0 10px 0; color: #555;" data-i18n="importexport.unclassifiedIntro">
                             Unklassifizierte Ausgaben (aktuell gewählter Jahresfilter) als kompakte,
                             nach Summe sortierte Händlerliste + aktuellem Regelwerk + fertigem Prompt
@@ -421,9 +428,48 @@
                         <button type="button" id="copyLlmPromptBtn" data-i18n="importexport.copyPrompt">Prompt kopieren</button>
                     </div>
                     </section>
+                    <section class="settings-section">
+                        <h3 data-i18n="ai.mcpTitle">Lokaler MCP-Server</h3>
+                        <p data-i18n="ai.mcpIntro">Der MCP-Server läuft auf deinem Computer und liest nur exportierte Dateien. Er kann Vorschläge als neue Dateien speichern, aber keine Einstellungen oder Buchungen in der App direkt ändern.</p>
+                        <div class="settings-action-row">
+                            <button type="button" id="mcpExportSettingsBtn" data-i18n="ai.exportSettings">Aktuelles SETTING exportieren</button>
+                            <button type="button" id="mcpExportDataBtn" data-i18n="ai.exportData">Aktuelle Daten exportieren</button>
+                        </div>
+                        <p data-i18n="ai.mcpImportHint">Nach der Prüfung Vorschläge manuell importieren:</p>
+                        <div class="settings-action-row">
+                            <button type="button" id="mcpImportSettingsBtn" data-i18n="ai.importSettings">SETTING-Vorschlag importieren</button>
+                            <button type="button" id="mcpImportAssignmentsBtn" data-i18n="ai.importAssignments">Zuordnungs-Vorschlag importieren</button>
+                        </div>
+                        <p data-i18n="ai.mcpPrivacy">Finanzdaten aus den Exporten werden an das verbundene LLM übertragen. Lege Exporte und Vorschläge außerhalb des öffentlichen Website-Ordners ab.</p>
+                        <div class="mcp-tool-list">
+                            <label><input type="checkbox" class="mcp-tool" value="list_categories" checked> list_categories <small data-i18n="ai.listCategories">Kategorien, Budgets und Beispiele lesen</small></label>
+                            <label><input type="checkbox" class="mcp-tool" value="list_transactions" checked> list_transactions <small data-i18n="ai.listTransactions">Transaktionen lesen und durchsuchen</small></label>
+                            <label><input type="checkbox" class="mcp-tool" value="list_rules" checked> list_rules <small data-i18n="ai.listRules">Klassifizierungsregeln lesen</small></label>
+                            <label><input type="checkbox" class="mcp-tool" value="propose_rules"> propose_rules <small data-i18n="ai.proposeRules">Neue Regeln als Importdatei vorschlagen</small></label>
+                            <label><input type="checkbox" class="mcp-tool" value="propose_assignments"> propose_assignments <small data-i18n="ai.proposeAssignments">Einzelne Buchungen als Importdatei zuordnen</small></label>
+                        </div>
+                        <p data-i18n="ai.mcpPathsIntro">Lokale absolute Pfade für die MCP-Konfiguration eingeben:</p>
+                        <div class="csv-field"><label for="mcpServerPath" data-i18n="ai.serverPath">Pfad zu mcp/server.mjs</label><input id="mcpServerPath" type="text" placeholder="/path/to/moneyMoneyAnalyzer/mcp/server.mjs"></div>
+                        <div class="csv-field"><label for="mcpSettingsPath" data-i18n="ai.settingsPath">Pfad zum SETTING-Export</label><input id="mcpSettingsPath" type="text" placeholder="/private/5ive_classification_settings.json"></div>
+                        <div class="csv-field"><label for="mcpDataPath" data-i18n="ai.dataPath">Pfad zum Daten-Export</label><input id="mcpDataPath" type="text" placeholder="/private/5ive_data_export.json"></div>
+                        <div class="csv-field"><label for="mcpOutputPath" data-i18n="ai.outputPath">Privater Ordner für Vorschläge und Berechtigungen</label><input id="mcpOutputPath" type="text" placeholder="/private/5ive-proposals"></div>
+                        <button type="button" id="mcpDownloadPermissionsBtn" data-i18n="ai.downloadPermissions">Berechtigungen herunterladen</button>
+                        <label for="mcpConfigSnippet" data-i18n="ai.configLabel">MCP-Konfiguration für deinen Client</label>
+                        <textarea id="mcpConfigSnippet" readonly class="llm-prompt-example" aria-describedby="mcpConfigHint"></textarea>
+                        <button type="button" id="mcpCopyConfigBtn" data-i18n="ai.copyConfig">Konfiguration kopieren</button>
+                        <p id="mcpConfigHint" data-i18n="ai.mcpHint">Installiere zuerst die Abhängigkeiten mit npm install --prefix mcp. Lege die heruntergeladene Berechtigungsdatei im angegebenen privaten Ausgabeordner ab und starte den MCP-Client nach Änderungen neu. Vorschläge müssen weiterhin über Export / Import bestätigt werden.</p>
+                    </section>
                 </div>
 
                 <div id="settingsTab-sync" class="settings-tab-pane" hidden>
+                    <section class="settings-section">
+                        <h3 data-i18n="ai.localBackupTitle">Lokale Datensicherung</h3>
+                        <p data-i18n="importexport.dataIntro">Alles außer dem SETTING: importierte Buchungen, manuelle Einträge, Kategorie-Korrekturen und sonstige Überschreibungen - als eigene Datei, um z. B. in einen anderen Browser umzuziehen.</p>
+                        <button id="exportDataBtn" data-i18n="importexport.exportData">Daten exportieren</button>
+                        <button id="importDataBtn" data-i18n="importexport.importData">Daten importieren</button>
+                        <input type="file" id="importDataFile" accept=".json" style="display: none;">
+                        <p id="dataImportStatus" role="status" aria-live="polite"></p>
+                    </section>
                     <section class="settings-section">
                     <p data-i18n="sync.intro">Sichere dein SETTING (und optional deine Transaktionsdaten) in der Cloud und nutze es auf mehreren Geräten - einfach mit deinem Google-Konto anmelden.</p>
                     <div id="syncGoogleButtonContainer"></div>
@@ -4121,7 +4167,7 @@
             sync_url_from_state();
         });
 
-        // Settings modal sub-tabs (Allgemein / Budgets / Fix Expense / Income / Export-Import / CSV-Import)
+        // Settings modal sub-tabs
         document.querySelectorAll('.settings-tab-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 document.querySelectorAll('.settings-tab-btn').forEach(b => b.classList.remove('active'));
@@ -4132,6 +4178,7 @@
                 document.getElementById('settingsTab-fixexpense').hidden = target !== 'fixexpense';
                 document.getElementById('settingsTab-income').hidden = target !== 'income';
                 document.getElementById('settingsTab-importexport').hidden = target !== 'importexport';
+                document.getElementById('settingsTab-ai').hidden = target !== 'ai';
                 document.getElementById('settingsTab-sync').hidden = target !== 'sync';
                 render_active_settings_tab();
                 if (target === 'sync') render_sync_google_button();
@@ -4445,6 +4492,47 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
                 document.getElementById('llmPromptExample').select();
             }
         });
+
+        document.getElementById('mcpExportSettingsBtn').addEventListener('click', () => document.getElementById('exportRulesBtn').click());
+        document.getElementById('mcpExportDataBtn').addEventListener('click', () => document.getElementById('exportDataBtn').click());
+        document.getElementById('mcpImportSettingsBtn').addEventListener('click', () => document.getElementById('importRulesBtn').click());
+        document.getElementById('mcpImportAssignmentsBtn').addEventListener('click', () => document.getElementById('importDataBtn').click());
+        const mcpPathFields = ['mcpServerPath', 'mcpSettingsPath', 'mcpDataPath', 'mcpOutputPath'];
+        const mcpPermissionsName = '5ive_mcp_permissions.json';
+        let storedMcpConfig = {};
+        try { storedMcpConfig = JSON.parse(localStorage.getItem('aiMcpConfig') || '{}') || {}; } catch (error) { /* Ignore invalid local preferences. */ }
+        mcpPathFields.forEach(id => { document.getElementById(id).value = storedMcpConfig[id] || ''; });
+        document.querySelectorAll('.mcp-tool').forEach(input => {
+            if (Array.isArray(storedMcpConfig.allowedTools)) input.checked = storedMcpConfig.allowedTools.includes(input.value);
+        });
+        function update_mcp_config() {
+            const paths = Object.fromEntries(mcpPathFields.map(id => [id, document.getElementById(id).value.trim()]));
+            const allowedTools = [...document.querySelectorAll('.mcp-tool:checked')].map(input => input.value);
+            localStorage.setItem('aiMcpConfig', JSON.stringify({ ...paths, allowedTools }));
+            const output = paths.mcpOutputPath.replace(/[\\/]+$/, '');
+            const separator = output.includes('\\') ? '\\' : '/';
+            const config = Object.values(paths).every(Boolean) ? {
+                mcpServers: { '5ive-budgets': { command: 'node', args: [paths.mcpServerPath, paths.mcpSettingsPath, paths.mcpDataPath,
+                    output, output + separator + mcpPermissionsName] } }
+            } : null;
+            document.getElementById('mcpConfigSnippet').value = config ? JSON.stringify(config, null, 2) : '';
+            document.getElementById('mcpCopyConfigBtn').disabled = !config;
+        }
+        mcpPathFields.forEach(id => document.getElementById(id).addEventListener('input', update_mcp_config));
+        document.querySelectorAll('.mcp-tool').forEach(input => input.addEventListener('change', update_mcp_config));
+        document.getElementById('mcpDownloadPermissionsBtn').addEventListener('click', () => {
+            const allowedTools = [...document.querySelectorAll('.mcp-tool:checked')].map(input => input.value);
+            const url = URL.createObjectURL(new Blob([JSON.stringify({ allowedTools }, null, 2)], { type: 'application/json' }));
+            const link = document.createElement('a');
+            link.href = url; link.download = mcpPermissionsName; link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        });
+        document.getElementById('mcpCopyConfigBtn').addEventListener('click', async () => {
+            const snippet = document.getElementById('mcpConfigSnippet');
+            try { await navigator.clipboard.writeText(snippet.value); }
+            catch (error) { snippet.select(); }
+        });
+        update_mcp_config();
 
         // ===== CSV IMPORT CONFIG (delimiter, line break, encoding, column mapping) =====
 

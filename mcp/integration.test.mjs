@@ -41,3 +41,27 @@ test('Claude MCP client reads categories and creates importable proposals', asyn
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('MCP permissions expose only selected tools', async () => {
+  const directory = await mkdtemp(join(tmpdir(), '5ive-mcp-permissions-'));
+  let client;
+  try {
+    const settingsPath = join(directory, 'settings.json');
+    const dataPath = join(directory, 'data.json');
+    const permissionsPath = join(directory, 'permissions.json');
+    await writeFile(settingsPath, JSON.stringify({ groups: [], mainCategories: [], rules: [] }));
+    await writeFile(dataPath, JSON.stringify({ importedEntries: [], manualEntries: [], overrides: {} }));
+    await writeFile(permissionsPath, JSON.stringify({ allowedTools: ['list_categories'] }));
+    client = new Client({ name: 'restricted-client', version: '1.0.0' });
+    await client.connect(new StdioClientTransport({ command: process.execPath,
+      args: [join(import.meta.dirname, 'server.mjs'), settingsPath, dataPath, directory, permissionsPath] }));
+    assert.deepEqual((await client.listTools()).tools.map(tool => tool.name), ['list_categories']);
+    const listed = await client.callTool({ name: 'list_categories', arguments: {} });
+    assert.equal(listed.isError, undefined);
+    const denied = await client.callTool({ name: 'propose_rules', arguments: { rules: [] } });
+    assert.equal(denied.isError, true);
+  } finally {
+    await client?.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

@@ -393,6 +393,15 @@ dialog.setup-wizard:not([open]) { display: none; }
 .settings-tab-btn.active { border-bottom-color: var(--accent); font-weight: 700; color: var(--accent); }
 .settings-tab-pane[hidden] { display: none; }
 .settings-tab-pane { display: grid; gap: 16px; }
+.settings-disclosure { border-top: 1px solid var(--border); padding: 12px 0; }
+.settings-disclosure > summary { cursor: pointer; font-weight: 600; }
+.settings-disclosure[open] > summary { margin-bottom: 14px; }
+.mcp-tool-list { display: grid; gap: 6px; margin: 14px 0; }
+.mcp-tool-list label { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; column-gap: 9px; padding: 9px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; }
+.mcp-tool-list input { grid-row: span 2; margin: 2px 0 0; }
+.mcp-tool-list small { grid-column: 2; font-family: inherit; }
+#settingsTab-ai .settings-action-row { justify-content: flex-start; flex-wrap: wrap; }
+#settingsTab-ai #mcpConfigSnippet { min-height: 145px; margin-top: 6px; }
 /* Mirrors the wizard's sticky summary card: sits right under the already-
    sticky .settings-tabs bar (53px measured height) so the totals stay in
    view while the intro text/editable list below scroll away underneath. */
