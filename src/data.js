@@ -285,10 +285,13 @@ function round2(v) { return Math.round((v + Number.EPSILON) * 100) / 100; }
 
 // Local amount edits preserve the original identity so category overrides and
 // edits survive reloads and re-importing the same bank file.
+// A matched manual entry contributes its classification, while imported
+// booking details remain authoritative. Only edits keyed to this booking
+// (including its legacy identity) may change its amount, note or date.
 export function apply_amount_overrides(rows, amounts) {
   rows.forEach(row => {
     const legacyId = tx_id({ ...row, _txId: undefined });
-    const value = amounts[tx_id(row)] ?? amounts[row._matchedManualTxId] ?? amounts[legacyId];
+    const value = amounts[tx_id(row)] ?? amounts[legacyId];
     if (!Number.isSafeInteger(value)) return;
     row._originalAmountCents ??= row.betrag_cents;
     row.betrag_cents = value;
@@ -303,7 +306,7 @@ export function apply_amount_overrides(rows, amounts) {
 export function apply_note_overrides(rows, notes) {
   rows.forEach(row => {
     const legacyId = tx_id({ ...row, _txId: undefined });
-    const value = notes[tx_id(row)] ?? notes[row._matchedManualTxId] ?? notes[legacyId];
+    const value = notes[tx_id(row)] ?? notes[legacyId];
     if (value === undefined) return;
     row._originalVerwendungszweck ??= row.verwendungszweck;
     row.verwendungszweck = value;
@@ -318,7 +321,7 @@ export function apply_note_overrides(rows, notes) {
 export function apply_date_overrides(rows, dates) {
   rows.forEach(row => {
     const legacyId = tx_id({ ...row, _txId: undefined });
-    const value = dates[tx_id(row)] ?? dates[row._matchedManualTxId] ?? dates[legacyId];
+    const value = dates[tx_id(row)] ?? dates[legacyId];
     if (!value) return;
     const [y, m, d] = value.split('-').map(Number);
     if (!y || !m || !d) return;

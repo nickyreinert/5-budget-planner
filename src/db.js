@@ -6,8 +6,10 @@
 // what's comfortable to keep as one big JSON blob in localStorage.
 
 const DB_NAME = 'fiveBudgets';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const IMPORT_STORE = 'importedEntries';
+const RANGE_STORE = 'importRanges';
+const RECONCILIATION_STORE = 'reconciliationDecisions';
 // Namespaced numeric entries reuse the existing store, avoiding upgrades that
 // would block while an older app tab is still open. Category values are strings.
 const AMOUNT_PREFIX = 'amount:';
@@ -26,6 +28,8 @@ function open_db() {
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(IMPORT_STORE)) db.createObjectStore(IMPORT_STORE, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains(RANGE_STORE)) db.createObjectStore(RANGE_STORE, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains(RECONCILIATION_STORE)) db.createObjectStore(RECONCILIATION_STORE);
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE); // keyed by transaction id (see data.js#tx_id)
       }
@@ -109,8 +113,9 @@ export async function load_manual_entries() {
 export async function delete_manual_entry(id, txId) {
   const db = await open_db();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction([MANUAL_STORE, STORE], 'readwrite');
+    const tx = db.transaction([MANUAL_STORE, STORE, RECONCILIATION_STORE], 'readwrite');
     tx.objectStore(MANUAL_STORE).delete(id);
+    tx.objectStore(RECONCILIATION_STORE).delete(id);
     if (txId) {
       const store = tx.objectStore(STORE);
       [txId, AMOUNT_PREFIX + txId, NOTE_PREFIX + txId, DATE_PREFIX + txId, PERIOD_PREFIX + txId].forEach(key => store.delete(key));
@@ -240,22 +245,43 @@ export async function clear_effective_period_override(id) {
 }
 
 // Imports have their own durable store; put() is an upsert by source identity.
-export async function upsert_imported_entries(records) {
+export async function upsert_imported_entries(records, ranges = []) {
+  // Coverage belongs to a file/account, never to the combined history. Keeping
+  // ranges separate preserves gaps between uploads and empty export periods.
+  ranges.forEach(validate_import_range);
   const db = await open_db();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction([IMPORT_STORE, STORE], 'readwrite');
+    const tx = db.transaction([IMPORT_STORE, STORE, RANGE_STORE, RECONCILIATION_STORE], 'readwrite');
     const imports = tx.objectStore(IMPORT_STORE), overrides = tx.objectStore(STORE);
+    const redirects = new Map();
+    let remaining = records.filter(record => record.legacyId && record.legacyId !== record.id).length;
+    function migrate_decision_ids() {
+      if (--remaining || !redirects.size) return;
+      const cursorRequest = tx.objectStore(RECONCILIATION_STORE).openCursor();
+      cursorRequest.onsuccess = () => {
+        const cursor = cursorRequest.result;
+        if (!cursor) return;
+        const target = redirects.get(cursor.value?.importedId);
+        if (target && cursor.value.kind === 'match') cursor.update({ kind: 'match', importedId: target });
+        cursor.continue();
+      };
+    }
+    ranges.forEach(range => tx.objectStore(RANGE_STORE).put(range));
     records.forEach(record => {
       imports.put(record);
       if (!record.legacyId || record.legacyId === record.id) return;
       const request = imports.get(record.legacyId);
       request.onsuccess = () => {
-        if (!request.result || request.result._account) return;
+        const oldCurrency = String(request.result?.Währung || 'EUR').trim().toUpperCase();
+        const newCurrency = String(record.Währung || 'EUR').trim().toUpperCase();
+        if (!request.result || request.result._account || oldCurrency !== newCurrency) { migrate_decision_ids(); return; }
         imports.delete(record.legacyId);
+        redirects.set(record.legacyId, record.id);
         for (const prefix of ['', AMOUNT_PREFIX, NOTE_PREFIX, DATE_PREFIX, PERIOD_PREFIX]) {
           const old = overrides.get(prefix + record.legacyId);
           old.onsuccess = () => { if (old.result !== undefined) { overrides.put(old.result, prefix + record.id); overrides.delete(prefix + record.legacyId); } };
         }
+        migrate_decision_ids();
       };
     });
     tx.oncomplete = () => resolve();
@@ -269,5 +295,60 @@ export async function load_imported_entries() {
     const req = db.transaction(IMPORT_STORE, 'readonly').objectStore(IMPORT_STORE).getAll();
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
+  });
+}
+
+function valid_iso_date(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(value + 'T00:00:00Z');
+  return Number.isFinite(+date) && date.toISOString().slice(0, 10) === value;
+}
+
+function validate_import_range(range) {
+  if (!range || typeof range.id !== 'string' || typeof range.account !== 'string' ||
+      !valid_iso_date(range.from) || !valid_iso_date(range.to) || range.from > range.to) {
+    throw new Error('Invalid import period');
+  }
+}
+
+export async function load_import_ranges() {
+  const db = await open_db();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(RANGE_STORE, 'readonly').objectStore(RANGE_STORE).getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function load_reconciliation_decisions() {
+  const db = await open_db();
+  return new Promise((resolve, reject) => {
+    const result = {};
+    const req = db.transaction(RECONCILIATION_STORE, 'readonly').objectStore(RECONCILIATION_STORE).openCursor();
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (!cursor) return resolve(result);
+      Object.defineProperty(result, cursor.key, { value: cursor.value, enumerable: true });
+      cursor.continue();
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// A null decision restores automatic matching. The raw manual record remains.
+export async function save_reconciliation_decision(manualId, decision) {
+  if (typeof manualId !== 'string' || !manualId || (decision !== null &&
+      (!decision || !['cash', 'separate', 'match'].includes(decision.kind) ||
+      (decision.kind === 'match' && (typeof decision.importedId !== 'string' || !decision.importedId))))) {
+    throw new Error('Invalid reconciliation decision');
+  }
+  const db = await open_db();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(RECONCILIATION_STORE, 'readwrite');
+    const store = tx.objectStore(RECONCILIATION_STORE);
+    if (decision === null) store.delete(manualId);
+    else store.put({ kind: decision.kind, ...(decision.kind === 'match' ? { importedId: decision.importedId } : {}) }, manualId);
+    tx.oncomplete = () => resolve();
+    tx.onerror = tx.onabort = () => reject(tx.error || new Error('Reconciliation aborted'));
   });
 }

@@ -65,8 +65,11 @@ test('explicit internal transfers need distinct accounts and respect the date wi
 test('manual bank category survives merging its PayPal merchant purchase', () => {
  const purchase=row('Shop','-20','PayPal'), bank=row('PayPal Europe','-20','DKB');
  bank._cls={category:'Dining',group:'essential',source:'manual',excluded:false};bank._matchedManualId='manual-1';
+ bank._matchedManual={Name:'Original manual purchase',Datum:'12.09.2026'};
+ bank._reconciliation={status:'matched',importedId:tx_id(bank),candidateIds:[tx_id(bank)]};
  reconcile_paypal([bank,purchase]);
  assert.equal(purchase._cls.category,'Dining');assert.equal(purchase._matchedManualId,'manual-1');assert.equal(bank._cls.excluded,true);
+ assert.equal(purchase._reconciliation.importedId,tx_id(bank));assert.equal(purchase._matchedManual.Name,'Original manual purchase');
 });
 
 test('a failed top-up and its reversal cancel out while the real purchase stays', () => {

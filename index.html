@@ -92,6 +92,7 @@
                     </div>
 
                     <div id="mainBudgetProgress" class="main-budget-progress" aria-label="Budgets dieser Woche"></div>
+                    <div id="weekReconciliationNotice" class="reconciliation-notice" hidden></div>
                     <div class="quickadd">
                         <div class="category-search-label" data-i18n="week.addExpense">Ausgabe hinzufügen</div><div class="quickadd-tiles" id="quickAddTiles"></div>
                         <button type="button" id="quickAddMoreBtn" class="quickadd-more">Alle Kategorien durchsuchen</button>
@@ -133,6 +134,7 @@
                     <div id="overviewFilterNote" class="filter-note" aria-live="polite"></div>
                 </div>
                 <div id="financeOverviewRow" class="budget-totals-row"></div>
+                <div id="overviewReconciliationNotice" class="reconciliation-notice" hidden></div>
                 <div id="paypalNotice" class="filter-note" hidden></div>
                 <div id="weekSavingsCalendar"></div>
                 <section class="timeline-section" id="budgetTrend" tabindex="-1">
@@ -324,6 +326,12 @@
                 <div id="settingsTab-importexport" class="settings-tab-pane" hidden>
                     <section class="settings-section">
                     <p data-i18n="csv.intro">Lade hier deine CSV-Datei und stelle bei Bedarf das Format ein, falls dein Export nicht dem Standard entspricht.</p>
+                    <div class="csv-grid">
+                        <div class="csv-field"><label for="csvRangeFrom" data-i18n="reconciliation.rangeFrom">Exportzeitraum von (optional)</label><input type="date" id="csvRangeFrom"></div>
+                        <div class="csv-field"><label for="csvRangeTo" data-i18n="reconciliation.rangeTo">Exportzeitraum bis (optional)</label><input type="date" id="csvRangeTo"></div>
+                    </div>
+                    <p class="dialog-hint" data-i18n="reconciliation.rangeHint">Ohne Zeitraum gilt je Konto nur der Bereich zwischen erster und letzter Buchung dieser Datei. Nur vollständige Kontoexporte verwenden; gefilterte Exporte belegen keinen vollständigen Zeitraum.</p>
+                    <div class="csv-field"><label for="manualMatchDays" data-i18n="reconciliation.window">Manuelle Ausgaben abgleichen: ± Tage</label><input type="number" id="manualMatchDays" min="0" max="14" step="1" value="3"></div>
                     <div class="csv-field">
                         <label data-i18n="csv.pickFile">Datei auswählen</label>
                         <input type="file" id="csvFile" accept=".csv">
@@ -637,6 +645,12 @@
         <label><span data-i18n="txEdit.reportingDate">Budget-/Auswertungsdatum für wiederkehrende Buchungen</span><input type="date" id="txEditEffectiveDate"></label>
         <p class="dialog-hint" id="txEditEffectiveDateHint"></p>
         <button type="button" id="txEditRestoreEffectiveDate" data-i18n="txEdit.restoreAutomaticPeriod">Automatische Zuordnung wiederherstellen</button>
+        <section id="txEditReconciliationSection" class="tx-merge-section" hidden>
+            <h3 data-i18n="reconciliation.title">Import-Abgleich</h3>
+            <p id="txEditReconciliationHint" class="dialog-hint"></p>
+            <label><span data-i18n="reconciliation.choice">Diese manuelle Buchung</span><select id="txEditReconciliationChoice"></select></label>
+            <button type="button" id="saveTxReconciliation" data-i18n="reconciliation.save">Abgleich speichern</button>
+        </section>
         <section id="txEditMergeSection" class="tx-merge-section" hidden>
             <h3 data-i18n="merge.title">Zusammengeführte Buchungen</h3>
             <p class="dialog-hint" id="txEditMergeHint"></p>
@@ -666,9 +680,9 @@
         import { get_csv_config, save_csv_config, default_csv_config } from './src/csv_config.js';
         import { load_footer } from './src/footer.js';
         import { init_section_highlight } from './src/highlight.js';
-        import { csv_records, reconcile_transactions, transaction_source_label } from './src/transactions.js';
+        import { csv_records, csv_import_ranges, reconcile_transactions, transaction_source_label, reconciliation_summary, get_manual_match_days, save_manual_match_days } from './src/transactions.js';
         import { category_catalog, sort_categories, fixed_expense_categories, UNCATEGORIZED, ADDITIONAL_INCOME, split_category, join_category } from './src/categories.js';
-        import { upsert_imported_entries, load_imported_entries } from './src/db.js';
+        import { upsert_imported_entries, load_imported_entries, load_import_ranges, load_reconciliation_decisions, save_reconciliation_decision } from './src/db.js';
         import { apply_amount_overrides, apply_note_overrides, apply_date_overrides, is_real_cashflow } from './src/data.js';
         import { load_amount_overrides, save_amount_override, load_all_overrides, save_overrides, add_manual_entry, load_manual_entries, delete_manual_entry, load_note_overrides, save_note_override, load_date_overrides, save_date_override, load_effective_period_overrides, save_effective_period_override, clear_effective_period_override } from './src/db.js';
         import {
@@ -749,12 +763,30 @@
             apply_effective_periods(module_data, effectivePeriodOverrides);
         }
 
-        // Rebuild from the two durable sources, matching date + signed cents.
+        // Rebuild from raw sources and durable import coverage/review decisions.
         async function merge_manual_entries() {
-            const [imports, manual] = await Promise.all([load_imported_entries(), load_manual_entries()]);
-            const rows = reconcile_transactions(imports, manual, amountOverrides);
+            const [imports, manual, importRanges, decisions] = await Promise.all([load_imported_entries(), load_manual_entries(), load_import_ranges(), load_reconciliation_decisions()]);
+            const rows = reconcile_transactions(imports, manual, amountOverrides, { maxDays: get_manual_match_days(), dateOverrides, importRanges, decisions });
+            // Preserve accepted one-to-one links across overlapping uploads.
+            // A later similarly priced purchase must not undo an earlier match.
+            for (const row of rows) {
+                if (row._matchedManualId && !decisions[row._matchedManualId]) {
+                    await save_reconciliation_decision(row._matchedManualId, { kind: 'match', importedId: tx_id(row) });
+                }
+            }
             module_data.splice(0, module_data.length);
             rows.forEach(row => module_data.push(row));
+        }
+
+        function render_reconciliation_notice(id, rows) {
+            const container = document.getElementById(id);
+            const summary = reconciliation_summary(rows);
+            const cash = rows.filter(r => r._reconciliation?.status === 'cash' && r.betrag_cents < 0 && is_real_cashflow(r));
+            container.hidden = !summary.count && !cash.length;
+            if (container.hidden) { container.replaceChildren(); return; }
+            const listed = [...summary.rows, ...cash].sort((a, b) => b.date - a.date);
+            container.innerHTML = `<details><summary>${escape_budget(t('reconciliation.summary', { count: summary.count, amount: fmt_eur(summary.cents) }))}${cash.length ? ' · ' + escape_budget(t('reconciliation.cashSummary', { amount: fmt_eur(cash.reduce((sum, r) => sum - r.betrag_cents, 0)) })) : ''}</summary><p>${escape_budget(t('reconciliation.summaryHint'))}</p><table class="transaction-rows">${listed.map(render_tx_row).join('')}</table></details>`;
+            wire_tx_rows(container);
         }
 
         let favoriteCategories;
@@ -996,7 +1028,7 @@
                 <td class="tx-cell">
                     <div class="tx-row-meta">
                         <span class="tx-date">${fmt_date(r.date)}</span>
-                        <span class="transaction-source">${transaction_source_label(r)}</span>
+                        <span class="transaction-source${['unassigned', 'ambiguous'].includes(r._reconciliation?.status) ? ' reconciliation-warning' : ''}">${escape_budget(transaction_source_label(r))}</span>
                         ${reportingNote}
                         <span class="tx-amount">${amountCell}</span>
                     </div>
@@ -1018,8 +1050,7 @@
             delete noteOverrides[txId];
             delete dateOverrides[txId];
             delete effectivePeriodOverrides[txId];
-            const idx = module_data.findIndex(r => r._manualId === manualId);
-            if (idx !== -1) module_data.splice(idx, 1);
+            await merge_manual_entries();
             reclassify();
             render_all();
             render_week();
@@ -1194,8 +1225,49 @@
             dialog.dataset.txId = txId;
             dialog.dataset.effectivePeriodMode = '';
             render_tx_merge_section(row, txId);
+            render_tx_reconciliation_section(row);
             dialog.showModal();
         }
+
+        function render_tx_reconciliation_section(row) {
+            const section = document.getElementById('txEditReconciliationSection');
+            const manualId = row._matchedManualId || (row.source === 'manual' ? row._manualId : null);
+            section.hidden = !manualId;
+            const dialog = document.getElementById('txEditDialog');
+            dialog.dataset.reconciliationManualId = manualId || '';
+            if (!manualId) return;
+            const hint = document.getElementById('txEditReconciliationHint');
+            hint.textContent = transaction_source_label(row) + '. ' + t('reconciliation.editHint');
+            if (row._matchedManual) hint.textContent += ' ' + t('reconciliation.originalManual', { name: row._matchedManual.Name, date: row._matchedManual.Datum });
+            const select = document.getElementById('txEditReconciliationChoice');
+            select.replaceChildren(new Option(t('reconciliation.auto'), 'auto'), new Option(t('reconciliation.cash'), 'cash'), new Option(t('reconciliation.separate'), 'separate'));
+            const candidates = new Set(row._reconciliation?.candidateIds || []);
+            const importedId = row._reconciliation?.importedId || tx_id(row);
+            if (row._matchedManualId) candidates.add(importedId);
+            for (const imported of module_data.filter(r => candidates.has(tx_id(r)) && r.source !== 'manual')) {
+                select.add(new Option(`${fmt_date(imported.date)} · ${imported.name} · ${fmt_eur(-imported.betrag_cents)} · ${account_key(imported)}`, 'match:' + tx_id(imported)));
+            }
+            select.value = row._matchedManualId ? 'match:' + importedId : row._reconciliation?.decisionKind === 'separate' ? 'separate' : row._reconciliation?.status === 'cash' ? 'cash' : 'auto';
+        }
+
+        document.getElementById('saveTxReconciliation').addEventListener('click', async () => {
+            const dialog = document.getElementById('txEditDialog');
+            const manualId = dialog.dataset.reconciliationManualId;
+            if (!manualId) return;
+            const choice = document.getElementById('txEditReconciliationChoice').value;
+            const decision = choice.startsWith('match:') ? { kind: 'match', importedId: choice.slice(6) } : choice === 'auto' ? null : { kind: choice };
+            try {
+                await save_reconciliation_decision(manualId, decision);
+                await merge_manual_entries();
+                reclassify(); render_all(); render_week();
+                const matched = module_data.some(r => r._matchedManualId === manualId);
+                if (decision?.kind === 'match' && !matched) {
+                    document.getElementById('txEditError').textContent = t('reconciliation.matchUnavailable');
+                    return;
+                }
+                dialog.close();
+            } catch (error) { document.getElementById('txEditError').textContent = error.message; }
+        });
 
         // Shows every transaction the automatic detection folded into the same
         // booking, with a per-leg "Trennen" escape hatch - and the inverse
@@ -1282,6 +1354,7 @@
                 tasks.push(save_effective_period_override(txId, effectiveDate).then(() => { effectivePeriodOverrides[txId] = effectiveDate; }));
             }
             await Promise.all(tasks);
+            if (row.source === 'manual') await merge_manual_entries();
             if (document.getElementById('txEditBudget').value !== (category_to_main(category) || '')) {
                 assign_category_to_budget(category, document.getElementById('txEditBudget').value);
             }
@@ -1314,6 +1387,7 @@
                     try {
                         await save_amount_override(id, cents);
                         amountOverrides[id] = cents;
+                        if (row.source === 'manual') await merge_manual_entries();
                         reclassify(); render_all();
                     } catch (error) { alert(error.message); }
                 }
@@ -1352,6 +1426,7 @@
             if (!hasData) return;
             render_quick_add_tiles();
             render_main_budget_progress();
+            render_reconciliation_notice('weekReconciliationNotice', module_data.filter(r => reporting_date(r) >= weekMonday && reporting_date(r) < add_days(weekMonday, 7)));
 
             document.getElementById('weekLabel').textContent = t('week.label', {
                 week: iso_week_number(weekMonday)
@@ -3091,6 +3166,7 @@
             if (!accounts.includes(selectedAccount)) selectedAccount = '';
             accountSelect.value = selectedAccount;
             const rows = overview_rows();
+            render_reconciliation_notice('overviewReconciliationNotice', rows);
             const summary = build_group_summary(rows);
             const rate = summary.totalIncome ? (summary.net / summary.totalIncome * 100).toFixed(1) + '%' : '–';
             document.getElementById('statsBar').innerHTML = [[t('charts.expenses'),summary.totalExpenses],[t('charts.income'),summary.totalIncome],[t('stats.netShort'),summary.net]].map(([label,cents]) => `<span>${label}<b>${fmt_eur(cents)}</b></span>`).join('') + `<span>${t('stats.savingsRateShort')}<b>${rate}</b></span>`;
@@ -3154,7 +3230,11 @@
                 const csv = e.target.result;
                 try {
                     parse_csv(csv, cfg);
-                    await upsert_imported_entries(csv_records(module_data));
+                    const records = csv_records(module_data);
+                    const ranges = csv_import_ranges(records, { from: document.getElementById('csvRangeFrom').value, to: document.getElementById('csvRangeTo').value, account: cfg.accountName });
+                    await upsert_imported_entries(records, ranges);
+                    document.getElementById('csvRangeFrom').value = '';
+                    document.getElementById('csvRangeTo').value = '';
                 } catch (error) {
                     alert('CSV-Import fehlgeschlagen: ' + error.message);
                 }
@@ -3823,6 +3903,7 @@
             for (const date of dates) {
                 const record = {
                     id: crypto.randomUUID(), source: 'manual', Datum: datum_string(date),
+                    reconciliationMode: 'forecast',
                     Name: payee, Verwendungszweck: '', Kategorie: '',
                     Betrag: ((direction === 'in' ? amountCents : -amountCents) / 100).toFixed(2)
                 };
@@ -4558,6 +4639,14 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             reclassify(); render_all(); render_week();
         });
 
+        document.getElementById('manualMatchDays').addEventListener('change', async (event) => {
+            const value = Number(event.target.value);
+            if (!Number.isInteger(value) || value < 0 || value > 14) { event.target.value = get_manual_match_days(); return; }
+            save_manual_match_days(value);
+            await merge_manual_entries();
+            reclassify(); render_all(); render_week();
+        });
+
         document.getElementById('csvSaveConfigBtn').addEventListener('click', () => {
             save_csv_config(read_csv_config_from_form());
             const note = document.getElementById('csvSavedNote');
@@ -4786,6 +4875,9 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
         async function gather_sync_transactions() {
             return {
                 importedEntries: await load_imported_entries(),
+                importRanges: await load_import_ranges(),
+                reconciliationDecisions: await load_reconciliation_decisions(),
+                manualMatchDays: get_manual_match_days(),
                 manualEntries: await load_manual_entries(),
                 overrides: await load_all_overrides(),
                 amountOverrides: await load_amount_overrides(),
@@ -4797,8 +4889,14 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
 
         async function apply_synced_transactions(data) {
             if (!data) return;
-            if (Array.isArray(data.importedEntries) && data.importedEntries.length) await upsert_imported_entries(data.importedEntries);
+            // Legacy backups do not prove coverage between isolated bookings.
+            await upsert_imported_entries(Array.isArray(data.importedEntries) ? data.importedEntries : [], Array.isArray(data.importRanges) ? data.importRanges : []);
             if (Array.isArray(data.manualEntries)) for (const entry of data.manualEntries) await add_manual_entry(entry);
+            if (data.reconciliationDecisions) for (const [id, decision] of Object.entries(data.reconciliationDecisions)) await save_reconciliation_decision(id, decision);
+            if (Number.isInteger(data.manualMatchDays) && data.manualMatchDays >= 0 && data.manualMatchDays <= 14) {
+                save_manual_match_days(data.manualMatchDays);
+                document.getElementById('manualMatchDays').value = data.manualMatchDays;
+            }
             if (data.overrides) await save_overrides(Object.entries(data.overrides));
             if (data.amountOverrides) for (const [id, cents] of Object.entries(data.amountOverrides)) await save_amount_override(id, cents);
             if (data.noteOverrides) for (const [id, note] of Object.entries(data.noteOverrides)) await save_note_override(id, note);
@@ -4944,6 +5042,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
 
             const csvConfig = get_csv_config();
             populate_csv_form(csvConfig);
+            document.getElementById('manualMatchDays').value = get_manual_match_days();
             populate_bank_form();
             render_connected_accounts();
             populate_sync_form();
@@ -4972,7 +5071,8 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
                 const storedCsvConfigRaw = localStorage.getItem('csvDataConfig');
                 const storedCsvConfig = storedCsvConfigRaw ? JSON.parse(storedCsvConfigRaw) : undefined;
                 parse_csv(storedCsv, storedCsvConfig);
-                await upsert_imported_entries(csv_records(module_data));
+                const records = csv_records(module_data);
+                await upsert_imported_entries(records, csv_import_ranges(records));
                 localStorage.removeItem('csvData');
                 localStorage.removeItem('csvDataConfig');
             }

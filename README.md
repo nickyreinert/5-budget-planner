@@ -101,6 +101,41 @@ needs a source account. Map the source-account column in CSV settings, or name
 the account when a file contains only one account. Separate imports are
 recommended for separate accounts.
 
+Log purchases manually while waiting for the next bank export. When you import
+the CSV later, the app reconciles those entries with the bank bookings before
+calculating weekly budgets, cashflow, and historical statistics. A matched
+purchase counts once. The CSV supplies the booking amount, date, account,
+currency, and reference; your manual category assignment stays attached.
+
+Automatic matching requires the same signed amount in integer cents and the
+same currency, within a configurable date window (default **±3 days**, adjustable
+from **0 to 14 days**). A known account on a manual entry must agree with the
+imported account. Only a unique one-to-one match is accepted. Two purchases for
+the same amount, delayed bookings, or missing account information can need
+review; amount and date alone do not prove that two records describe the same
+purchase.
+
+Each CSV import records a separate covered date range for each account. The
+range is inferred from the earliest and latest booking in that file, or you can
+supply optional from/to dates when the statement covers a wider period. A
+manual expense outside imported coverage stays **pending**. An unmatched manual
+expense inside coverage is flagged **Unassigned**, and an uncertain match is
+flagged for review in the week and overview views. It continues to count as
+spending: it may be a real cash purchase, including spending birthday cash, or
+a purchase that has not yet been correctly matched. The app does not assume
+that every unmatched expense was paid in cash.
+
+Review these exceptions by choosing a corresponding imported booking, marking
+the entry as cash, or keeping it as a separate expense. These decisions and
+the import ranges survive reloads, data exports, and transaction sync. Repeated
+overlapping CSV imports preserve history and upsert existing bookings; matched
+manual entries remain saved so reconciliation can be reviewed later. AI data
+exports use the same reconciliation rules and include the status of each row.
+Older saved imports have no reliable coverage metadata. Reimport a complete
+account CSV once to establish its covered period; until then, unmatched manual
+entries stay pending. Filtered merchant/category exports must not be used to
+declare a complete account period.
+
 Known PayPal merchant purchases can be matched to corresponding bank debits by
 exact signed amount and date window. Ambiguous matches remain visible instead
 of being silently removed. Other internal transfers require explicitly

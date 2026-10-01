@@ -21,7 +21,12 @@ export async function load_exports(settingsPath, dataPath) {
 }
 
 function prepared_rows(data) {
-  const rows = reconcile_transactions(data.importedEntries, data.manualEntries, data.amountOverrides || {});
+  const rows = reconcile_transactions(data.importedEntries, data.manualEntries, data.amountOverrides || {}, {
+    maxDays: data.manualMatchDays ?? 3,
+    dateOverrides: data.dateOverrides || {},
+    importRanges: data.importRanges || [],
+    decisions: data.reconciliationDecisions || {}
+  });
   rows.forEach(row => { row._ignoreCsvCategories = row.source === 'csv'; });
   apply_amount_overrides(rows, data.amountOverrides || {});
   apply_note_overrides(rows, data.noteOverrides || {});
@@ -34,9 +39,10 @@ export function classified_rows(settings, data) {
   classify_all(rows, settings);
   apply_manual_overrides(rows, data.overrides, settings);
   return rows.map(row => ({
-    id: tx_id(row), date: row.Datum, name: row.Name, purpose: row.Verwendungszweck,
-    amountCents: row.betrag_cents, account: row._account || '',
-    category: row._cls.category, source: row._cls.source
+    id: tx_id(row), date: `${String(row.date.getDate()).padStart(2, '0')}.${String(row.date.getMonth() + 1).padStart(2, '0')}.${row.date.getFullYear()}`, name: row.Name, purpose: row.Verwendungszweck,
+    amountCents: row.betrag_cents, account: row._account || '', currency: row.Währung || 'EUR',
+    category: row._cls.category, source: row._cls.source,
+    transactionSource: row.source, reconciliation: row._reconciliation || null
   }));
 }
 

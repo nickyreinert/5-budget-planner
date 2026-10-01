@@ -17,7 +17,8 @@ test('transaction_to_row: an outgoing payment uses the creditor as the name', ()
     Name: 'REWE Markt',
     Verwendungszweck: 'Einkauf REWE',
     Kategorie: '',
-    Betrag: '-12.34'
+    Betrag: '-12.34',
+    Währung: 'EUR'
   });
 });
 
@@ -33,7 +34,8 @@ test('transaction_to_row: an incoming payment uses the debtor as the name, falls
     Name: 'Arbeitgeber GmbH',
     Verwendungszweck: 'Gehalt September 2026',
     Kategorie: '',
-    Betrag: '3446.68'
+    Betrag: '3446.68',
+    Währung: 'EUR'
   });
 });
 
@@ -46,6 +48,14 @@ test('transaction_to_row output round-trips correctly through enrich_row (matche
   assert.equal(row.betrag_cents, -1234);
   assert.equal(row.in_out, 'out');
   assert.equal(tx_id(row), '15.09.2026|REWE||-1234');
+});
+
+test('bank import preserves currency so equal numeric amounts cannot match across currencies', async () => {
+  const { reconcile_transactions } = await import('../src/transactions.js');
+  const bank = { ...transaction_to_row({ bookingDate: '2026-09-15', transactionAmount: { amount: '-12.34', currency: 'USD' }, creditorName: 'Example shop' }), id: 'gc:usd', source: 'gocardless' };
+  const manual = { id: 'm:eur', _txId: 'manual:eur', source: 'manual', Datum: '15.09.2026', Name: 'Example shop', Betrag: '-12.34' };
+  assert.equal(bank.Währung, 'USD');
+  assert.equal(reconcile_transactions([], [bank, manual]).length, 2);
 });
 
 test('transaction_key: prefers a stable GoCardless id when present', () => {

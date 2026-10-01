@@ -312,6 +312,8 @@ export function reconcile_paypal(rows, maxDays = 7, splitIds = new Set()) {
         purchase._cls = { ...manualClassification, excluded: false };
         purchase._matchedManualId = bank._matchedManualId;
         purchase._matchedManualTxId = bank._matchedManualTxId;
+        purchase._matchedManual = bank._matchedManual;
+        purchase._reconciliation = bank._reconciliation;
       }
       used.add(purchase); purchase._effectiveAccount = account_key(bank); purchase._paypalLinked = true;
     }

@@ -35,7 +35,8 @@ export function transaction_to_row(tx) {
     Name: name,
     Verwendungszweck: verwendungszweck,
     Kategorie: '',
-    Betrag: amountStr
+    Betrag: amountStr,
+    Währung: tx.transactionAmount?.currency || 'EUR'
   };
 }
 

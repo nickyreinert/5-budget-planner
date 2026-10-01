@@ -2,14 +2,21 @@
 <html lang="en"><meta charset="utf-8"><title>Storage integration tests</title>
 <body><h1>Storage integration tests</h1><pre id="result">Running…</pre>
 <script type="module">
-import { load_manual_entries, load_all_overrides, upsert_imported_entries, load_imported_entries, add_manual_entry, delete_manual_entry, save_overrides, save_amount_override, load_amount_overrides } from '../src/db.js';
+import { load_manual_entries, load_all_overrides, upsert_imported_entries, load_imported_entries, add_manual_entry, delete_manual_entry, save_overrides, save_amount_override, load_amount_overrides, load_import_ranges, load_reconciliation_decisions, save_reconciliation_decision } from '../src/db.js';
 import { csv_records, reconcile_transactions } from '../src/transactions.js';
 import { enrich_row } from '../src/data.js';
 // Real IndexedDB, isolated from the app's database and removed after the test.
 const nativeDB = globalThis.indexedDB;
 const name = 'fiveAnalyzer-test-' + crypto.randomUUID();
-Object.defineProperty(globalThis, 'indexedDB', { value: { open: (_, version) => nativeDB.open(name, version) } });
+const v3Name = name + '-v3';
+let activeName = name;
+Object.defineProperty(globalThis, 'indexedDB', { value: { open: (_, version) => nativeDB.open(activeName, version) } });
 const check = (condition, message) => { if (!condition) throw new Error(message); };
+const rejects = async (operation, message) => {
+  let rejected = false;
+  try { await operation(); } catch { rejected = true; }
+  check(rejected, message);
+};
 const raw = { Datum: '20.09.2026', Name: 'Fixture shop', Verwendungszweck: '', Kategorie: '', Betrag: '-12.34' };
 try {
   await new Promise((resolve, reject) => {
@@ -21,35 +28,113 @@ try {
     req.onsuccess = () => { req.result.close(); resolve(); };
     req.onerror = () => reject(req.error);
   });
-  check((await load_manual_entries()).length === 1, 'v2 manual records must survive v3 upgrade');
+  check((await load_manual_entries()).length === 1, 'v2 manual records must survive v4 upgrade');
   check((await load_all_overrides()).legacy === 'Food', 'v2 overrides must survive');
-  const records = csv_records([enrich_row({ ...raw }), enrich_row({ ...raw, Datum: '19.09.2026' })]);
+  check((await load_import_ranges()).length === 0, 'migration must not infer CSV coverage from old history');
+  check(Object.keys(await load_reconciliation_decisions()).length === 0, 'migration creates an empty decision store');
+  const records = csv_records([enrich_row({ ...raw }), enrich_row({ ...raw, Datum: '10.09.2026' })]);
   await upsert_imported_entries(records);
   await upsert_imported_entries([records[0]]);
   check((await load_imported_entries()).length === 2, 'overlapping import must upsert and retain older history');
+  check((await load_import_ranges()).length === 0, 'default upserts must not infer full-history CSV coverage');
   await upsert_imported_entries([{ ...records[0], Kategorie: 'Updated' }]);
   check((await load_imported_entries()).find(r => r.id === records[0].id).Kategorie === 'Updated', 'upsert must update');
   const merged = reconcile_transactions(await load_imported_entries(), await load_manual_entries());
   check(merged.length === 2 && merged.some(r => r._matchedManualId === 'legacy-manual'), 'manual/import booking counts once');
   await add_manual_entry({ ...raw, id: 'new-manual', _txId: 'manual:new', source: 'manual' });
   await save_overrides([['manual:new', 'Food']]);
+  await save_reconciliation_decision('new-manual', { kind: 'cash' });
+  check((await load_reconciliation_decisions())['new-manual'].kind === 'cash', 'cash decision persists');
+  await save_reconciliation_decision('new-manual', { kind: 'separate' });
+  check((await load_reconciliation_decisions())['new-manual'].kind === 'separate', 'separate decision replaces cash decision');
+  await save_reconciliation_decision('new-manual', { kind: 'match', importedId: records[0].id });
+  check((await load_reconciliation_decisions())['new-manual'].importedId === records[0].id, 'explicit bank match persists');
+  await rejects(() => save_reconciliation_decision('new-manual', { kind: 'match' }), 'match decision requires an imported transaction');
+  check((await load_reconciliation_decisions())['new-manual'].importedId === records[0].id, 'invalid decision preserves the prior decision');
+  await save_reconciliation_decision('new-manual', null);
+  check(!Object.hasOwn(await load_reconciliation_decisions(), 'new-manual'), 'null decision restores automatic matching');
+  await save_reconciliation_decision('legacy-manual', { kind: 'cash' });
+  await save_reconciliation_decision('new-manual', { kind: 'separate' });
   await delete_manual_entry('new-manual', 'manual:new');
   check((await load_manual_entries()).length === 1, 'delete removes only the requested manual record');
   check(!(await load_all_overrides())['manual:new'], 'delete removes its override');
+  const remainingDecisions = await load_reconciliation_decisions();
+  check(!Object.hasOwn(remainingDecisions, 'new-manual'), 'manual deletion clears its reconciliation decision');
+  check(remainingDecisions['legacy-manual'].kind === 'cash', 'manual deletion preserves other decisions');
   check((await load_imported_entries()).length === 2, 'manual deletion preserves imported records');
+  const usd = csv_records([enrich_row({ ...raw, Währung: 'USD' })])[0];
+  await upsert_imported_entries([usd]);
+  check((await load_imported_entries()).some(record => record.id === records[0].id && (record.Währung || 'EUR') === 'EUR'), 'foreign-currency import must not migrate an unrelated legacy EUR booking');
+  check((await load_imported_entries()).some(record => record.id === usd.id && record.Währung === 'USD'), 'foreign-currency import remains a distinct booking');
   await save_overrides([[records[0].id,'Groceries']]);
   await save_amount_override(records[0].id,-2500);
+  await save_reconciliation_decision('legacy-manual', { kind: 'match', importedId: records[0].id });
   const withAccount = csv_records([enrich_row({...raw,Account:'DKB Giro'})])[0];
   await upsert_imported_entries([withAccount]);
-  check((await load_imported_entries()).length === 2, 'source-account reimport upgrades legacy record instead of duplicating');
+  check((await load_imported_entries()).length === 3, 'source-account reimport upgrades legacy record instead of duplicating');
   check((await load_all_overrides())[withAccount.id] === 'Groceries', 'category override follows upgraded identity');
   check((await load_amount_overrides())[withAccount.id] === -2500, 'amount override follows upgraded identity');
+  const migratedDecision = (await load_reconciliation_decisions())['legacy-manual'];
+  check(migratedDecision.kind === 'match' && migratedDecision.importedId === withAccount.id, 'explicit match follows upgraded imported identity');
   await upsert_imported_entries([withAccount]);
-  check((await load_imported_entries()).length === 2, 'account-aware reimport stays idempotent');
-  document.getElementById('result').textContent = 'PASS: account identity migration with category and amount overrides;  v2 migration, separate stores, repeated upserts, history retention, reconciliation, override and deletion persistence.';
+  check((await load_imported_entries()).length === 3, 'account-aware reimport stays idempotent');
+  check((await load_reconciliation_decisions())['legacy-manual'].importedId === withAccount.id, 'repeated reimport preserves the migrated explicit match');
+  const syncRecord = { ...records[0], id: 'bank:sync', legacyId: undefined, source: 'gocardless', Datum: '15.09.2026' };
+  await upsert_imported_entries([syncRecord]);
+  check((await load_import_ranges()).length === 0, 'bank sync must not claim CSV coverage');
+  const early = { id: 'csv-period:early', account: 'DKB Giro', from: '2026-09-01', to: '2026-09-10' };
+  const late = { id: 'csv-period:late', account: 'DKB Giro', from: '2026-09-20', to: '2026-09-30' };
+  const overlap = { id: 'csv-period:overlap', account: 'DKB Giro', from: '2026-09-05', to: '2026-09-10' };
+  await upsert_imported_entries([withAccount], [early, late]);
+  await upsert_imported_entries([withAccount], [overlap, late]);
+  await upsert_imported_entries([withAccount], [early, overlap]);
+  const savedRanges = await load_import_ranges();
+  check(savedRanges.length === 3, 'repeated overlapping range upserts stay idempotent');
+  check(savedRanges.every(range => range.account === 'DKB Giro'), 'coverage retains the source account');
+  check(!savedRanges.some(range => range.from <= '2026-09-15' && range.to >= '2026-09-15'), 'separate exports retain uncovered gaps');
+  const importsBeforeInvalid = await load_imported_entries();
+  const orphan = { ...records[0], id: 'csv:invalid-period-attempt' };
+  for (const invalid of [
+    { ...early, id: 'invalid:reversed', from: '2026-09-10', to: '2026-09-01' },
+    { ...early, id: 'invalid:calendar', from: '2026-02-30' },
+    { ...early, id: 'invalid:account', account: undefined }
+  ]) {
+    await rejects(() => upsert_imported_entries([orphan], [{ ...early, id: 'must-not-save' }, invalid]), 'invalid import ranges must reject atomically');
+  }
+  check((await load_imported_entries()).length === importsBeforeInvalid.length, 'rejected ranges must not save imported rows');
+  check((await load_import_ranges()).length === savedRanges.length, 'rejected ranges must not save earlier valid ranges');
+
+  // Load a fresh db.js instance against a second isolated database to cover
+  // the direct upgrade path used by installations that already stored CSVs.
+  await new Promise((resolve, reject) => {
+    const req = nativeDB.open(v3Name, 3);
+    req.onupgradeneeded = () => {
+      const overrides = req.result.createObjectStore('categoryOverrides');
+      overrides.put('Groceries', records[0].id);
+      overrides.put(-2500, 'amount:' + records[0].id);
+      req.result.createObjectStore('manualEntries', { keyPath: 'id' }).put({ ...raw, id: 'v3-manual' });
+      req.result.createObjectStore('importedEntries', { keyPath: 'id' }).put(records[0]);
+    };
+    req.onsuccess = () => { req.result.close(); resolve(); };
+    req.onerror = () => reject(req.error);
+  });
+  activeName = v3Name;
+  const v3 = await import('../src/db.js?storage-test-v3=' + crypto.randomUUID());
+  check((await v3.load_manual_entries())[0].id === 'v3-manual', 'v3 manual records survive v4 upgrade');
+  check((await v3.load_imported_entries())[0].id === records[0].id, 'v3 CSV records survive v4 upgrade');
+  check((await v3.load_all_overrides())[records[0].id] === 'Groceries', 'v3 category overrides survive v4 upgrade');
+  check((await v3.load_amount_overrides())[records[0].id] === -2500, 'v3 amount overrides survive v4 upgrade');
+  check((await v3.load_import_ranges()).length === 0, 'v3 CSV history must not invent covered periods');
+  check(Object.keys(await v3.load_reconciliation_decisions()).length === 0, 'v3 upgrade creates an empty decision store');
+  await v3.upsert_imported_entries([], [early]);
+  await v3.save_reconciliation_decision('v3-manual', { kind: 'cash' });
+  check((await v3.load_import_ranges()).length === 1, 'empty CSV periods persist after v3 upgrade');
+  check((await v3.load_reconciliation_decisions())['v3-manual'].kind === 'cash', 'decision store is writable after v3 upgrade');
+  document.getElementById('result').textContent = 'PASS: v2/v3 → v4 migration; account identity and overrides; repeated imports; explicit coverage, preserved gaps and atomic validation; reconciliation decisions and manual deletion persistence.';
 } catch (error) {
   document.getElementById('result').textContent = 'FAIL: ' + error.message;
 } finally {
   nativeDB.deleteDatabase(name);
+  nativeDB.deleteDatabase(v3Name);
 }
 </script></body></html>
