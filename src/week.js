@@ -2,7 +2,7 @@
 // All other outgoing payments belong to budgets; other income stays in cashflow.
 // Legacy reserve_monthly_cents remains available for historical reporting.
 
-import { is_real_cashflow } from './data.js';
+import { is_real_cashflow, transaction_display_name } from './data.js';
 import { reporting_date } from './recurrence.js';
 
 const DAY_MS = 86400000;
@@ -60,7 +60,7 @@ export function salary_monthly_cents(rows) {
 
 function payee_key(r) {
   if (r._cls?.contractId) return `contract:${r._cls.contractId}`;
-  return `${r._cls?.category || ''}|${(r.name || '').trim().toLowerCase()}`;
+  return `${r._cls?.category || ''}|${transaction_display_name(r).trim().toLowerCase()}`;
 }
 
 // Median gap between bookings (same-day duplicates ignored) mapped to a
@@ -165,15 +165,16 @@ export function cluster_by_payee(rows, keyFn = payee_key) {
 // this is what makes this total agree with build_budget_basis().fixedCents,
 // which already applies the exact same cutoff via active_contracts().
 export function rule_monthly_equivalent(rows, overrides = {}, refDate = null) {
-  const clusters = cluster_by_payee(rows, r => r._cls?.contractId ? `contract:${r._cls.contractId}` : (r.name || '').trim().toLowerCase());
+  const clusters = cluster_by_payee(rows.filter(is_real_cashflow), r => r._cls?.contractId ? `contract:${r._cls.contractId}` : transaction_display_name(r).trim().toLowerCase());
   const items = clusters.map(c => {
     const latest = c.rows[0];
-    const payee = (latest.name || '').trim().toLowerCase();
+    const payee = transaction_display_name(latest).trim().toLowerCase();
+    const originalPayee = (latest.name || '').trim().toLowerCase();
     const autoMonths = interval_months(c.rows.map(r => r.date).reverse()) || 1;
-    const months = overrides[payee] || autoMonths;
+    const months = overrides[payee] || overrides[originalPayee] || latest._cls?.recurring?.intervalMonths || autoMonths;
     return {
       payee,
-      name: latest._cls?.contractName || latest.name || '(ohne Namen)',
+      name: latest._cls?.contractName || transaction_display_name(latest) || '(ohne Namen)',
       months,
       autoMonths,
       amountCents: c.latestCents,

@@ -232,12 +232,15 @@ const settlement = row => {
 // almost always carries the real merchant, just buried behind a booking
 // reference ("1053077432981/. ALDI Nord , Ihr Einkauf bei ALDI Nord").
 const REFERENCE_PREFIX = /^[\s\d/.:;#-]+/;
-const clean_segment = value => String(value || '').split(',')[0].replace(REFERENCE_PREFIX, '').trim();
+const PAYPAL_BOOKING_PREFIX = /^PP\.\d+\.PP\/[.\s]*/i;
+const clean_segment = value => String(value || '').split(',')[0].replace(REFERENCE_PREFIX, '').replace(PAYPAL_BOOKING_PREFIX, '').trim();
 
 export function settlement_payee(row) {
   // Whichever segment does NOT itself look like a collector line is the
   // merchant - reuses settlement()'s own markers instead of a brand list.
-  return [clean_segment(row.name || row.Name), clean_segment(row.verwendungszweck)]
+  const purpose = row.verwendungszweck || row.Verwendungszweck || '';
+  const purchaseMention = purpose.match(/\bIhr Einkauf bei\s+([^,;]+)/i);
+  return [clean_segment(row.name || row.Name), clean_segment(purchaseMention?.[1]), clean_segment(purpose)]
     .find(segment => /\p{L}{3}/u.test(segment) && !settlement({ name: segment, verwendungszweck: '' })) || '';
 }
 
@@ -285,7 +288,29 @@ function pick_bundle(candidates, bank) {
   }
   return unique_bundle(candidates, target);
 }
-export function reconcile_paypal(rows, maxDays = 7, splitIds = new Set()) {
+
+// A merchant's explicit category wins over a settlement rule. Otherwise the
+// bank's rule can be the only source of a useful classification: bank exports
+// often name the merchant in the purpose while the PayPal export does not
+// match that same rule. Never move a transfer/exclusion onto the real payment.
+function meaningful_rule_classification(cls) {
+  return cls?.source === 'rule' && cls.category && !cls.excluded
+    && cls.group !== 'internal_transfer' && cls.group !== 'unclassified';
+}
+
+function inherited_classification(cls, purchase, ruleSet) {
+  const inherited = { ...cls, excluded: false };
+  const rules = ruleSet?.rules || [];
+  const rule = (cls.ruleId && rules.find(r => r.id === cls.ruleId)) || rules.find(r => (r.category || r.label) === cls.category);
+  const payee = String(purchase.name || purchase.Name || '').trim().toLocaleLowerCase();
+  const intervalMonths = Number(rule?.recurringOverrides?.[payee]);
+  // Interval controls now name the visible merchant. Reapply that merchant's
+  // override when its classification came from a differently named bank leg.
+  if ([1, 3, 6, 12].includes(intervalMonths)) inherited.recurring = { ...inherited.recurring, intervalMonths };
+  return inherited;
+}
+
+export function reconcile_paypal(rows, maxDays = 7, splitIds = new Set(), ruleSet = null) {
   rows.forEach(r => { delete r._effectiveAccount; delete r._paypalLinked; delete r._paypalUnmatched; delete r._displayName; });
   const eligible = r => !splitIds.has(tx_id(r)) && r._mergeGroup?.kind !== 'reversal';
   const purchases = rows.filter(r => is_paypal_account(r) && !funding(r) && r.betrag_cents && eligible(r));
@@ -305,15 +330,18 @@ export function reconcile_paypal(rows, maxDays = 7, splitIds = new Set()) {
       continue;
     }
     const manualClassification = bank._cls?.source === 'manual' ? { ...bank._cls } : null;
+    const ruleClassification = meaningful_rule_classification(bank._cls) ? { ...bank._cls } : null;
     bank._cls = { ...bank._cls, excluded: true, group: 'internal_transfer', source: 'paypal-settlement' };
     bank._paypalLinked = true;
     for (const purchase of bundle) {
       if (bundle.length === 1 && manualClassification && purchase._cls?.source !== 'manual') {
-        purchase._cls = { ...manualClassification, excluded: false };
+        purchase._cls = inherited_classification(manualClassification, purchase, ruleSet);
         purchase._matchedManualId = bank._matchedManualId;
         purchase._matchedManualTxId = bank._matchedManualTxId;
         purchase._matchedManual = bank._matchedManual;
         purchase._reconciliation = bank._reconciliation;
+      } else if (bundle.length === 1 && ruleClassification && purchase._cls?.source !== 'manual' && !meaningful_rule_classification(purchase._cls)) {
+        purchase._cls = inherited_classification(ruleClassification, purchase, ruleSet);
       }
       used.add(purchase); purchase._effectiveAccount = account_key(bank); purchase._paypalLinked = true;
     }
@@ -325,6 +353,13 @@ export function reconcile_paypal(rows, maxDays = 7, splitIds = new Set()) {
       && bundle.some(p => account_key(p) === account_key(f))
       && days_between(f.date, bank.date) <= maxDays);
     if (topUp) { usedFunding.add(topUp); topUp._paypalLinked = true; }
+    if (bundle.length === 1) {
+      // These are display aliases only. Raw fields stay intact for matching,
+      // stable transaction IDs and the list of original merged bookings.
+      const merchantName = bundle[0].name || bundle[0].Name;
+      bank._displayName = merchantName || undefined;
+      if (topUp) topUp._displayName = merchantName || undefined;
+    }
     tag_merge_group([bank, ...bundle, ...(topUp ? [topUp] : [])], 'paypal');
   }
   return rows;

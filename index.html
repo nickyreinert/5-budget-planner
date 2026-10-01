@@ -670,7 +670,7 @@
     </dialog>
 
     <script type="module">
-        import { parse_csv, data as module_data, build_group_summary, build_unclassified_report, enrich_row, tx_id } from './src/data.js';
+        import { parse_csv, data as module_data, build_group_summary, build_unclassified_report, enrich_row, tx_id, transaction_display_name, category_transactions } from './src/data.js';
         import { filter_overview_rows, build_timeline, render_timeline, period_label } from './src/overview.js';
         import { apply_effective_periods, reporting_date } from './src/recurrence.js';
         import { settings_changes, apply_settings_changes, manual_rule_ids } from './src/settings.js';
@@ -758,7 +758,7 @@
             apply_internal_transfer_pairs(module_data, find_internal_transfer_pairs(module_data, get_transfer_max_days(), splitIds));
             apply_reversal_pairs(module_data, find_reversal_pairs(module_data, get_reversal_max_days(), splitIds));
             apply_manual_overrides(module_data, overridesById, ruleSet);
-            reconcile_paypal(module_data, Math.max(7, get_transfer_max_days()), splitIds);
+            reconcile_paypal(module_data, Math.max(7, get_transfer_max_days()), splitIds, ruleSet);
             ensure_budget_coverage(ruleSet, module_data);
             apply_effective_periods(module_data, effectivePeriodOverrides);
         }
@@ -1033,7 +1033,7 @@
                         <span class="tx-amount">${amountCell}</span>
                     </div>
                     <div class="tx-row-main">
-                        <button type="button" class="tx-name-btn" data-tx-id="${txId}" title="${t('txEdit.title')}">${escape_budget(r._displayName || r.name)}</button>
+                        <button type="button" class="tx-name-btn" data-tx-id="${txId}" title="${t('txEdit.title')}">${escape_budget(transaction_display_name(r))}</button>
                         ${mergeBadge}
                         <button type="button" class="tx-category-label" style="border-left:4px solid ${category_color(r._cls.category)}" data-tx-id="${txId}" title="${t('txEdit.quickRecategorize')}">${escape_budget(r._cls.category)}</button>
                     </div>
@@ -1984,7 +1984,7 @@
         function preview_rows_for_category(category) {
             const now = module_data.length ? build_budget_basis(module_data).refDate : new Date();
             const windowStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-            return module_data.filter(r => r.date >= windowStart && r.date <= now && r._cls && r._cls.category === category);
+            return category_transactions(module_data, category).filter(r => r.date >= windowStart && r.date <= now);
         }
 
         function format_month_year(date) {
@@ -2013,7 +2013,7 @@
             return `
                 <tr>
                     <td>${fmt_date(r.date)}<small class="transaction-source">${transaction_source_label(r)}</small></td>
-                    <td><button type="button" class="tx-preview-name-btn" data-tx-id="${encodeURIComponent(tx_id(r))}">${escape_budget(r.name)}</button></td>
+                    <td><button type="button" class="tx-preview-name-btn" data-tx-id="${encodeURIComponent(tx_id(r))}">${escape_budget(transaction_display_name(r))}</button></td>
                     <td class="num">${fmt_eur(amountValue(r))}</td>
                 </tr>
             `;
@@ -2522,7 +2522,7 @@
         // basis changes here, not what's shown.
         function rule_all_matches(rule, amountFilter) {
             const category = rule.category || rule.label;
-            return module_data.filter(r => amountFilter(r) && r._cls?.category === category);
+            return category_transactions(module_data, category).filter(amountFilter);
         }
 
         function rule_matchers(rule) {
@@ -3052,7 +3052,7 @@
             const active = drillTxState.matchers.filter(matcher => matcher.value);
             const rows = active.length ? drillTxState.rows.filter(row => rule_matches(row, { matchers: active })) : [...drillTxState.rows];
             const valueFor = (row, key) => key === 'date' ? row.date.getTime() : key === 'amount' ? row.betrag_cents
-                : key === 'category' ? row._cls?.category || '' : key === 'budget' ? drill_budget_label(row) : row.name || '';
+                : key === 'category' ? row._cls?.category || '' : key === 'budget' ? drill_budget_label(row) : transaction_display_name(row);
             rows.sort((a, b) => {
                 const left = valueFor(a, drillTxState.sort), right = valueFor(b, drillTxState.sort);
                 const compare = typeof left === 'number' ? left - right : String(left).localeCompare(String(right), locale());
@@ -3069,7 +3069,7 @@
             const body = document.getElementById('drillTransactionsRows');
             body.innerHTML = rows.map((row, index) => {
                 const id = tx_id(row);
-                return `<tr><td class="select-col"><input type="checkbox" class="drill-row-select" data-index="${index}" aria-label="${t('drill.selectRow')}"${drillTxState.selected.has(id) ? ' checked' : ''}></td><td>${fmt_date(row.date)}</td><td>${escape_budget(row.name)}</td><td><select class="drill-row-category" data-index="${index}" aria-label="${t('table.kategorie')}"></select></td><td>${escape_budget(drill_budget_label(row))}</td><td class="num">${fmt_eur(row.betrag_cents)}</td></tr>`;
+                return `<tr><td class="select-col"><input type="checkbox" class="drill-row-select" data-index="${index}" aria-label="${t('drill.selectRow')}"${drillTxState.selected.has(id) ? ' checked' : ''}></td><td>${fmt_date(row.date)}</td><td>${escape_budget(transaction_display_name(row))}</td><td><select class="drill-row-category" data-index="${index}" aria-label="${t('table.kategorie')}"></select></td><td>${escape_budget(drill_budget_label(row))}</td><td class="num">${fmt_eur(row.betrag_cents)}</td></tr>`;
             }).join('') || `<tr><td colspan="6">${t('wizard.noMatchingTransactions')}</td></tr>`;
             const optionsFor = {};
             body.querySelectorAll('.drill-row-category').forEach(select => {

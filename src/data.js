@@ -49,6 +49,12 @@ export function tx_id(r) {
   return `${r.Datum}|${r.Name}|${r.Verwendungszweck}|${r._originalAmountCents ?? r.betrag_cents}`;
 }
 
+// UI labels can describe the merchant while bank names and references remain
+// intact for source identity, classification, and the expanded merge details.
+export function transaction_display_name(row) {
+  return row._displayName || row.name || row.Name || '';
+}
+
 // Rows classified (via rules.js classify_all) as excludeFromTotals are
 // internal transfers (e.g. PayPal wallet funding legs) that have zero real
 // cashflow impact — the actual expense/income already shows up as its own
@@ -56,6 +62,12 @@ export function tx_id(r) {
 // income and expenses both get inflated by the same internal amount.
 export function is_real_cashflow(r) {
   return !(r._cls && r._cls.excluded);
+}
+
+// Spending/category lists show the payment that contributes to their totals.
+// The linked settlement and funding bookings remain in the merge details.
+export function category_transactions(rows, category) {
+  return rows.filter(row => is_real_cashflow(row) && row._cls?.category === category);
 }
 
 // The whole app drills through one shared 3-level expense tree, built from

@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { enrich_row } from '../src/data.js';
-import { reconcile_paypal, find_internal_transfer_pairs, apply_internal_transfer_pairs, find_reversal_pairs, apply_reversal_pairs, account_key } from '../src/transfers.js';
+import { reconcile_paypal, find_internal_transfer_pairs, apply_internal_transfer_pairs, find_reversal_pairs, apply_reversal_pairs, account_key, clear_merge_groups } from '../src/transfers.js';
 import { tx_id } from '../src/data.js';
+import { classify_all } from '../src/rules.js';
+import { build_budget_basis, rule_monthly_equivalent } from '../src/week.js';
 const row = (Name, Betrag, Bank, Datum = '10.09.2026', group = 'essential') => ({ ...enrich_row({ Datum, Name, Betrag, Bank, Account: Bank, Konto: Bank, Verwendungszweck: '' }), _cls: { category: 'Lebensmittel', group, excluded: group === 'internal_transfer' } });
 
 test('PayPal merchant, funding and bank debit count once with bank account attribution', () => {
@@ -70,6 +72,161 @@ test('manual bank category survives merging its PayPal merchant purchase', () =>
  reconcile_paypal([bank,purchase]);
  assert.equal(purchase._cls.category,'Dining');assert.equal(purchase._matchedManualId,'manual-1');assert.equal(bank._cls.excluded,true);
  assert.equal(purchase._reconciliation.importedId,tx_id(bank));assert.equal(purchase._matchedManual.Name,'Original manual purchase');
+});
+
+const arag_payment = () => {
+  const purchase = enrich_row({ Datum: '01.09.2026', Name: 'ARAG SE', Betrag: '-270.00', Account: 'PayPal',
+    Verwendungszweck: '1TW73003SD8960608 / Payment, Umsatzart: Payment' });
+  const funding = enrich_row({ Datum: '01.09.2026', Name: 'Bank Account (direct debit)', Betrag: '270.00', Account: 'PayPal', Verwendungszweck: 'Wallet funding' });
+  const bank = enrich_row({ Datum: '02.09.2026', Name: 'PayPal Europe S.a.r.l. et Cie S.C.A', Betrag: '-270.00', Account: 'DKB',
+    Verwendungszweck: '000123/PP.9999.PP/. Arag SE, Ihr Einkauf bei Arag SE, Umsatzart: Folgelastschrift' });
+  const ruleSet = { rules: [{ id: 'arag-bank', category: 'Versicherungen.Rechtsschutz', group: 'fixed', recurring: { intervalMonths: 6 },
+    matchers: [{ field: 'name', operator: 'contains', value: 'PayPal Europe' }, { field: 'purpose', operator: 'contains', value: 'Arag SE' }],
+    contractMerges: [{ id: 'arag-contract', name: 'ARAG SE', payees: ['paypal europe'], amountCents: 27000 }] }] };
+  return { purchase, funding, bank, rows: [bank, purchase, funding], ruleSet };
+};
+
+test('a bank-only ARAG rule classifies the real merchant and labels its settlement and funding legs without changing raw data', () => {
+  const { purchase, funding, bank, rows, ruleSet } = arag_payment();
+  const originals = rows.map(r => ({ id: tx_id(r), Name: r.Name, name: r.name, Verwendungszweck: r.Verwendungszweck, verwendungszweck: r.verwendungszweck }));
+  classify_all(rows, ruleSet);
+  const classification = { ...bank._cls };
+  assert.equal(purchase._cls.group, 'unclassified');
+  reconcile_paypal(rows);
+  assert.deepEqual(purchase._cls, classification);
+  assert.equal(purchase._cls.group, 'fixed');
+  assert.equal(purchase._cls.recurring.intervalMonths, 6);
+  assert.equal(purchase._cls.contractId, 'arag-contract');
+  assert.equal(bank._cls.excluded, true);
+  assert.equal(funding._cls.excluded, true);
+  assert.equal(bank._displayName, 'ARAG SE');
+  assert.equal(funding._displayName, 'ARAG SE');
+  assert.equal(purchase._displayName, undefined);
+  assert.deepEqual(rows.map(r => ({ id: tx_id(r), Name: r.Name, name: r.name, Verwendungszweck: r.Verwendungszweck, verwendungszweck: r.verwendungszweck })), originals);
+});
+
+test('settlement rules fill missing and bank-fallback categories, while merchant rules and manual categories win', () => {
+  const cases = [
+    [{ source: 'none', category: 'Unkategorisiert', group: 'unclassified' }, true],
+    [{ source: 'bank', category: 'Shopping', group: 'essential' }, true],
+    [{ source: 'rule', category: 'Unkategorisiert', group: 'unclassified' }, true],
+    [{ source: 'rule', ruleId: 'merchant', category: 'Own rule', group: 'fixed' }, false],
+    [{ source: 'manual', category: 'Own manual', group: 'essential' }, false],
+    [{ source: 'manual', category: 'Unkategorisiert', group: 'unclassified' }, false]
+  ];
+  for (const [merchantClassification, inherits] of cases) {
+    const { purchase, bank, rows, ruleSet } = arag_payment();
+    classify_all(rows, ruleSet);
+    purchase._cls = { ...merchantClassification, excluded: false };
+    reconcile_paypal(rows);
+    assert.equal(purchase._cls.category, inherits ? 'Versicherungen.Rechtsschutz' : merchantClassification.category);
+    assert.equal(bank._cls.excluded, true);
+  }
+});
+
+test('merchant interval overrides apply to inherited rule and manual classifications and keep the budget basis in sync', () => {
+  for (const source of ['rule', 'manual']) {
+    const { purchase, bank, rows, ruleSet } = arag_payment();
+    ruleSet.rules[0].recurringOverrides = { 'arag se': 3 };
+    classify_all(rows, ruleSet);
+    assert.equal(bank._cls.recurring.intervalMonths, 6);
+    if (source === 'manual') { bank._cls.source = 'manual'; bank._cls.ruleId = null; }
+    reconcile_paypal(rows, 7, new Set(), ruleSet);
+    assert.equal(purchase._cls.recurring.intervalMonths, 3);
+    assert.equal(bank._cls.recurring.intervalMonths, 6, 'copying must not change the original bank interval');
+    assert.equal(build_budget_basis(rows).fixedCents, 9000);
+    assert.equal(rule_monthly_equivalent(rows, ruleSet.rules[0].recurringOverrides).totalCents, 9000);
+  }
+});
+
+test('missing or invalid merchant interval overrides preserve the inherited bank interval', () => {
+  for (const override of [undefined, 0, -1, 2, 18, 'invalid']) {
+    const { purchase, rows, ruleSet } = arag_payment();
+    ruleSet.rules[0].recurringOverrides = { 'arag se': override };
+    classify_all(rows, ruleSet);
+    reconcile_paypal(rows, 7, new Set(), ruleSet);
+    assert.equal(purchase._cls.recurring.intervalMonths, 6);
+  }
+});
+
+test('manual settlement category precedence is preserved, and a manual merchant still wins', () => {
+  for (const merchantSource of ['rule', 'manual']) {
+    const { purchase, bank, rows, ruleSet } = arag_payment();
+    classify_all(rows, ruleSet);
+    bank._cls = { category: 'Settlement manual', group: 'essential', source: 'manual', excluded: false };
+    purchase._cls = { category: 'Merchant category', group: 'fixed', source: merchantSource, excluded: false };
+    reconcile_paypal(rows);
+    assert.equal(purchase._cls.category, merchantSource === 'manual' ? 'Merchant category' : 'Settlement manual');
+  }
+});
+
+test('excluded, transfer and unclassified settlement rules never classify a real payment', () => {
+  for (const donor of [{ group: 'fixed', excluded: true }, { group: 'internal_transfer', excluded: false }, { group: 'unclassified', excluded: false }]) {
+    const { purchase, bank, rows } = arag_payment();
+    purchase._cls = { category: 'Unkategorisiert', group: 'unclassified', source: 'none', excluded: false };
+    bank._cls = { source: 'rule', category: 'Settlement category', ...donor };
+    reconcile_paypal(rows);
+    assert.equal(purchase._cls.category, 'Unkategorisiert');
+    assert.equal(purchase._cls.excluded, false);
+  }
+});
+
+test('a bundled settlement keeps distinct merchant classifications and does not invent a single merchant label', () => {
+  const a = row('Shop A', '-12', 'PayPal'), b = row('Shop B', '-8', 'PayPal'), bank = row('PayPal Europe', '-20', 'DKB');
+  const funding = row('Bank Account (direct debit)', '20', 'PayPal');
+  a._cls = { category: 'Unkategorisiert', group: 'unclassified', source: 'none', excluded: false };
+  b._cls = { category: 'Other shopping', group: 'essential', source: 'rule', excluded: false };
+  bank._cls = { category: 'Insurance', group: 'fixed', source: 'rule', excluded: false, recurring: { intervalMonths: 6 } };
+  reconcile_paypal([bank, a, b, funding]);
+  assert.equal(a._cls.category, 'Unkategorisiert');
+  assert.equal(b._cls.category, 'Other shopping');
+  assert.equal(a._cls.excluded, false);
+  assert.equal(b._cls.excluded, false);
+  assert.equal(bank._cls.excluded, true);
+  assert.equal(bank._displayName, undefined);
+  assert.equal(funding._displayName, undefined);
+});
+
+test('splitting and reclassifying removes derived merchant labels and restores each original classification', () => {
+  const { purchase, funding, bank, rows, ruleSet } = arag_payment();
+  classify_all(rows, ruleSet);
+  reconcile_paypal(rows);
+  assert.equal(bank._displayName, 'ARAG SE');
+  assert.equal(funding._displayName, 'ARAG SE');
+  classify_all(rows, ruleSet);
+  clear_merge_groups(rows);
+  reconcile_paypal(rows, 7, new Set([tx_id(bank)]));
+  assert.equal(bank._displayName, undefined);
+  assert.equal(funding._displayName, undefined);
+  assert.equal(bank.name, 'PayPal Europe S.a.r.l. et Cie S.C.A');
+  assert.equal(bank._cls.group, 'fixed');
+  assert.equal(bank._cls.excluded, false);
+  assert.equal(purchase._cls.group, 'unclassified');
+  assert.equal(purchase._mergeGroup, undefined);
+  classify_all(rows, { rules: [] });
+  clear_merge_groups(rows);
+  reconcile_paypal(rows);
+  assert.equal(purchase._cls.group, 'unclassified');
+  assert.equal(bank._displayName, 'ARAG SE');
+  assert.equal(funding._displayName, 'ARAG SE');
+});
+
+test('a bank-only ARAG booking strips PayPal references from its merchant label while preserving its raw purpose', () => {
+  for (const purpose of [
+    '000123/PP.9999.PP/. Arag SE, Ihr Einkauf bei Arag SE, Umsatzart: Folgelastschrift',
+    '000123/PP.9999.PP/. Arag SE, Umsatzart: Folgelastschrift',
+    'PayPal collection, Ihr Einkauf bei Arag SE, Umsatzart: Folgelastschrift'
+  ]) {
+    const bank = enrich_row({ Datum: '02.09.2026', Name: 'PayPal Europe S.a.r.l. et Cie S.C.A', Betrag: '-270.00', Account: 'DKB', Verwendungszweck: purpose });
+    bank._cls = { category: 'Insurance', group: 'fixed', source: 'rule', excluded: false };
+    const id = tx_id(bank);
+    reconcile_paypal([bank]);
+    assert.equal(bank._displayName, 'Arag SE');
+    assert.equal(bank.Verwendungszweck, purpose);
+    assert.equal(bank.verwendungszweck, purpose);
+    assert.equal(tx_id(bank), id);
+    assert.equal(bank._cls.excluded, false);
+  }
 });
 
 test('a failed top-up and its reversal cancel out while the real purchase stays', () => {

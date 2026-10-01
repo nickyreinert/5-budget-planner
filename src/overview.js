@@ -1,4 +1,4 @@
-import { is_real_cashflow } from './data.js';
+import { is_real_cashflow, transaction_display_name } from './data.js';
 import { budget_category } from './budgets.js';
 import { week_start, add_days, iso_week_number, category_color } from './week.js';
 import { account_key, is_paypal_account } from './transfers.js';
@@ -45,7 +45,7 @@ export function build_timeline(rows, settings, kind, granularity = 'month', dril
       cents = -row.betrag_cents;
     } else if (kind === 'fixed') {
       if (row.betrag_cents >= 0 || cls.group !== 'fixed' || (drill && category !== drill)) continue;
-      key = drill ? row.name : category; label = key; cents = -row.betrag_cents; color = category_color(key);
+      key = drill ? transaction_display_name(row) : category; label = key; cents = -row.betrag_cents; color = category_color(key);
     } else {
       key = row.betrag_cents < 0 ? 'Ausgaben' : is_salary(row) ? 'Gehalt' : 'Zusätzliche Einnahmen';
       label = key === 'Ausgaben' ? t('charts.expenses') : key === 'Gehalt' ? t('charts.salary') : t('charts.otherIncome'); cents = row.betrag_cents;

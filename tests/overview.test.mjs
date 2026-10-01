@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import { build_timeline, filter_overview_rows, period_start, relative_deviation } from '../src/overview.js';
 import { build_budget_basis, salary_monthly_cents } from '../src/week.js';
 import { ensure_budget_coverage, budget_category } from '../src/budgets.js';
+import { enrich_row, category_transactions, transaction_display_name, tx_id } from '../src/data.js';
+import { classify_all } from '../src/rules.js';
+import { reconcile_paypal } from '../src/transfers.js';
+import { rule_monthly_equivalent } from '../src/week.js';
 const row = (month,cents,category,group = 'essential', extra = {}) => ({ date:new Date(2026,month-1,15), name:'Fixture', Account:'DKB', in_out: cents < 0 ? 'out':'in', betrag_cents:cents, _cls:{ category,group,...extra } });
 const setting = () => ({ rules:[],mainCategories:[{id:'food',label:'Alltag'}],categoryMappings:{Groceries:'food',Drugstore:'food'} });
 test('budgets roll up, drill to categories and include empty intervening months', () => {
@@ -51,4 +55,37 @@ test('relative chart comparison normalizes every series against its own average 
   const median = relative_deviation(values, 'median');
   assert.equal(median.reference, 200);
   assert.deepEqual(median.values, [-50, 0, -100]);
+});
+
+test('PayPal insurance lists and fixed-cost drilldowns show the merchant once, preserving payment details and interval', () => {
+  const category = 'Insurance.Legal';
+  const settings = { rules: [{ id: 'insurance', category, group: 'fixed', verwendungPattern: 'Fixture Insurance', recurring: { intervalMonths: 6 } }] };
+  const merchant = enrich_row({ Datum: '01.09.2026', Name: 'Fixture Insurance SE', Verwendungszweck: '', Betrag: '-270.00', _account: 'PayPal' });
+  const settlement = enrich_row({ Datum: '02.09.2026', Name: 'PayPal Europe S.a.r.l. et Cie S.C.A', Verwendungszweck: '000123/PP.9999.PP/. Fixture Insurance SE, Ihr Einkauf bei Fixture Insurance SE', Betrag: '-270.00', _account: 'Checking' });
+  const funding = enrich_row({ Datum: '01.09.2026', Name: 'Bank Account (direct debit)', Verwendungszweck: '', Betrag: '270.00', _account: 'PayPal' });
+  const rows = [settlement, merchant, funding];
+  const originalIds = rows.map(tx_id);
+  classify_all(rows, settings);
+  reconcile_paypal(rows);
+
+  const list = category_transactions(rows, category);
+  assert.deepEqual(list, [merchant]);
+  assert.equal(transaction_display_name(list[0]), 'Fixture Insurance SE');
+  assert.equal(list[0].Datum, '01.09.2026');
+  assert.equal(list[0].betrag_cents, -27000);
+  assert.deepEqual(list[0]._mergeGroup.members, originalIds);
+  assert.equal(settlement.Name, 'PayPal Europe S.a.r.l. et Cie S.C.A');
+  assert.equal(funding.Name, 'Bank Account (direct debit)');
+
+  // Even a caller accidentally passing all three source bookings cannot
+  // inflate the recurring preview or replace its primary merchant label.
+  const recurring = rule_monthly_equivalent(rows);
+  assert.equal(recurring.totalCents, 4500);
+  assert.equal(recurring.clusters.length, 1);
+  assert.equal(recurring.clusters[0].name, 'Fixture Insurance SE');
+  assert.equal(build_budget_basis(rows).fixedCents, 4500);
+  const model = build_timeline(rows, settings, 'fixed', 'month', category);
+  assert.deepEqual(model.series.map(s => s.label), ['Fixture Insurance SE']);
+  assert.deepEqual(model.series[0].values, [27000]);
+  assert.deepEqual([...model.series[0].rowsByStamp.values()].flat(), [merchant]);
 });

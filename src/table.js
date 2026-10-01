@@ -1,5 +1,5 @@
 // --- table.js ---
-import { expense_matches_path, tx_id } from './data.js';
+import { expense_matches_path, tx_id, is_real_cashflow, transaction_display_name } from './data.js';
 import { transaction_source_label } from './transactions.js';
 import { t } from './i18n.js';
 
@@ -21,7 +21,7 @@ export function render_table(rows, tbodySelector, current_path, leakCategoryFilt
   tbody.innerHTML = '';
 
   // Filter transactions based on mode
-  let display = rows.filter(r => r.in_out === 'out');
+  let display = rows.filter(r => r.in_out === 'out' && is_real_cashflow(r));
 
   if (leakCategoryFilter) {
     // Money-flow quick filter: jump straight to one rule-engine category,
@@ -39,7 +39,7 @@ export function render_table(rows, tbodySelector, current_path, leakCategoryFilt
       display = display.filter(r => {
         let cellValue = '';
         if (column === 'date') cellValue = r.Datum || '';
-        else if (column === 'name') cellValue = r.Name || '';
+        else if (column === 'name') cellValue = transaction_display_name(r);
         else if (column === 'verwendungszweck') cellValue = r.Verwendungszweck || '';
         else if (column === 'betrag') cellValue = (r.betrag_cents / 100).toFixed(2);
         else if (column === 'kategorie') cellValue = r._cls ? r._cls.category : '';
@@ -56,8 +56,8 @@ export function render_table(rows, tbodySelector, current_path, leakCategoryFilt
         aVal = a.date.getTime();
         bVal = b.date.getTime();
       } else if (sortState.column === 'name') {
-        aVal = (a.Name || '').toLowerCase();
-        bVal = (b.Name || '').toLowerCase();
+        aVal = transaction_display_name(a).toLowerCase();
+        bVal = transaction_display_name(b).toLowerCase();
       } else if (sortState.column === 'verwendungszweck') {
         aVal = (a.Verwendungszweck || '').toLowerCase();
         bVal = (b.Verwendungszweck || '').toLowerCase();
@@ -81,7 +81,7 @@ export function render_table(rows, tbodySelector, current_path, leakCategoryFilt
     const id = tx_id(r);
     const checked = selectedIds.has(id) ? ' checked' : '';
     tr.innerHTML = `<td class="select-col"><input type="checkbox" class="row-select" data-id="${esc(id)}"${checked}></td>` +
-      `<td>${esc(r.Datum)}<small class="transaction-source">${esc(transaction_source_label(r))}</small></td><td>${esc(r._displayName || r.Name)}</td><td>${esc(r.Verwendungszweck)}</td><td>${euro}</td>` +
+      `<td>${esc(r.Datum)}<small class="transaction-source">${esc(transaction_source_label(r))}</small></td><td>${esc(transaction_display_name(r))}</td><td>${esc(r.Verwendungszweck)}</td><td>${euro}</td>` +
       `<td><button type="button" class="category-picker-btn" data-id="${esc(id)}" data-category="${esc(cls)}">${esc(cls) || '—'} <span class="caret">▾</span></button></td>`;
     tbody.appendChild(tr);
   });

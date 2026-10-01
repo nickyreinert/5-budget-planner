@@ -233,3 +233,14 @@ test('build_sub_budget_report: categoryToMain rolls several transaction categori
   const report = build_sub_budget_report(rows, monday, { gastro: 5000 }, categoryToMain);
   assert.deepEqual(report, [{ category: 'gastro', capCents: 5000, spentCents: 2500, remainingCents: 2500, pct: 50 }]);
 });
+
+test('recurring previews retain legacy interval overrides when a bank-only collector gets a merchant display name', () => {
+  const bank = tx('2026-09-01', -27000, 'PayPal Europe', 'fixed', 'Insurance');
+  bank._displayName = 'Fixture Insurance';
+  bank._cls.recurring = { intervalMonths: 12 };
+  const automatic = rule_monthly_equivalent([bank]);
+  assert.equal(automatic.clusters[0].name, 'Fixture Insurance');
+  assert.equal(automatic.totalCents, 2250);
+  assert.equal(rule_monthly_equivalent([bank], { 'paypal europe': 6 }).totalCents, 4500);
+  assert.equal(rule_monthly_equivalent([bank], { 'fixture insurance': 3, 'paypal europe': 6 }).totalCents, 9000);
+});
