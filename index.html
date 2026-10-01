@@ -1492,8 +1492,8 @@
                             <span class="main-budget-arrow" aria-hidden="true"></span>
                             <i class="rg-dot" aria-hidden="true"></i>
                             <strong>${escape_budget(m.label)}</strong>
-                            ${m.carriedCents === null ? '' : `<span class="main-budget-carry ${m.carriedCents < 0 ? 'negative' : m.carriedCents > 0 ? 'positive' : ''}" title="${escape_budget(t('week.budgetCarry'))}" aria-label="${escape_budget(t('week.budgetCarry'))}: ${escape_budget(fmt_eur(m.carriedCents))}">${m.carriedCents > 0 ? '+' : ''}${fmt_eur(m.carriedCents)}</span>`}
-                            <span class="main-budget-value${over ? ' budget-over' : ''}">${fmt_eur(m.spentCents)}${m.capCents ? ' / ' + fmt_eur(m.capCents) : ''}</span>
+                            ${m.monthlyRemainingCents === null ? '' : `<span class="main-budget-carry ${m.monthlyRemainingCents < 0 ? 'negative' : m.monthlyRemainingCents > 0 ? 'positive' : ''}" title="${escape_budget(t('week.budgetCarry'))}" aria-label="${escape_budget(t('week.budgetCarry'))}: ${escape_budget(fmt_eur(m.monthlyRemainingCents))}">${fmt_eur(m.monthlyRemainingCents)}</span>`}
+                            <span class="main-budget-value${over ? ' budget-over' : ''}" title="${escape_budget(t('week.spentThisWeek'))}">${fmt_eur(m.spentCents)}</span>
                         </span>
                         <span class="main-budget-track" role="meter" aria-label="${escape_budget(m.label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${m.pct}" aria-valuetext="${escape_budget(fmt_eur(m.spentCents))}">
                             <span class="main-budget-fill" style="width:${width}%">${m.categories.map(c => `<span style="width:${positive ? Math.max(0,c.cents) / positive * 100 : 0}%;background:${category_color(c.category)}"></span>`).join('')}</span>

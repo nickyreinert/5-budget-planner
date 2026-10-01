@@ -49,7 +49,7 @@ test('budget bars include uncapped and empty budgets, other income excluded and 
   assert.equal(report[1].spentCents, 0); assert.equal(report.length, 6);
   assert.equal(report.at(-1).spentCents, 700);
 });
-test('budget carry uses prior weeks of the selected month, including only the first week days in that month', () => {
+test('monthly remaining includes the selected week and only the days within the selected month', () => {
   const s = setting();
   const row = (day, cents) => ({ date: new Date(2026, 9, day), betrag_cents: -cents, in_out: 'out', _cls: { category: 'Drogerie', group: 'essential' } });
   const rows = [
@@ -57,11 +57,14 @@ test('budget carry uses prior weeks of the selected month, including only the fi
     row(2, 1000), row(6, 13000), row(13, 2000)
   ];
   const report = monday => build_main_budget_report(rows, monday, s.mainCategories, { lebensmittel: 7000 }, c => budget_category(s, c));
-  assert.equal(report(new Date(2026, 9, 5))[0].carriedCents, 3000);
-  assert.equal(report(new Date(2026, 9, 12))[0].carriedCents, -3000);
+  assert.equal(report(new Date(2026, 9, 5))[0].monthlyRemainingCents, -3000);
+  assert.equal(report(new Date(2026, 9, 12))[0].monthlyRemainingCents, 2000);
   assert.equal(report(new Date(2026, 9, 12))[0].spentCents, 2000);
-  assert.equal(report(new Date(2026, 10, 2))[0].carriedCents, 1000);
-  assert.equal(report(new Date(2026, 9, 12))[1].carriedCents, null);
+  assert.equal(report(new Date(2026, 10, 2))[0].monthlyRemainingCents, 8000);
+  assert.equal(report(new Date(2026, 9, 12))[1].monthlyRemainingCents, null);
+  const lastWeek = [...rows, row(31, 1000), { ...row(31, 1000), date: new Date(2026, 10, 1) }];
+  const last = build_main_budget_report(lastWeek, new Date(2026, 9, 26), s.mainCategories, { lebensmittel: 7000 }, c => budget_category(s, c))[0];
+  assert.equal(last.monthlyRemainingCents, 14000);
 });
 test('amount corrections retain identity, classification and reload behavior', () => {
   const source = { Datum: '20.09.2026', Name: 'Example', Verwendungszweck: 'Test', Betrag: '-10.00', Kategorie: '' };

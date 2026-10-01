@@ -324,9 +324,10 @@ export function build_main_budget_report(rows, monday, mains, caps, categoryToMa
   const buckets = mains.map(m => ({ ...m, capCents: caps[m.id] || 0, categories: [] }));
   const unassigned = { id: '__unassigned', label: 'Nicht zugeordnet', capCents: 0, categories: [] };
   const monthStart = new Date(monday.getFullYear(), monday.getMonth(), 1);
+  const nextMonth = new Date(monday.getFullYear(), monday.getMonth() + 1, 1);
   const priorWeeks = [];
   for (let start = week_start(monthStart); start < monday; start = add_days(start, 7)) {
-    const daysInMonth = Math.max(0, (add_days(start, 7) - Math.max(+start, +monthStart)) / DAY_MS);
+    const daysInMonth = days_between(start < monthStart ? monthStart : start, add_days(start, 7));
     const spentByBudget = {};
     build_week_report(rows, start).categories.forEach(category => {
       const budgetId = categoryToMain(category.category);
@@ -342,9 +343,12 @@ export function build_main_budget_report(rows, monday, mains, caps, categoryToMa
   buckets.push(unassigned);
   return buckets.map(m => {
     const spentCents = m.categories.reduce((sum, c) => sum + c.cents, 0);
-    const carriedCents = m.capCents ? Math.round(priorWeeks.reduce((sum, week) =>
-      sum + m.capCents * week.daysInMonth / 7 - (week.spentByBudget[m.id] || 0), 0)) : null;
-    return { ...m, spentCents, carriedCents, remainingCents: m.capCents - spentCents,
+    const currentDaysInMonth = days_between(monday, add_days(monday, 7) < nextMonth ? add_days(monday, 7) : nextMonth);
+    const monthlyRemainingCents = m.capCents ? Math.round(priorWeeks.reduce((sum, week) =>
+      sum + m.capCents * week.daysInMonth / 7 - (week.spentByBudget[m.id] || 0), 0) +
+      m.capCents * currentDaysInMonth / 7 -
+      m.categories.flatMap(c => c.rows).reduce((sum, row) => sum + (row.date < nextMonth ? -row.betrag_cents : 0), 0)) : null;
+    return { ...m, spentCents, monthlyRemainingCents, remainingCents: m.capCents - spentCents,
       pct: m.capCents ? Math.max(0, Math.min(100, spentCents / m.capCents * 100)) : 0,
       rows: m.categories.flatMap(c => c.rows).sort((a, b) => b.date - a.date) };
   });

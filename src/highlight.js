@@ -55,11 +55,17 @@ export function init_section_highlight(doc = document) {
   doc.addEventListener('pointerout', e => {
     const path = path_of(e.target);
     const root = path[0]?.parentElement;
+    if (root?.matches('.main-budget-progress')) {
+      if (path_of(e.relatedTarget)[0]?.parentElement !== root) clear(root);
+      return;
+    }
     if (!root || root.contains(e.relatedTarget)) return;
     // Left the whole list: fall back to whatever still has keyboard focus.
     if (root.contains(doc.activeElement) && doc.activeElement !== doc.body) show(doc.activeElement); else clear(root);
   });
-  doc.addEventListener('focusin', e => show(e.target));
+  doc.addEventListener('focusin', e => {
+    if (!path_of(e.target)[0]?.parentElement?.matches('.main-budget-progress')) show(e.target);
+  });
   doc.addEventListener('focusout', e => {
     const root = path_of(e.target)[0]?.parentElement;
     if (root && !root.contains(e.relatedTarget) && !root.matches(':hover')) clear(root);
