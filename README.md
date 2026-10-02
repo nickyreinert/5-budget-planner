@@ -169,6 +169,34 @@ additions, edits, and deletions before saving. Local rules and manual
 per-transaction assignments take precedence over imported suggestions. Export
 your settings before intentionally replacing local changes.
 
+## Claude MCP (live, local)
+
+Claude can read the app's current state and change it without export or import
+files. The MCP server runs on your computer with `--live` and opens a bridge on
+`127.0.0.1:8765`; the app in your browser connects to it and executes Claude's
+requests against its own storage.
+
+1. `npm install --prefix mcp`
+2. Configure your MCP client with `"command": "node"` and
+	 `"args": ["/absolute/path/to/mcp/server.mjs", "--live"]`.
+3. In the app, open Settings > AI, tick the tools Claude may use, and enable
+	 **Live-Verbindung zu lokalem Claude**. Keep the tab open; the setting is
+	 remembered per browser.
+4. Ask Claude to review and adjust classifications. `propose_rules`,
+	 `propose_assignments` and `propose_category_maintenance` are applied
+	 immediately in this mode (no file, no review dialog) and there is no undo
+	 for them. Export your settings and data first if unsure.
+
+The bridge accepts only the origins `http://localhost:3000`,
+`http://127.0.0.1:3000` and `https://5.1-1-1.de`; set
+`FIVE_ALLOWED_ORIGINS` (comma-separated) to change them, and `FIVE_BRIDGE_PORT`
+to change the port (the app uses 8765 and is not configurable). Tool
+permissions are enforced by the app's checkboxes, not by a permissions file.
+Browsers may ask for permission to reach a local network address when the app
+is served from a public domain; Safari blocks plain-HTTP loopback requests
+from HTTPS pages, so use Chrome/Firefox or run the app on `localhost`.
+Claude receives financial details returned by the read tools.
+
 ## Claude MCP (local exports)
 
 Claude Desktop or Claude Code can inspect existing classifications and suggest

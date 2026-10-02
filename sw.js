@@ -32,6 +32,7 @@ const APP_SHELL = [
   './src/keypad.js',
   './src/gocardless.js',
   './src/sync.js',
+  './src/live_bridge.js',
   './src/transfers.js',
   './src/i18n.js',
   './src/csv_config.js',

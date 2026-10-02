@@ -437,6 +437,9 @@
                     </section>
                     <section class="settings-section">
                         <h3 data-i18n="ai.mcpTitle">Lokaler MCP-Server</h3>
+                        <label><input type="checkbox" id="liveBridgeToggle"> <span data-i18n="ai.live.toggle">Live-Verbindung zu lokalem Claude</span></label>
+                        <p id="liveBridgeStatus" role="status"></p>
+                        <p data-i18n="ai.live.hint">Mit laufendem lokalem MCP-Server (--live) liest Claude den aktuellen Stand direkt aus der App; freigegebene Änderungswerkzeuge werden sofort angewendet, ohne Export oder Import.</p>
                         <p data-i18n="ai.mcpIntro">Der MCP-Server läuft auf deinem Computer und liest nur exportierte Dateien. Er kann Vorschläge als neue Dateien speichern, aber keine Einstellungen oder Buchungen in der App direkt ändern.</p>
                         <div class="settings-action-row">
                             <button type="button" id="mcpExportSettingsBtn" data-i18n="ai.exportSettings">Aktuelles SETTING exportieren</button>
@@ -708,6 +711,7 @@
         import { push_digit, pop_digit, buffer_to_cents } from './src/keypad.js';
         import { init_responsive_selects, fit_picker_dialogs } from './src/pickers.js';
         import { plan_category_maintenance, category_maintenance_revision } from './src/category_maintenance.js';
+        import { start_live_bridge } from './src/live_bridge.js';
         init_responsive_selects();
         import { transaction_to_row, transaction_key } from './src/gocardless.js';
         import { get_sync_settings, save_sync_settings, render_google_button, sign_out as sync_sign_out, current_session as current_sync_session, push_data as sync_push_data, pull_data as sync_pull_data } from './src/sync.js';
@@ -4598,6 +4602,21 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             }
         });
 
+        async function apply_category_plan(plan) {
+            await save_overrides(Object.entries(plan.overrides));
+            overridesById = plan.overrides;
+            ruleSet = plan.settings;
+            subBudgetCaps = ruleSet.subBudgetCaps || subBudgetCaps;
+            favoriteCategories = [...new Set(favoriteCategories.map(category => {
+                const seen = new Set();
+                while (plan.redirects[category] && !seen.has(category)) { seen.add(category); category = plan.redirects[category]; }
+                return category;
+            }).filter(category => category_catalog(ruleSet).includes(category)))];
+            localStorage.setItem('favoriteCategories', JSON.stringify(favoriteCategories));
+            persist_budgets(); render_sub_budget_settings();
+            modalOpenSnapshot = settings_snapshot(); lastSettingsSnapshot = modalOpenSnapshot; settingsUndoStack = []; update_undo_button();
+        }
+
         document.getElementById('mcpExportSettingsBtn').addEventListener('click', () => document.getElementById('exportRulesBtn').click());
         document.getElementById('mcpExportDataBtn').addEventListener('click', () => document.getElementById('exportDataBtn').click());
         document.getElementById('mcpImportSettingsBtn').addEventListener('click', () => document.getElementById('importRulesBtn').click());
@@ -4638,18 +4657,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
                 document.getElementById('applyCategoryMaintenance').onclick = async () => {
                     try {
                         if (proposal.revision !== category_maintenance_revision({ ...ruleSet, subBudgetCaps }, module_data, overridesById)) throw new Error(t('ai.categoryProposalStale'));
-                        await save_overrides(Object.entries(plan.overrides));
-                        overridesById = plan.overrides;
-                        ruleSet = plan.settings;
-                        subBudgetCaps = ruleSet.subBudgetCaps || subBudgetCaps;
-                        favoriteCategories = [...new Set(favoriteCategories.map(category => {
-                            const seen = new Set();
-                            while (plan.redirects[category] && !seen.has(category)) { seen.add(category); category = plan.redirects[category]; }
-                            return category;
-                        }).filter(category => category_catalog(ruleSet).includes(category)))];
-                        localStorage.setItem('favoriteCategories', JSON.stringify(favoriteCategories));
-                        persist_budgets(); render_sub_budget_settings();
-                        modalOpenSnapshot = settings_snapshot(); lastSettingsSnapshot = modalOpenSnapshot; settingsUndoStack = []; update_undo_button();
+                        await apply_category_plan(plan);
                         status.textContent = t('ai.categoryApplied'); dialog.close();
                     } catch (error) { document.getElementById('categoryMaintenanceError').textContent = error.message; }
                 };
@@ -4677,6 +4685,58 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             link.href = url; link.download = mcpPermissionsName; link.click();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
         });
+
+        // ===== LIVE CONNECTION to the local MCP server (mcp/server.mjs --live) =====
+        // Claude's read tools get a fresh snapshot of the app's state and its
+        // change tools are applied directly - no export/import files. Which
+        // tools may run is decided by the checkboxes above.
+        const LIVE_BRIDGE_URL = 'http://127.0.0.1:8765';
+        let stopLiveBridge = null;
+
+        async function apply_live_change(change) {
+            if (change.kind === 'rules') {
+                const next = { ...ruleSet, rules: [...ruleSet.rules, ...change.rules] };
+                validate_budget_settings(next, { checkSuggestionCaps: false });
+                ruleSet = next;
+                persist_budgets();
+                return { rules: change.rules.length };
+            }
+            if (change.kind === 'assignments') {
+                await save_overrides(Object.entries(change.overrides));
+                overridesById = { ...overridesById, ...change.overrides };
+                reclassify();
+                if (module_data.length) render_all();
+                render_week();
+                return { transactions: Object.keys(change.overrides).length };
+            }
+            if (change.kind === 'category-maintenance') {
+                const plan = plan_category_maintenance({ ...ruleSet, subBudgetCaps }, module_data, overridesById, change.operations);
+                await apply_category_plan(plan);
+                return { changes: plan.changes.map(({ action, category, target, affectedIds }) => ({ action, category, target, count: affectedIds.length })) };
+            }
+            throw new Error(`Unknown change: ${change.kind}`);
+        }
+
+        async function handle_live_command({ type, payload }) {
+            if (!document.querySelector(`.mcp-tool[value="${payload.tool}"]`)?.checked) throw new Error(`Tool ${payload.tool} is disabled in the app (Settings > AI).`);
+            if (type === 'state') return { settings: { ...ruleSet, subBudgetCaps }, data: await gather_sync_transactions() };
+            if (type === 'apply') return apply_live_change(payload);
+            throw new Error(`Unknown command: ${type}`);
+        }
+
+        function set_live_bridge(enabled) {
+            localStorage.setItem('aiLiveBridge', enabled ? '1' : '0');
+            stopLiveBridge?.();
+            stopLiveBridge = enabled ? start_live_bridge({
+                url: LIVE_BRIDGE_URL, handle: handle_live_command,
+                on_status: state => { document.getElementById('liveBridgeStatus').textContent = t(`ai.live.${state}`); }
+            }) : null;
+            if (!enabled) document.getElementById('liveBridgeStatus').textContent = '';
+        }
+        const liveBridgeToggle = document.getElementById('liveBridgeToggle');
+        liveBridgeToggle.checked = localStorage.getItem('aiLiveBridge') === '1';
+        liveBridgeToggle.addEventListener('change', () => set_live_bridge(liveBridgeToggle.checked));
+        if (liveBridgeToggle.checked) set_live_bridge(true);
 
         // ===== CSV IMPORT CONFIG (delimiter, line break, encoding, column mapping) =====
 
