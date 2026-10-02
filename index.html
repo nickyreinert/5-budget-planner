@@ -475,7 +475,7 @@
                         <p id="dataImportStatus" role="status" aria-live="polite"></p>
                     </section>
                     <section class="settings-section">
-                    <p data-i18n="sync.intro">Sichere dein SETTING (und optional deine Transaktionsdaten) in der Cloud und nutze es auf mehreren Geräten - einfach mit deinem Google-Konto anmelden.</p>
+                    <p data-i18n="sync.intro">Melde dich mit Google an. Änderungen an Einstellungen und Budgets werden automatisch hochgeladen; Transaktionsdaten nur über „Hochladen“.</p>
                     <div id="syncGoogleButtonContainer"></div>
                     <p id="syncAccountStatus" style="margin-top:20px;"></p>
                     <button id="syncDisconnectBtn" hidden data-i18n="sync.disconnect">Trennen</button>
@@ -1942,6 +1942,7 @@
             render_week();
             render_all();
             lastSettingsSnapshot = settings_snapshot();
+            schedule_setup_sync();
         }
 
         // Updates the "Rückgängig" button's enabled state.
@@ -1973,6 +1974,7 @@
             render_active_settings_tab();
             refresh_category_picker();
             if (module_data.length) { reclassify(); render_all(); render_week(); }
+            schedule_setup_sync();
         }
         document.getElementById('addMainCategory').addEventListener('click', () => {
             ruleSet.mainCategories.push({id: 'budget_' + Date.now(), label: 'Neues Budget'});
@@ -4341,6 +4343,7 @@
             save_rule_set(ruleSet);
             refresh_category_picker();
             modalOpenSnapshot = settings_snapshot();
+            schedule_setup_sync();
             if (module_data.length > 0) {
                 reclassify();
                 render_all();
@@ -4919,10 +4922,28 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
 
         // ===== SETTINGS > SYNC: Google-account cloud sync (Firebase Auth
         // + Firestore) - see src/sync.js.
-        // "Setup" (SETTING + sub-budget caps) always syncs; transaction data
-        // (imports, manual entries, overrides) only when opted into via the
-        // "auch Transaktionsdaten synchronisieren" checkbox. Upload/download
-        // are explicit, one-directional actions - no automatic merging.
+        // Setup changes upload automatically; transaction data is only sent
+        // with an explicit upload when opted in.
+
+        let setupSyncTimer;
+        let setupSyncQueue = Promise.resolve();
+        function schedule_setup_sync() {
+            if (!current_sync_session()) return;
+            clearTimeout(setupSyncTimer);
+            setupSyncTimer = setTimeout(() => {
+                setupSyncQueue = setupSyncQueue.catch(() => {}).then(async () => {
+                    if (!current_sync_session()) return;
+                    const statusEl = document.getElementById('syncStatus');
+                    statusEl.textContent = t('sync.uploading');
+                    try {
+                        await sync_push_data('setup', { ...ruleSet, subBudgetCaps });
+                        statusEl.textContent = t('sync.uploadDone');
+                    } catch (err) {
+                        statusEl.textContent = t('sync.error', { message: err.message });
+                    }
+                });
+            }, 800);
+        }
 
         function populate_sync_form() {
             document.getElementById('syncIncludeTransactions').checked = get_sync_settings().includeTransactions;
@@ -4931,6 +4952,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
 
         function render_sync_account(session) {
             document.getElementById('syncAccountStatus').textContent = session ? t('sync.connectedAs', { email: session.email }) : t('sync.notConnected');
+            document.getElementById('syncGoogleButtonContainer').hidden = !!session;
             document.getElementById('syncDisconnectBtn').hidden = !session;
         }
 
@@ -4952,6 +4974,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
 
         document.getElementById('syncDisconnectBtn').addEventListener('click', async () => {
             await sync_sign_out();
+            clearTimeout(setupSyncTimer);
             render_sync_account(null);
         });
 
@@ -4995,14 +5018,19 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             const { includeTransactions } = get_sync_settings();
             const statusEl = document.getElementById('syncStatus');
             if (!current_sync_session()) { statusEl.textContent = t('sync.noAccountConnected'); return; }
-            statusEl.textContent = t('sync.uploading');
-            try {
-                await sync_push_data('setup', { ...ruleSet, subBudgetCaps });
-                if (includeTransactions) await sync_push_data('transactions', await gather_sync_transactions());
-                statusEl.textContent = t('sync.uploadDone');
-            } catch (err) {
-                statusEl.textContent = t('sync.error', { message: err.message });
-            }
+            clearTimeout(setupSyncTimer);
+            setupSyncQueue = setupSyncQueue.catch(() => {}).then(async () => {
+                if (!current_sync_session()) return;
+                statusEl.textContent = t('sync.uploading');
+                try {
+                    await sync_push_data('setup', { ...ruleSet, subBudgetCaps });
+                    if (includeTransactions) await sync_push_data('transactions', await gather_sync_transactions());
+                    statusEl.textContent = t('sync.uploadDone');
+                } catch (err) {
+                    statusEl.textContent = t('sync.error', { message: err.message });
+                }
+            });
+            await setupSyncQueue;
         });
 
         document.getElementById('syncDownloadBtn').addEventListener('click', async () => {
@@ -5010,6 +5038,8 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             const statusEl = document.getElementById('syncStatus');
             if (!current_sync_session()) { statusEl.textContent = t('sync.noAccountConnected'); return; }
             if (!confirm(t('sync.confirmDownload'))) return;
+            clearTimeout(setupSyncTimer);
+            await setupSyncQueue;
             statusEl.textContent = t('sync.downloading');
             try {
                 const setup = await sync_pull_data('setup');

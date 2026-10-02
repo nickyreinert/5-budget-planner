@@ -391,7 +391,7 @@ const dict = {
     'ai.mcpHint': 'Nach Änderungen die Berechtigungsdatei erneut herunterladen und den lokalen MCP-Client neu starten. Die Freigaben gelten nur für Clients, die diese Datei verwenden.',
     'ai.mcpSetup': 'Einmalige MCP-Einrichtung',
 
-    'sync.intro': 'Sichere dein SETTING (und optional deine Transaktionsdaten) in der Cloud und nutze es auf mehreren Geräten - einfach mit deinem Google-Konto anmelden.',
+    'sync.intro': 'Melde dich mit Google an. Änderungen an Einstellungen und Budgets werden automatisch hochgeladen; Transaktionsdaten nur über „Hochladen“.',
     'sync.connect': 'Mit Google-Konto verbinden',
     'sync.disconnect': 'Trennen',
     'sync.connectedAs': 'Verbunden als {email}',
@@ -939,7 +939,7 @@ const dict = {
     'ai.mcpHint': 'After changing permissions, download the file again and restart the local MCP client. Only clients using this file are affected.',
     'ai.mcpSetup': 'One-time MCP setup',
 
-    'sync.intro': 'Back up your SETTING (and optionally your transaction data) to the cloud and use it across multiple devices - just sign in with your Google account.',
+    'sync.intro': 'Sign in with Google. Settings and budget changes upload automatically; transaction data only uploads when you select Upload.',
     'sync.connect': 'Connect Google account',
     'sync.disconnect': 'Disconnect',
     'sync.connectedAs': 'Connected as {email}',
