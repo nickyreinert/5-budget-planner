@@ -2109,11 +2109,6 @@
                             <option value="6" ${cluster.months === 6 ? 'selected' : ''}>${t('week.interval.6')}</option>
                             <option value="12" ${cluster.months === 12 ? 'selected' : ''}>${t('week.interval.12')}</option>
                         </select>
-                        <select class="tx-amount-mode-select" data-rule="${escape_budget(opts.ruleId || '')}" data-payee="${escape_budget(cluster.payee)}" aria-label="${t('recurringExpense.amountMode')}: ${escape_budget(cluster.name)}" title="${t('recurringExpense.amountModeHint')}">
-                            <option value="latest" ${cluster.amountMode === 'latest' ? 'selected' : ''}>${t('recurringExpense.amountLatest')}</option>
-                            <option value="max" ${cluster.amountMode === 'max' ? 'selected' : ''}>${t('recurringExpense.amountMax')}</option>
-                            <option value="average" ${cluster.amountMode === 'average' ? 'selected' : ''}>${t('recurringExpense.amountAverage')}</option>
-                        </select>
                         <span class="tx-interval-monthly">≈ ${fmt_eur(cluster.monthlyCents)} ${t('fixExpense.perMonth')}</span>
                         ${cluster.active === false ? `<span class="tx-interval-ended" title="${t('fixExpense.contractEndedHint')}">${t('fixExpense.contractEnded')}</span>` : ''}
                         ${ruleId && mergedRow ? `<button type="button" class="tx-unmerge-btn" data-rule="${escape_budget(ruleId)}" data-merge-id="${escape_budget(mergedRow._cls.contractId)}" title="${t('fixExpense.unmerge')}">${t('fixExpense.unmerge')}</button>` : ''}
@@ -2200,12 +2195,9 @@
 
         // Manual per-payee interval override (Settings > Fix Expense/Income
         // rule previews only) - `onChange(ruleId, payee, months)`.
-        function wire_recurring_interval_selects(container, onChange, onAmountMode) {
+        function wire_recurring_interval_selects(container, onChange) {
             container.querySelectorAll('.tx-interval-select').forEach(select => {
                 select.addEventListener('change', () => onChange(select.dataset.rule, select.dataset.payee, Number(select.value)));
-            });
-            container.querySelectorAll('.tx-amount-mode-select').forEach(select => {
-                select.addEventListener('change', () => onAmountMode?.(select.dataset.rule, select.dataset.payee, select.value));
             });
         }
 
@@ -2587,6 +2579,7 @@
                         ${opt(matcher, 'field', 'purpose', 'matcher.purpose')}
                         ${opt(matcher, 'field', 'category', 'matcher.bankCategory')}
                         ${opt(matcher, 'field', 'amount', 'matcher.amount')}
+                        ${opt(matcher, 'field', 'date', 'matcher.date')}
                     </select>
                     <select data-matcher-operator aria-label="${t('matcher.operator')}">
                         ${opt(matcher, 'operator', 'contains', 'matcher.contains')}
@@ -2594,22 +2587,23 @@
                         ${opt(matcher, 'operator', 'regex', 'matcher.regex')}
                         ${opt(matcher, 'operator', 'gt', 'matcher.gt')}
                         ${opt(matcher, 'operator', 'lt', 'matcher.lt')}
+                        ${opt(matcher, 'operator', 'after', 'matcher.after')}
                     </select>
-                    <input data-matcher-value type="${matcher.field === 'amount' ? 'number' : 'text'}" step="${matcher.field === 'amount' ? '0.01' : ''}" value="${escape_budget(String(matcher.value || ''))}" placeholder="${matcher.field === 'amount' ? t('matcher.euro') : t('matcher.placeholder')}" aria-label="${t('matcher.value')}">
+                    <input data-matcher-value type="${matcher.field === 'amount' ? 'number' : matcher.field === 'date' ? 'date' : 'text'}" step="${matcher.field === 'amount' ? '0.01' : ''}" value="${escape_budget(String(matcher.value || ''))}" placeholder="${matcher.field === 'amount' ? t('matcher.euro') : t('matcher.placeholder')}" aria-label="${t('matcher.value')}">
                     <label class="matcher-exclude"><input data-matcher-exclude type="checkbox" ${matcher.exclude ? 'checked' : ''}> ${t('matcher.exclude')}</label>
                     <button type="button" class="remove-matcher-btn" title="${t('matcher.remove')}" aria-label="${t('matcher.remove')}">×</button>
                 </div>
             `).join('');
         }
 
-        // "Betrag" only supports >, < and =; every other field only supports
-        // text operators. Switching the field leaves the old operator selected,
+        // "Betrag" only supports >, < and =, "Datum" only "after"; every other
+        // field only supports text operators. Switching the field leaves the old operator selected,
         // so coerce it - otherwise an invalid combination gets saved and
         // rejects the whole rule set (see validate_budget_settings).
         function matcher_operator_for(field, operator) {
-            const numeric = ['gt', 'lt', 'equals'];
-            if (field === 'amount') return numeric.includes(operator) ? operator : 'gt';
-            return ['gt', 'lt'].includes(operator) ? 'contains' : operator;
+            if (field === 'date') return 'after';
+            if (field === 'amount') return ['gt', 'lt', 'equals'].includes(operator) ? operator : 'gt';
+            return ['gt', 'lt', 'after'].includes(operator) ? 'contains' : operator;
         }
 
         // Keeps every row exactly as edited, including ones with an empty
@@ -2742,6 +2736,9 @@
                     <button type="button" class="group-toggle-btn" data-rule="${escape_budget(rule.id)}" title="${t('budgets.toggleCategories')}">${expanded ? '▼' : '▶'}</button>
                     <input value="${escape_budget(displayName)}" data-rule="${escape_budget(rule.id)}" data-field="category" aria-label="Kategorie">
                     <span class="fixexpense-monthly" title="${recurring ? t('fixExpense.monthlyHint') : ''}">${valueHtml}</span>
+                    ${recurring ? `<select class="rule-amount-mode-select" data-rule="${escape_budget(rule.id)}" aria-label="${t('recurringExpense.amountMode')}" title="${t('recurringExpense.amountModeHint')}">
+                        ${['latest', 'max', 'average'].map(mode => `<option value="${mode}" ${(rule.recurringAmountMode || 'latest') === mode ? 'selected' : ''}>${t('recurringExpense.amount' + mode[0].toUpperCase() + mode.slice(1))}</option>`).join('')}
+                    </select>` : ''}
                     <button type="button" class="remove-btn" data-rule="${escape_budget(rule.id)}" title="${t('fixExpense.removeRow')}">×</button>
                 </div>
                 <div class="main-budget-group-categories fixexpense-body" ${expanded ? '' : 'hidden'}>
@@ -2860,14 +2857,14 @@
                 rule.recurringOverrides[payee] = months;
                 persist_budgets();
                 render_rule_group_list(kind);
-            }, (ruleId, payee, mode) => {
-                const rule = (ruleSet.rules || []).find(r => r.id === ruleId);
-                if (!rule || !['latest', 'max', 'average'].includes(mode)) return;
-                rule.recurringAmountMode ||= {};
-                if (mode === 'latest') delete rule.recurringAmountMode[payee]; else rule.recurringAmountMode[payee] = mode;
+            });
+            container.querySelectorAll('.rule-amount-mode-select').forEach(select => select.addEventListener('change', () => {
+                const rule = (ruleSet.rules || []).find(r => r.id === select.dataset.rule);
+                if (!rule || !['latest', 'max', 'average'].includes(select.value)) return;
+                if (select.value === 'latest') delete rule.recurringAmountMode; else rule.recurringAmountMode = select.value;
                 persist_budgets();
                 render_rule_group_list(kind);
-            });
+            }));
 
             container.querySelectorAll('.fixexpense-row .group-toggle-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -4749,7 +4746,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
                     let changed = false;
                     const matchers = rule.matchers.map(matcher => {
                         const operator = matcher_operator_for(matcher.field, matcher.operator);
-                        const value = matcher.field === 'amount' && String(matcher.value ?? '').trim() && !Number.isFinite(Number(matcher.value)) ? '' : matcher.value;
+                        const value = String(matcher.value ?? '').trim() && ((matcher.field === 'amount' && !Number.isFinite(Number(matcher.value))) || (matcher.field === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(String(matcher.value)))) ? '' : matcher.value;
                         if (operator === matcher.operator && value === matcher.value) return matcher;
                         changed = true;
                         return { ...matcher, operator, value };

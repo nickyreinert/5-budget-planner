@@ -77,16 +77,15 @@ export function validate_budget_settings(settings, { checkSuggestionCaps = true 
       if (!r.recurringOverrides || typeof r.recurringOverrides !== 'object') fail('recurringOverrides must be an object');
       for (const months of Object.values(r.recurringOverrides)) if (![1,3,6,12].includes(months)) fail('recurringOverrides values must be 1, 3, 6 or 12');
     }
-    if (r.recurringAmountMode !== undefined) {
-      if (!r.recurringAmountMode || typeof r.recurringAmountMode !== 'object') fail('recurringAmountMode must be an object');
-      for (const mode of Object.values(r.recurringAmountMode)) if (!['latest', 'max', 'average'].includes(mode)) fail('recurringAmountMode values must be latest, max or average');
-    }
+    if (r.recurringAmountMode !== undefined && !['latest', 'max', 'average'].includes(r.recurringAmountMode)) fail('recurringAmountMode must be latest, max or average');
     if (r.matchers !== undefined) {
       if (!Array.isArray(r.matchers)) fail('matchers must be an array');
       for (const matcher of r.matchers) {
-        if (!matcher || !['any', 'name', 'purpose', 'category', 'amount'].includes(matcher.field)) fail('Invalid matcher field');
+        if (!matcher || !['any', 'name', 'purpose', 'category', 'amount', 'date'].includes(matcher.field)) fail('Invalid matcher field');
         if (typeof matcher.exclude !== 'undefined' && typeof matcher.exclude !== 'boolean') fail('Invalid matcher exclusion');
-        if (matcher.field === 'amount') {
+        if (matcher.field === 'date') {
+          if (matcher.operator !== 'after' || (String(matcher.value ?? '').trim() && !/^\d{4}-\d{2}-\d{2}$/.test(String(matcher.value)))) fail('Invalid date matcher');
+        } else if (matcher.field === 'amount') {
           if (!['gt', 'lt', 'equals'].includes(matcher.operator) || (String(matcher.value ?? '').trim() && !Number.isFinite(Number(matcher.value)))) fail('Invalid amount matcher');
         } else {
           if (!['contains', 'regex', 'equals'].includes(matcher.operator) || typeof matcher.value !== 'string') fail('Invalid text matcher');

@@ -80,6 +80,14 @@ function matcher_matches(tx, matcher) {
     if (matcher.operator === 'lt') return amount < value;
     return amount < value;
   }
+  if (matcher.field === 'date') {
+    // "after" is strictly after the chosen day (YYYY-MM-DD), so bookings on
+    // that day itself are not matched.
+    const [year, month, day] = String(matcher.value).split('-').map(Number);
+    const bookedAt = tx.date instanceof Date ? tx.date : null;
+    if (!bookedAt || !year || !month || !day) return false;
+    return bookedAt >= new Date(year, month - 1, day + 1);
+  }
   const text = matcher_text(tx, matcher.field);
   if (matcher.operator === 'contains') return text.toLocaleLowerCase().includes(String(matcher.value || '').toLocaleLowerCase());
   if (matcher.operator === 'equals') return text.toLocaleLowerCase() === String(matcher.value || '').toLocaleLowerCase();
@@ -153,12 +161,12 @@ function fallback_group_for_category(ruleSet, topCategory) {
   return map[(topCategory || '').toLowerCase()] || FALLBACK_GROUP;
 }
 
-// Per-payee recurring settings of a Fix Expense/Income rule: the billing
-// interval (recurringOverrides) and which amount represents the cluster
+// Recurring settings a rule hands to its transactions: the per-payee billing
+// interval (recurringOverrides) and the rule-wide amount mode
 // (recurringAmountMode: 'latest' (default) | 'max' | 'average').
 function recurring_for(rule, payee) {
   const intervalMonths = rule?.recurringOverrides?.[payee];
-  const amountMode = rule?.recurringAmountMode?.[payee];
+  const amountMode = rule?.recurringAmountMode;
   if (!intervalMonths && !amountMode) return rule?.recurring;
   return { ...(rule?.recurring || {}), ...(intervalMonths ? { intervalMonths } : {}), ...(amountMode ? { amountMode } : {}) };
 }

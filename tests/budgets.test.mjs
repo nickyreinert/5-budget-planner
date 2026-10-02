@@ -241,3 +241,29 @@ test('a recurring payee interval override is exposed to the budget calculation',
   });
   assert.deepEqual(result.recurring, { intervalMonths: 12 });
 });
+
+test('date condition "after" filters out older bookings and validates its value', () => {
+  const rule = { matchers: [{ field: 'name', operator: 'contains', value: 'Gym' }, { field: 'date', operator: 'after', value: '2026-01-31' }] };
+  const booking = date => ({ name: 'Gym', date, betrag_cents: -3000 });
+  assert.equal(rule_matches(booking(new Date(2026, 0, 31)), rule), false, 'the chosen day itself is not after');
+  assert.equal(rule_matches(booking(new Date(2026, 1, 1)), rule), true);
+  assert.equal(rule_matches(booking(new Date(2025, 5, 1)), rule), false);
+  assert.equal(rule_matches({ name: 'Gym', betrag_cents: -3000 }, rule), false, 'no date never matches');
+  const settings = setting();
+  settings.rules[0].matchers = [{ field: 'date', operator: 'after', value: '2026-01-31', exclude: false }];
+  assert.doesNotThrow(() => validate_budget_settings(structuredClone(settings)));
+  for (const bad of [{ operator: 'gt' }, { value: '31.01.2026' }]) {
+    const broken = structuredClone(settings); Object.assign(broken.rules[0].matchers[0], bad);
+    assert.throws(() => validate_budget_settings(broken), /Invalid date matcher/);
+  }
+});
+
+test('recurringAmountMode is a rule-wide setting that every matching booking inherits', () => {
+  const rule = { id: 'gym', category: 'Sport', group: 'fixed', matchers: [{ field: 'name', operator: 'contains', value: 'Gym', exclude: false }], recurringAmountMode: 'max' };
+  assert.equal(classify({ name: 'Gym Berlin', betrag_cents: -3000 }, { rules: [rule] }).recurring.amountMode, 'max');
+  assert.equal(classify({ name: 'Gym Berlin', betrag_cents: -3000 }, { rules: [{ ...rule, recurringAmountMode: undefined }] }).recurring, undefined);
+  const settings = setting(); settings.rules[0].recurringAmountMode = 'average';
+  assert.doesNotThrow(() => validate_budget_settings(structuredClone(settings)));
+  settings.rules[0].recurringAmountMode = { gym: 'max' };
+  assert.throws(() => validate_budget_settings(settings), /recurringAmountMode/);
+});
