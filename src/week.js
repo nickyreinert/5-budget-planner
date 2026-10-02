@@ -46,16 +46,33 @@ function earliest_date(rows) {
   return rows.reduce((min, r) => (r.date < min ? r.date : min), rows[0].date);
 }
 
+// Monthly salary. By default the median of the last three monthly totals.
+// If any salary payee has an explicit amount mode (Settings > Income:
+// latest / max / average), salary payees are evaluated one by one: a payee
+// with a mode contributes the amount that mode picks from its bookings, any
+// other payee still contributes the median of its last three monthly totals.
+// Payees whose last booking is older than two months before the newest
+// salary booking are treated as ended.
 export function salary_monthly_cents(rows) {
-  const months = new Map();
-  rows.filter(r => r.in_out === 'in' && is_real_cashflow(r) && r._cls?.group === 'income' &&
-    (r._cls.incomeType === 'salary' || (!r._cls.incomeType && SALARY_PATTERN.test(r._cls.category)))).forEach(r => {
+  const salaryRows = rows.filter(r => r.in_out === 'in' && is_real_cashflow(r) && r._cls?.group === 'income' &&
+    (r._cls.incomeType === 'salary' || (!r._cls.incomeType && SALARY_PATTERN.test(r._cls.category))));
+  const median_of_last_months = list => {
+    const months = new Map();
+    list.forEach(r => {
       const date = reporting_date(r);
       const key = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2, '0')}`;
       months.set(key, (months.get(key) || 0) + r.betrag_cents);
     });
-  const last3 = [...months.entries()].sort(([a],[b]) => b.localeCompare(a)).slice(0,3).map(([,v]) => v).sort((a,b) => a-b);
-  return last3.length ? last3[Math.floor(last3.length / 2)] : 0;
+    const last3 = [...months.entries()].sort(([a],[b]) => b.localeCompare(a)).slice(0,3).map(([,v]) => v).sort((a,b) => a-b);
+    return last3.length ? last3[Math.floor(last3.length / 2)] : 0;
+  };
+  if (!salaryRows.some(r => r._cls?.recurring?.amountMode)) return median_of_last_months(salaryRows);
+  const newest = latest_date(salaryRows);
+  return cluster_by_payee(salaryRows).reduce((sum, c) => {
+    if (days_between(c.rows[0].date, newest) > 62) return sum;
+    const mode = c.rows[0]._cls?.recurring?.amountMode;
+    return sum + (mode ? cluster_amount_cents(c, mode) : median_of_last_months(c.rows));
+  }, 0);
 }
 
 function payee_key(r) {

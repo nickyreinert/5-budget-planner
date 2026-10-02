@@ -294,3 +294,15 @@ test('recurring amount mode picks latest (default), max or average of a payee cl
   const raise = [tx('2025-09-01', -10000, 'Gym', 'fixed'), tx('2026-09-01', -11000, 'Gym', 'fixed')].map(row => { row._cls.recurring = { intervalMonths: 1, amountMode: 'average' }; return row; });
   assert.equal(rule_monthly_equivalent(raise).totalCents, 10500);
 });
+
+test('salary amount mode: latest, max or average of the salary payee instead of the monthly median', () => {
+  const pay = (date, cents, mode) => { const r = tx(date, cents, 'Employer', 'income'); r._cls.incomeType = 'salary'; if (mode) r._cls.recurring = { amountMode: mode }; return r; };
+  const history = mode => [pay('2026-07-25', 300000, mode), pay('2026-08-25', 320000, mode), pay('2026-09-25', 340000, mode)];
+  assert.equal(salary_monthly_cents(history()), 320000, 'median by default');
+  assert.equal(salary_monthly_cents(history('latest')), 340000);
+  assert.equal(salary_monthly_cents(history('max')), 340000);
+  assert.equal(salary_monthly_cents(history('average')), 320000);
+  const withTravel = [...history('latest'), tx('2026-09-28', 40000, 'Employer travel', 'income')];
+  withTravel[3]._cls.incomeType = 'other';
+  assert.equal(salary_monthly_cents(withTravel), 340000, 'non-salary income never counts');
+});
