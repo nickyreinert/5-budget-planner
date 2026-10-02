@@ -30,6 +30,9 @@ test('Claude MCP client reads categories and creates importable proposals', asyn
     assert.deepEqual((await client.listTools()).tools.map(tool => tool.name), ['list_categories', 'list_transactions', 'list_rules', 'propose_rules', 'propose_assignments', 'propose_category_maintenance']);
     const listed = await client.callTool({ name: 'list_transactions', arguments: { category: 'Unkategorisiert' } });
     assert.equal(JSON.parse(listed.content[0].text).rows[0].id, 'csv:2');
+    const dated = await client.callTool({ name: 'list_transactions', arguments: { from: '2026-10-02' } });
+    assert.equal(JSON.parse(dated.content[0].text).total, 0);
+    assert.match(client.getInstructions(), /question tool/);
     const proposed = await client.callTool({ name: 'propose_rules', arguments: { rules: [{ category: 'Food', field: 'name', text: 'BAKERY' }] } });
     assert.equal(proposed.isError, undefined);
     assert.equal(JSON.parse(await readFile(join(directory, '5ive_mcp_settings_proposal.json'), 'utf8')).rules.length, 2);

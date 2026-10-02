@@ -22,6 +22,15 @@ test('MCP reads existing rule and manual classifications with transaction IDs', 
   assert.equal(transactions(settings, data, { category: 'Unkategorisiert' }).rows[0].id, 'csv:2');
 });
 
+test('MCP transaction listing filters by inclusive date range', () => {
+  const dated = { importedEntries: [{ ...entry('csv:a', 'A'), Datum: '28.09.2026' }, { ...entry('csv:b', 'B'), Datum: '01.10.2026' }, { ...entry('csv:c', 'C'), Datum: '02.10.2026' }], manualEntries: [], overrides: {} };
+  const ids = filters => transactions(settings, dated, filters).rows.map(row => row.id);
+  assert.deepEqual(ids({ from: '2026-09-29', to: '2026-10-01' }), ['csv:b']);
+  assert.deepEqual(ids({ from: '2026-10-01' }), ['csv:b', 'csv:c']);
+  assert.deepEqual(ids({ to: '2026-09-28' }), ['csv:a']);
+  assert.throws(() => transactions(settings, dated, { from: '28.09.2026' }), /YYYY-MM-DD/);
+});
+
 test('AI category exports never present recurring categories as spending-budget assignments', () => {
   const settings = { rules: [{ id: 'insurance', category: 'Insurance.Legal', group: 'fixed', namePattern: 'Contract' }], mainCategories: [{ id: 'housing', label: 'Housing' }], categoryMappings: { 'Insurance.Legal': 'housing' } };
   const data = { importedEntries: [entry('csv:contract', 'Contract provider')], manualEntries: [], overrides: {} };

@@ -62,9 +62,14 @@ export function categories(settings, data) {
   }));
 }
 
-export function transactions(settings, data, { category, search, offset = 0, limit = 50 } = {}) {
+const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+
+export function transactions(settings, data, { category, search, from, to, offset = 0, limit = 50 } = {}) {
   if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('offset must be >= 0; limit must be 1..100');
+  if ([from, to].some(date => date !== undefined && !isoDate.test(date))) throw new Error('from and to must be YYYY-MM-DD');
   const rows = classified_rows(settings, data).filter(row =>
+    (!from || row.date.split('.').reverse().join('-') >= from) &&
+    (!to || row.date.split('.').reverse().join('-') <= to) &&
     (!category || row.category === category) &&
     (!search || `${row.name} ${row.purpose}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
   );
