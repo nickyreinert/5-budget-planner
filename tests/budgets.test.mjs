@@ -64,15 +64,18 @@ test('recurring and spending categories can share a name without sharing their b
 
 test('loading and saving rules persist repaired legacy recurring mappings', () => {
   const originalStorage = globalThis.localStorage;
-  let stored = JSON.stringify({ rules: [{ id: 'fixed', category: 'Insurance', group: 'fixed', budgetCategory: 'daily' }], mainCategories: [{ id: 'daily', label: 'Daily' }], categoryMappings: { Insurance: 'daily' } });
+  let stored = JSON.stringify({ rules: [{ id: 'fixed', category: 'Insurance', group: 'fixed', budgetCategory: 'daily' }, { id: 'child', category: 'Versicherungen.HDI Leben', group: 'fixed' }], mainCategories: [{ id: 'daily', label: 'Daily' }], categoryMappings: { Insurance: 'daily', Versicherungen: 'daily' } });
   globalThis.localStorage = { getItem: () => stored, setItem: (_, value) => { stored = value; } };
   try {
     const settings = get_stored_rule_set();
     assert.equal(JSON.parse(stored).categoryMappings.Insurance, undefined);
+    assert.equal(JSON.parse(stored).categoryMappings.Versicherungen, undefined);
     assert.equal(settings.rules[0].budgetCategory, undefined);
     settings.categoryMappings.Insurance = 'daily';
+    settings.categoryMappings.Versicherungen = 'daily';
     save_rule_set(settings);
     assert.equal(JSON.parse(stored).categoryMappings.Insurance, undefined);
+    assert.equal(JSON.parse(stored).categoryMappings.Versicherungen, undefined);
     assert.equal(JSON.parse(stored).rules[0].group, 'fixed');
   } finally { globalThis.localStorage = originalStorage; }
 });

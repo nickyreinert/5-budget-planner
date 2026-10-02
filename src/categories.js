@@ -10,6 +10,7 @@ export function is_spending_classification(classification = {}) {
 export function is_budget_category(settings, category, classification = null) {
   if (!category || category === ADDITIONAL_INCOME || (classification && !is_spending_classification(classification))) return false;
   const rules = (settings.rules || []).filter(rule => (rule.category || rule.label) === category);
+  if (!rules.length && (settings.rules || []).some(rule => rule.group === 'fixed' && (rule.category || rule.label)?.startsWith(category + '.'))) return false;
   return !rules.length || rules.some(rule => is_spending_classification({ group: rule.group, excluded: rule.excludeFromTotals }));
 }
 

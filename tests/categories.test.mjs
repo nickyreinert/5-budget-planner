@@ -31,6 +31,13 @@ test('spending pickers exclude legacy recurring mappings, including matching mai
   assert.deepEqual(fixed_expense_categories(settings), ['Insurance']);
 });
 
+test('spending picker excludes a fixed-cost parent left behind in mappings', () => {
+  const settings = { rules: [{ category: 'Versicherungen.HDI Leben', group: 'fixed' }], categoryMappings: { Versicherungen: '', Lebensmittel: '' } };
+  assert.deepEqual(category_catalog(settings, true), ['Unkategorisiert', 'Lebensmittel']);
+  settings.rules.push({ category: 'Versicherungen', group: 'essential' });
+  assert.ok(category_catalog(settings, true).includes('Versicherungen'));
+});
+
 test('transaction pickers keep spending, recurring, income and transfers separate', () => {
   const settings = { rules: [
     { category: 'Software & Abos', group: 'fixed' },
