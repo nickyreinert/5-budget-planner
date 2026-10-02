@@ -29,7 +29,11 @@ if (permissions && (!Array.isArray(permissions.allowedTools) || permissions.allo
   throw new Error('MCP permissions require an allowedTools array of known tool names');
 }
 const enabled = name => !permissions || permissions.allowedTools.includes(name);
-const server = new McpServer({ name: '5ive-budgets', version: '1.0.0' });
+const instructions = [
+  'Never guess the category of an unclear transaction. Collect all unclear ones and ask the user, one question per transaction, quoting date, name, purpose and amount.',
+  'Ask with the client\'s built-in question tool (for example AskUserQuestion) and offer the 2-4 most plausible categories from list_categories as selectable options; if no such tool exists, use a numbered list of categories plus a "skip" entry. Do not ask open-ended "which category?" questions.'
+].join(' ');
+const server = new McpServer({ name: '5ive-budgets', version: '1.0.0' }, { instructions });
 const reply = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }] });
 const run = action => async args => {
   try { return reply(await action(args)); }
@@ -50,9 +54,11 @@ if (enabled('list_categories')) server.registerTool('list_categories', {
 }));
 
 if (enabled('list_transactions')) server.registerTool('list_transactions', {
-  description: 'Read exported CSV transactions with current category and classification source. Filter by category or payee/purpose; use offset to paginate. Never guess unclear purchases.',
+  description: 'Read exported CSV transactions with current category and classification source. Filter by category, payee/purpose or date range (from/to); use offset to paginate. Never guess unclear purchases.',
   inputSchema: {
     category: z.string().optional(), search: z.string().optional(),
+    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('First day to include, YYYY-MM-DD'),
+    to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Last day to include, YYYY-MM-DD'),
     offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(100).default(50)
   }
 }, run(async filters => {
