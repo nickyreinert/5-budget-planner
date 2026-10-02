@@ -37,6 +37,15 @@ export function fixed_expense_categories(settings, favorites = []) {
   return sort_categories([...new Set(categories)], favorites);
 }
 
+export function transaction_category_options(settings, group, favorites = []) {
+  if (group === 'fixed') return sort_categories([UNCATEGORIZED, ...fixed_expense_categories(settings)], favorites);
+  if (group === 'income' || group === 'internal_transfer') {
+    const categories = (settings.rules || []).filter(rule => rule.group === group).map(rule => rule.category || rule.label).filter(Boolean);
+    return sort_categories([...new Set([UNCATEGORIZED, ...(group === 'income' ? [ADDITIONAL_INCOME] : []), ...categories])], favorites);
+  }
+  return sort_categories(category_catalog(settings, true), favorites);
+}
+
 // Fix Expense/Income category strings support one optional subcategory
 // level via dot notation ("Versicherungen.HDI Lebensversicherung") - kept
 // as a single string (not a nested object) so every existing category

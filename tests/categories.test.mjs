@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { category_catalog, fixed_expense_categories, sort_categories, split_category, join_category } from '../src/categories.js';
+import { category_catalog, fixed_expense_categories, transaction_category_options, sort_categories, split_category, join_category } from '../src/categories.js';
 import { classify, classify_all, apply_manual_overrides } from '../src/rules.js';
 import { enrich_row, tx_id } from '../src/data.js';
 import { default_csv_config, get_csv_config } from '../src/csv_config.js';
@@ -29,6 +29,19 @@ test('spending pickers exclude legacy recurring mappings, including matching mai
   assert.ok(!category_catalog(settings, true).includes('Insurance'));
   assert.ok(category_catalog(settings, true).includes('Food'));
   assert.deepEqual(fixed_expense_categories(settings), ['Insurance']);
+});
+
+test('transaction pickers keep spending, recurring, income and transfers separate', () => {
+  const settings = { rules: [
+    { category: 'Software & Abos', group: 'fixed' },
+    { category: 'Food', group: 'essential' },
+    { category: 'Salary', group: 'income' },
+    { category: 'Between accounts', group: 'internal_transfer' }
+  ], mainCategories: [{ id: 'food', label: 'Food' }] };
+  assert.deepEqual(transaction_category_options(settings, 'unclassified'), ['Unkategorisiert', 'Food']);
+  assert.deepEqual(transaction_category_options(settings, 'fixed'), ['Unkategorisiert', 'Software & Abos']);
+  assert.deepEqual(transaction_category_options(settings, 'income'), ['Unkategorisiert', 'Salary', 'Zusätzliche Einnahmen']);
+  assert.deepEqual(transaction_category_options(settings, 'internal_transfer'), ['Unkategorisiert', 'Between accounts']);
 });
 
 test('manual overrides retain the classified role when recurring and spending categories have identical names', () => {

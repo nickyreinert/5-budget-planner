@@ -695,7 +695,7 @@
         import { load_footer } from './src/footer.js';
         import { init_section_highlight } from './src/highlight.js';
         import { csv_records, csv_import_ranges, reconcile_transactions, transaction_source_label, reconciliation_summary, get_manual_match_days, save_manual_match_days } from './src/transactions.js';
-        import { category_catalog, sort_categories, fixed_expense_categories, is_budget_category, is_spending_classification, UNCATEGORIZED, ADDITIONAL_INCOME, split_category, join_category } from './src/categories.js';
+        import { category_catalog, sort_categories, fixed_expense_categories, transaction_category_options, is_budget_category, is_spending_classification, UNCATEGORIZED, ADDITIONAL_INCOME, split_category, join_category } from './src/categories.js';
         import { upsert_imported_entries, load_imported_entries, load_import_ranges, load_reconciliation_decisions, save_reconciliation_decision } from './src/db.js';
         import { apply_amount_overrides, apply_note_overrides, apply_date_overrides, apply_ignored_transactions, is_real_cashflow, transaction_list_order } from './src/data.js';
         import { load_ignored_transactions, save_ignored_transaction, clear_transaction_data } from './src/db.js';
@@ -1106,9 +1106,11 @@
             // for a fast reassignment without the bigger dialog.
             container.querySelectorAll('.tx-category-label').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    open_category_popover(btn, collect_category_options(), async (category) => {
+                    const row = module_data.find(row => tx_id(row) === decodeURIComponent(btn.dataset.txId));
+                    const options = transaction_category_options(ruleSet, row?._cls?.group, favoriteCategories);
+                    open_category_popover(btn, options, async (category) => {
                         await assign_category([decodeURIComponent(btn.dataset.txId)], category);
-                    }, { onCreate: async (category) => { await create_and_assign_category(decodeURIComponent(btn.dataset.txId), category); } });
+                    }, is_spending_classification(row?._cls) ? { onCreate: async (category) => { await create_and_assign_category(decodeURIComponent(btn.dataset.txId), category); } } : {});
                 });
             });
             container.querySelectorAll('.tx-amount-btn').forEach(btn => {
@@ -1244,7 +1246,7 @@
             const categoryButton = document.getElementById('txEditCategory');
             categoryButton.dataset.category = row._cls?.category || '';
             categoryButton.textContent = row._cls?.category || t('recurringExpense.chooseCategory');
-            categoryButton.onclick = () => open_category_popover(categoryButton, collect_category_options(), (category) => {
+            categoryButton.onclick = () => open_category_popover(categoryButton, transaction_category_options(ruleSet, row._cls?.group, favoriteCategories), (category) => {
                 categoryButton.dataset.category = category;
                 categoryButton.textContent = category;
                 render_tx_budget_select(category, row);
