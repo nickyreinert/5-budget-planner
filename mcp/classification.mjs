@@ -13,8 +13,10 @@ const assignmentsName = '5ive_mcp_assignments.json';
 const categoryMaintenanceName = '5ive_mcp_category_maintenance.json';
 
 export async function load_exports(settingsPath, dataPath) {
-  const settings = JSON.parse(await readFile(settingsPath, 'utf8'));
-  const data = JSON.parse(await readFile(dataPath, 'utf8'));
+  return validate_exports(JSON.parse(await readFile(settingsPath, 'utf8')), JSON.parse(await readFile(dataPath, 'utf8')));
+}
+
+export function validate_exports(settings, data) {
   validate_budget_settings(settings, { checkSuggestionCaps: false });
   ensure_budget_coverage(settings);
   if (!Array.isArray(data.importedEntries) || !Array.isArray(data.manualEntries) || !data.overrides || typeof data.overrides !== 'object') {
