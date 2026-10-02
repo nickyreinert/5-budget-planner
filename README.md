@@ -53,6 +53,15 @@ npx vercel link
 site to production. Cloud sync runs directly against Firebase (Auth +
 Firestore) from the browser; there is no server-side function.
 
+For Google sign-in in the installed PWA, Vercel proxies Firebase's auth helper
+through the app domain. Before deploying, add `https://5.1-1-1.de/__/auth/handler`
+to the authorized redirect URIs of the Google OAuth web client used by Firebase,
+and ensure `5.1-1-1.de` is an authorized domain under Firebase Authentication.
+The proxy must remain a rewrite (not a browser redirect) so the helper uses the
+same origin as the PWA. After deployment, verify that
+`https://5.1-1-1.de/__/auth/handler` returns the Firebase helper page rather
+than the app shell.
+
 ## A simple workflow
 
 1. Import CSV files from your accounts.

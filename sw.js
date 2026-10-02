@@ -8,6 +8,11 @@ const APP_SHELL = [
   './index.html',
   './styles.css',
   './favicon.svg',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/icon-maskable-192.png',
+  './icons/icon-maskable-512.png',
+  './icons/apple-touch-icon.png',
   './manifest.webmanifest',
   './sample_data.json',
   './src/data.js',
@@ -58,6 +63,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith('/__/auth/')) return;
 
   // The HTML shell is network-first: a cache-first reload could otherwise
   // briefly flash the PREVIOUS deploy's markup (this SW instance's own old

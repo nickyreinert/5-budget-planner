@@ -14,7 +14,7 @@ import { getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, collection } fro
 
 const firebaseConfig = {
   apiKey: 'AIzaSyDLklCTVAjelhrogbMl7dvPkLIUIqbQ_OI',
-  authDomain: 'budgets-83ffd.firebaseapp.com',
+  authDomain: location.hostname === '5.1-1-1.de' ? location.host : 'budgets-83ffd.firebaseapp.com',
   projectId: 'budgets-83ffd',
   storageBucket: 'budgets-83ffd.firebasestorage.app',
   messagingSenderId: '283214914221',
