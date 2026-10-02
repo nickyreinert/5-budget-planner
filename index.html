@@ -2952,7 +2952,25 @@
                     persist_and_refresh_rule_group_list(kind);
             }
             container.querySelectorAll('.rule-matchers').forEach(matcherContainer => {
-                matcherContainer.querySelectorAll('input, select').forEach(input => input.addEventListener('change', () => save_matchers(matcherContainer.dataset.rule, matcherContainer)));
+                matcherContainer.querySelectorAll('input, select').forEach(input => {
+                    const save = () => save_matchers(matcherContainer.dataset.rule, matcherContainer);
+                    if (input.type !== 'date') { input.addEventListener('change', save); return; }
+                    // A date input fires 'change' on every keystroke once the typed
+                    // date is valid (year "0020" while typing 2026), and saving
+                    // re-renders the row and drops focus. So skip implausible years,
+                    // wait for a typing pause, and save right away on blur.
+                    let timer;
+                    input.addEventListener('change', () => {
+                        clearTimeout(timer);
+                        if (input.value && Number(input.value.slice(0, 4)) < 1900) return;
+                        timer = setTimeout(save, 800);
+                    });
+                    input.addEventListener('blur', () => {
+                        if (!timer) return;
+                        clearTimeout(timer); timer = null;
+                        if (!input.value || Number(input.value.slice(0, 4)) >= 1900) save();
+                    });
+                });
                 matcherContainer.querySelectorAll('.remove-matcher-btn').forEach(btn => btn.addEventListener('click', () => {
                     if (matcherContainer.querySelectorAll('.rule-matcher-row').length < 2) return;
                     btn.closest('.rule-matcher-row').remove(); save_matchers(matcherContainer.dataset.rule, matcherContainer);
