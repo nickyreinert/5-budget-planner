@@ -2,7 +2,7 @@
 // Minimal offline app-shell cache: the app itself is entirely client-side
 // (localStorage-backed, no backend), so caching the static shell is enough
 // to let it load without a network connection after the first visit.
-const CACHE_NAME = 'money-money-analyzer-20261001-clean-week';
+const CACHE_NAME = 'money-money-analyzer-20261001-clean-week-2';
 const APP_SHELL = [
   './',
   './index.html',
@@ -39,7 +39,7 @@ const APP_SHELL = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL))
+      .then((cache) => cache.addAll(APP_SHELL.map((url) => new Request(url, { cache: 'reload' }))))
       .then(() => self.skipWaiting())
   );
 });
