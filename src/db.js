@@ -245,6 +245,20 @@ export async function clear_effective_period_override(id) {
   });
 }
 
+// Wipes every transaction-related store (imports, ranges, manual entries,
+// reconciliation decisions, all per-transaction overrides) - used by cloud
+// download so it replaces local data instead of merging into it.
+export async function clear_transaction_data() {
+  const db = await open_db();
+  return new Promise((resolve, reject) => {
+    const names = [IMPORT_STORE, RANGE_STORE, RECONCILIATION_STORE, STORE, MANUAL_STORE];
+    const tx = db.transaction(names, 'readwrite');
+    names.forEach(name => tx.objectStore(name).clear());
+    tx.oncomplete = () => resolve();
+    tx.onerror = tx.onabort = () => reject(tx.error || new Error('Clear aborted'));
+  });
+}
+
 // Imports have their own durable store; put() is an upsert by source identity.
 export async function upsert_imported_entries(records, ranges = []) {
   // Coverage belongs to a file/account, never to the combined history. Keeping

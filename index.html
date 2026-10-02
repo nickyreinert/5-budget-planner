@@ -698,7 +698,7 @@
         import { category_catalog, sort_categories, fixed_expense_categories, is_budget_category, is_spending_classification, UNCATEGORIZED, ADDITIONAL_INCOME, split_category, join_category } from './src/categories.js';
         import { upsert_imported_entries, load_imported_entries, load_import_ranges, load_reconciliation_decisions, save_reconciliation_decision } from './src/db.js';
         import { apply_amount_overrides, apply_note_overrides, apply_date_overrides, apply_ignored_transactions, is_real_cashflow, transaction_list_order } from './src/data.js';
-        import { load_ignored_transactions, save_ignored_transaction } from './src/db.js';
+        import { load_ignored_transactions, save_ignored_transaction, clear_transaction_data } from './src/db.js';
         import { load_amount_overrides, save_amount_override, load_all_overrides, save_overrides, add_manual_entry, load_manual_entries, delete_manual_entry, load_note_overrides, save_note_override, load_date_overrides, save_date_override, load_effective_period_overrides, save_effective_period_override, clear_effective_period_override } from './src/db.js';
         import {
             build_budget_basis, build_week_report, build_sub_budget_report, build_main_budget_report, category_color,
@@ -4995,9 +4995,10 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             };
         }
 
-        async function apply_synced_transactions(data) {
+        async function apply_synced_transactions(data, { replace = false } = {}) {
             if (!data) return;
             if (data.ignoredTransactions && (typeof data.ignoredTransactions !== 'object' || Array.isArray(data.ignoredTransactions) || Object.values(data.ignoredTransactions).some(value => typeof value !== 'boolean'))) throw new Error('Invalid ignored transactions');
+            if (replace) await clear_transaction_data();
             // Legacy backups do not prove coverage between isolated bookings.
             await upsert_imported_entries(Array.isArray(data.importedEntries) ? data.importedEntries : [], Array.isArray(data.importRanges) ? data.importRanges : []);
             if (Array.isArray(data.manualEntries)) for (const entry of data.manualEntries) await add_manual_entry(entry);
@@ -5052,7 +5053,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
                 subBudgetCaps = pulledCaps || {};
                 save_sub_budgets(subBudgetCaps);
                 if (includeTransactions) {
-                    await apply_synced_transactions(await sync_pull_data('transactions'));
+                    await apply_synced_transactions(await sync_pull_data('transactions'), { replace: true });
                     overridesById = await load_all_overrides();
                     amountOverrides = await load_amount_overrides();
                     noteOverrides = await load_note_overrides();
