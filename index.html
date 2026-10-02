@@ -4917,8 +4917,8 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             }
         }
 
-        // ===== SETTINGS > SYNC: Google-account cloud sync (Netlify Function
-        // + Netlify Database) - see src/sync.js and netlify/README.md.
+        // ===== SETTINGS > SYNC: Google-account cloud sync (Firebase Auth
+        // + Firestore) - see src/sync.js.
         // "Setup" (SETTING + sub-budget caps) always syncs; transaction data
         // (imports, manual entries, overrides) only when opted into via the
         // "auch Transaktionsdaten synchronisieren" checkbox. Upload/download
@@ -4942,7 +4942,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
                 render_sync_account(session);
                 document.getElementById('syncStatus').textContent = '';
             }).catch(err => {
-                document.getElementById('syncStatus').textContent = err.message === 'not_configured' ? t('sync.noConfigConfigured') : t('sync.error', { message: err.message });
+                document.getElementById('syncStatus').textContent = t('sync.error', { message: err.message });
             });
         }
 
@@ -4950,8 +4950,8 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             save_sync_settings({ includeTransactions: e.target.checked });
         });
 
-        document.getElementById('syncDisconnectBtn').addEventListener('click', () => {
-            sync_sign_out();
+        document.getElementById('syncDisconnectBtn').addEventListener('click', async () => {
+            await sync_sign_out();
             render_sync_account(null);
         });
 

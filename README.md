@@ -41,19 +41,17 @@ app does not send it to an LLM. You decide what to share with an external LLM.
 
 ## Deploy manually from your PC
 
-Automatic Netlify builds can stay disabled. To publish the current working tree
-from your computer, install/link the site once and then run:
+The site is hosted on Vercel. Link the project once, then deploy:
 
 ```sh
-npx netlify-cli login
-npx netlify-cli link
+npx vercel login
+npx vercel link
 ./deploy.sh
 ```
 
-`deploy.sh` publishes the static site and the optional Netlify Functions to the
-production site. This keeps the public domain and cloud-sync backend while
-avoiding a build on every Git push. Function environment variables such as
-`GOOGLE_CLIENT_ID` and `NETLIFY_DB_URL` remain managed in Netlify site settings.
+`deploy.sh` stamps a fresh service-worker cache name and publishes the static
+site to production. Cloud sync runs directly against Firebase (Auth +
+Firestore) from the browser; there is no server-side function.
 
 ## A simple workflow
 

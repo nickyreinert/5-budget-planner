@@ -1,14 +1,32 @@
 // --- sync.js ---
-// Optional cloud sync via "Sign in with Google" (Google Identity Services)
-// + a Netlify Function backed by Netlify Database (Postgres) - see
-// netlify/README.md for the one-time backend setup. There is nothing to
-// configure here: the Google OAuth Client ID lives server-side as an env
-// var and is fetched once from the function on first use. Inert (the
-// sign-in button throws `not_configured`, caught by the caller to show a
-// "not set up yet" message) until that env var exists on the Netlify site.
+// Optional cloud sync via Firebase Auth ("Sign in with Google") + Firestore.
+// Data lives under users/{uid}/sync_{collection}/ - see the Firestore rules
+// that restrict access to the owning user. The firebaseConfig below is
+// public by design; access is enforced by the rules, not by hiding it.
+//
+// A Firestore document is capped at 1 MiB, so the JSON payload is split
+// into text chunks (docs "0", "1", ...) plus a "meta" doc holding the
+// chunk count, written last so a half-finished upload is never read.
 
-const SYNC_ENDPOINT = '/.netlify/functions/sync';
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
+import { getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, collection } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey: 'AIzaSyDLklCTVAjelhrogbMl7dvPkLIUIqbQ_OI',
+  authDomain: 'budgets-83ffd.firebaseapp.com',
+  projectId: 'budgets-83ffd',
+  storageBucket: 'budgets-83ffd.firebasestorage.app',
+  messagingSenderId: '283214914221',
+  appId: '1:283214914221:web:a976bb56ad6dfcf9635c24'
+};
+
 const INCLUDE_TX_KEY = 'syncIncludeTransactions';
+const CHUNK_CHARS = 300000; // well under 1 MiB even at 3 bytes/char
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 export function get_sync_settings() {
   return { includeTransactions: localStorage.getItem(INCLUDE_TX_KEY) === '1' };
@@ -18,85 +36,61 @@ export function save_sync_settings({ includeTransactions }) {
   localStorage.setItem(INCLUDE_TX_KEY, includeTransactions ? '1' : '0');
 }
 
-let publicConfig = null;
-async function fetch_public_config() {
-  if (publicConfig) return publicConfig;
-  const res = await fetch(SYNC_ENDPOINT);
-  if (res.status === 404) throw new Error('not_configured');
-  if (!res.ok) throw new Error(`config_failed_${res.status}`);
-  publicConfig = await res.json();
-  return publicConfig;
+export function current_session() {
+  const user = auth.currentUser;
+  return user ? { uid: user.uid, email: user.email } : null;
 }
 
-let gsiReady = null;
-function load_gsi() {
-  if (gsiReady) return gsiReady;
-  gsiReady = new Promise((resolve, reject) => {
-    if (window.google?.accounts?.id) return resolve(window.google);
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.onload = () => resolve(window.google);
-    script.onerror = () => reject(new Error('gsi_load_failed'));
-    document.head.append(script);
-  });
-  return gsiReady;
+export async function sign_out() {
+  await signOut(auth);
 }
 
-function decode_id_token(idToken) {
-  const payload = idToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(atob(payload));
-}
-
-let session = null; // { idToken, email, sub, ... }
-export function current_session() { return session; }
-
-export function sign_out() {
-  session = null;
-  window.google?.accounts?.id?.disableAutoSelect?.();
-}
-
-// Renders Google's own "Sign in with Google" button into `container` - the
-// ID-token-based Google Identity Services API only supports its own
-// button/One-Tap UI, not a custom button triggering a popup. Throws
-// `not_configured` if the backend has no Google Client ID set yet.
+// Renders a "Sign in with Google" button into `container`. A session
+// restored from a previous visit calls `onSignedIn` right away.
 export async function render_google_button(container, onSignedIn) {
-  const { googleClientId } = await fetch_public_config();
-  if (!googleClientId) throw new Error('not_configured');
-  const google = await load_gsi();
-  google.accounts.id.initialize({
-    client_id: googleClientId,
-    auto_select: true,
-    callback: (response) => {
-      session = { idToken: response.credential, ...decode_id_token(response.credential) };
-      onSignedIn(session);
-    }
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = 'Sign in with Google';
+  button.addEventListener('click', async () => {
+    const { user } = await signInWithPopup(auth, new GoogleAuthProvider());
+    onSignedIn({ uid: user.uid, email: user.email });
   });
-  container.replaceChildren();
-  google.accounts.id.renderButton(container, { theme: 'outline', size: 'large', text: 'signin_with' });
+  container.replaceChildren(button);
+  await auth.authStateReady();
+  if (auth.currentUser) onSignedIn(current_session());
 }
 
-async function call_api(action, collection, data) {
-  if (!session) throw new Error('not_signed_in');
-  const res = await fetch(SYNC_ENDPOINT, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ idToken: session.idToken, action, collection, data })
-  });
-  if (res.status === 401) { session = null; throw new Error('session_expired'); }
-  if (!res.ok) throw new Error(`sync_failed_${res.status}`);
-  return res.json();
+function user_collection(name) {
+  if (!auth.currentUser) throw new Error('not_signed_in');
+  return collection(db, 'users', auth.currentUser.uid, `sync_${name}`);
 }
 
-// `collection` is one of 'setup' or 'transactions' - see index.html, which
+// `name` is one of 'setup' or 'transactions' - see index.html, which
 // decides what goes into each (setup = SETTING JSON, transactions = CSV
 // imports + manual entries + category overrides, only gathered when the
 // user opted in via the "also sync transaction data" checkbox).
-export async function push_data(collection, data) {
-  await call_api('push', collection, data);
+export async function push_data(name, data) {
+  const col = user_collection(name);
+  const text = JSON.stringify(data);
+  const count = Math.max(1, Math.ceil(text.length / CHUNK_CHARS));
+  const previous = await getDoc(doc(col, 'meta'));
+  const previousCount = previous.exists() ? previous.data().count : 0;
+  for (let i = 0; i < count; i++) {
+    await setDoc(doc(col, String(i)), { text: text.slice(i * CHUNK_CHARS, (i + 1) * CHUNK_CHARS) });
+  }
+  await setDoc(doc(col, 'meta'), { count, updatedAt: Date.now() });
+  for (let i = count; i < previousCount; i++) await deleteDoc(doc(col, String(i)));
 }
 
-export async function pull_data(collection) {
-  const { data } = await call_api('pull', collection, undefined);
-  return data;
+export async function pull_data(name) {
+  const col = user_collection(name);
+  const meta = await getDoc(doc(col, 'meta'));
+  if (!meta.exists()) return null;
+  const { count } = meta.data();
+  const chunks = new Array(count);
+  (await getDocs(col)).forEach(d => {
+    if (d.id !== 'meta' && Number(d.id) < count) chunks[Number(d.id)] = d.data().text;
+  });
+  if (chunks.some(c => c === undefined)) throw new Error('sync_incomplete');
+  return JSON.parse(chunks.join(''));
 }

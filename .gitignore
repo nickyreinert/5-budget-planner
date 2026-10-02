@@ -6,5 +6,5 @@ gocardless-proxy/.wrangler/
 node_modules/
 .env
 
-# Local Netlify folder
-.netlify
+# Local Vercel folder
+.vercel

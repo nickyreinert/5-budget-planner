@@ -10,4 +10,4 @@ STAMP="$(date -u +%Y%m%d%H%M%S)"
 sed -i.bak "s/const CACHE_NAME = '[^']*'/const CACHE_NAME = 'money-money-analyzer-${STAMP}'/" sw.js
 rm -f sw.js.bak
 
-npx --yes netlify-cli deploy --prod --dir=. --functions=netlify/functions
+npx --yes vercel deploy --prod
