@@ -2084,7 +2084,7 @@
             // (e.g. a PayPal collection account) commonly has several
             // clusters at very different amounts, which would otherwise all
             // show as selected/unselected together.
-            const clusterKey = cluster => `${cluster.payee}::${cluster.amountCents}`;
+            const clusterKey = cluster => `${cluster.payee}::${cluster.latestCents}`;
             const mergeBar = (ruleId && clusters.length > 1) ? `
                 <div class="tx-merge-bar">
                     <span>${t('wizard.mergeSelectionHint')}</span>
@@ -2100,7 +2100,7 @@
                 <tr class="tx-interval-header">
                     <td colspan="3">
                         <span class="tx-interval-header-label">
-                            ${ruleId ? `<input type="checkbox" class="tx-merge-checkbox" data-rule="${escape_budget(ruleId)}" data-key="${escape_budget(clusterKey(cluster))}" data-payee="${escape_budget(cluster.payee)}" data-name="${escape_budget(cluster.name)}" data-amount="${cluster.amountCents}" aria-label="${t('wizard.mergeSelectionHint')}: ${escape_budget(cluster.name)}" ${selected.has(clusterKey(cluster)) ? 'checked' : ''}>` : ''}
+                            ${ruleId ? `<input type="checkbox" class="tx-merge-checkbox" data-rule="${escape_budget(ruleId)}" data-key="${escape_budget(clusterKey(cluster))}" data-payee="${escape_budget(cluster.payee)}" data-name="${escape_budget(cluster.name)}" data-amount="${cluster.latestCents}" aria-label="${t('wizard.mergeSelectionHint')}: ${escape_budget(cluster.name)}" ${selected.has(clusterKey(cluster)) ? 'checked' : ''}>` : ''}
                             <span class="tx-interval-payee">${escape_budget(cluster.name)}</span>
                         </span>
                         <select class="tx-interval-select" data-rule="${escape_budget(opts.ruleId || '')}" data-payee="${escape_budget(cluster.payee)}" aria-label="${t('recurringExpense.interval')}: ${escape_budget(cluster.name)}">
@@ -2108,6 +2108,11 @@
                             <option value="3" ${cluster.months === 3 ? 'selected' : ''}>${t('week.interval.3')}</option>
                             <option value="6" ${cluster.months === 6 ? 'selected' : ''}>${t('week.interval.6')}</option>
                             <option value="12" ${cluster.months === 12 ? 'selected' : ''}>${t('week.interval.12')}</option>
+                        </select>
+                        <select class="tx-amount-mode-select" data-rule="${escape_budget(opts.ruleId || '')}" data-payee="${escape_budget(cluster.payee)}" aria-label="${t('recurringExpense.amountMode')}: ${escape_budget(cluster.name)}" title="${t('recurringExpense.amountModeHint')}">
+                            <option value="latest" ${cluster.amountMode === 'latest' ? 'selected' : ''}>${t('recurringExpense.amountLatest')}</option>
+                            <option value="max" ${cluster.amountMode === 'max' ? 'selected' : ''}>${t('recurringExpense.amountMax')}</option>
+                            <option value="average" ${cluster.amountMode === 'average' ? 'selected' : ''}>${t('recurringExpense.amountAverage')}</option>
                         </select>
                         <span class="tx-interval-monthly">≈ ${fmt_eur(cluster.monthlyCents)} ${t('fixExpense.perMonth')}</span>
                         ${cluster.active === false ? `<span class="tx-interval-ended" title="${t('fixExpense.contractEndedHint')}">${t('fixExpense.contractEnded')}</span>` : ''}
@@ -2195,9 +2200,12 @@
 
         // Manual per-payee interval override (Settings > Fix Expense/Income
         // rule previews only) - `onChange(ruleId, payee, months)`.
-        function wire_recurring_interval_selects(container, onChange) {
+        function wire_recurring_interval_selects(container, onChange, onAmountMode) {
             container.querySelectorAll('.tx-interval-select').forEach(select => {
                 select.addEventListener('change', () => onChange(select.dataset.rule, select.dataset.payee, Number(select.value)));
+            });
+            container.querySelectorAll('.tx-amount-mode-select').forEach(select => {
+                select.addEventListener('change', () => onAmountMode?.(select.dataset.rule, select.dataset.payee, select.value));
             });
         }
 
@@ -2850,6 +2858,13 @@
                 if (!rule) return;
                 rule.recurringOverrides ||= {};
                 rule.recurringOverrides[payee] = months;
+                persist_budgets();
+                render_rule_group_list(kind);
+            }, (ruleId, payee, mode) => {
+                const rule = (ruleSet.rules || []).find(r => r.id === ruleId);
+                if (!rule || !['latest', 'max', 'average'].includes(mode)) return;
+                rule.recurringAmountMode ||= {};
+                if (mode === 'latest') delete rule.recurringAmountMode[payee]; else rule.recurringAmountMode[payee] = mode;
                 persist_budgets();
                 render_rule_group_list(kind);
             });

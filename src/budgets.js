@@ -77,6 +77,10 @@ export function validate_budget_settings(settings, { checkSuggestionCaps = true 
       if (!r.recurringOverrides || typeof r.recurringOverrides !== 'object') fail('recurringOverrides must be an object');
       for (const months of Object.values(r.recurringOverrides)) if (![1,3,6,12].includes(months)) fail('recurringOverrides values must be 1, 3, 6 or 12');
     }
+    if (r.recurringAmountMode !== undefined) {
+      if (!r.recurringAmountMode || typeof r.recurringAmountMode !== 'object') fail('recurringAmountMode must be an object');
+      for (const mode of Object.values(r.recurringAmountMode)) if (!['latest', 'max', 'average'].includes(mode)) fail('recurringAmountMode values must be latest, max or average');
+    }
     if (r.matchers !== undefined) {
       if (!Array.isArray(r.matchers)) fail('matchers must be an array');
       for (const matcher of r.matchers) {

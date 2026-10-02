@@ -153,6 +153,16 @@ function fallback_group_for_category(ruleSet, topCategory) {
   return map[(topCategory || '').toLowerCase()] || FALLBACK_GROUP;
 }
 
+// Per-payee recurring settings of a Fix Expense/Income rule: the billing
+// interval (recurringOverrides) and which amount represents the cluster
+// (recurringAmountMode: 'latest' (default) | 'max' | 'average').
+function recurring_for(rule, payee) {
+  const intervalMonths = rule?.recurringOverrides?.[payee];
+  const amountMode = rule?.recurringAmountMode?.[payee];
+  if (!intervalMonths && !amountMode) return rule?.recurring;
+  return { ...(rule?.recurring || {}), ...(intervalMonths ? { intervalMonths } : {}), ...(amountMode ? { amountMode } : {}) };
+}
+
 // Classifies a single transaction against a rule set (highest priority
 // rule wins). A bank fallback is allowed only for a name in the active
 // settings catalog and when CSV categories have not been disabled.
@@ -163,13 +173,12 @@ export function classify(tx, ruleSet) {
     if (rule_matches(tx, rule)) {
       const contractMerge = contract_merge_for(tx, rule);
       const payee = String(tx.name || tx.Name || '').trim().toLocaleLowerCase();
-      const intervalMonths = rule.recurringOverrides?.[payee];
       return {
         ruleId: rule.id,
         contractId: contractMerge?.id,
         contractName: contractMerge?.name,
         incomeType: rule.incomeType,
-        recurring: intervalMonths ? { ...(rule.recurring || {}), intervalMonths } : rule.recurring,
+        recurring: recurring_for(rule, payee),
         label: rule.label,
         category: rule.category || rule.label,
         group: rule.group || FALLBACK_GROUP,
@@ -258,14 +267,13 @@ export function apply_manual_overrides(rows, overridesById, ruleSet) {
     const candidates = ruleByCategory[category] || [];
     const rule = candidates.find(rule => rule.group === r._cls?.group) || candidates[0];
     const payee = String(r.name || r.Name || '').trim().toLocaleLowerCase();
-    const intervalMonths = rule?.recurringOverrides?.[payee];
     r._cls = {
       ruleId: null,
       label: category,
       category,
       group: category === UNCATEGORIZED ? 'unclassified' : category === ADDITIONAL_INCOME ? 'income' : rule?.group || 'discretionary',
       incomeType: category === ADDITIONAL_INCOME ? 'other' : undefined,
-      recurring: intervalMonths ? { ...(rule.recurring || {}), intervalMonths } : rule?.recurring,
+      recurring: recurring_for(rule, payee),
       excluded: !!rule?.excludeFromTotals,
       source: 'manual'
     };

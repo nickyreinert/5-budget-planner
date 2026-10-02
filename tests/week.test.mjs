@@ -280,3 +280,17 @@ test('ignored bookings stay in main-budget and week lists with zero contribution
   ignored._ignored = false;
   assert.equal(build_week_report([ignored, active], monday).spentCents, 2000);
 });
+
+test('recurring amount mode picks latest (default), max or average of a payee cluster', () => {
+  const make = mode => [
+    tx('2026-07-01', -10000, 'Gym', 'fixed'), tx('2026-08-01', -12000, 'Gym', 'fixed'), tx('2026-09-01', -11000, 'Gym', 'fixed')
+  ].map(row => { row._cls.recurring = { intervalMonths: 1, ...(mode ? { amountMode: mode } : {}) }; return row; });
+  assert.equal(rule_monthly_equivalent(make()).totalCents, 11000, 'latest by default');
+  assert.equal(rule_monthly_equivalent(make('latest')).totalCents, 11000);
+  assert.equal(rule_monthly_equivalent(make('max')).totalCents, 12000);
+  assert.equal(rule_monthly_equivalent(make('average')).totalCents, 11000);
+  const rows = make('max');
+  assert.equal(build_budget_basis([...rows, tx('2026-09-25', 300000, 'Employer', 'income')]).fixedCents, 12000);
+  const raise = [tx('2025-09-01', -10000, 'Gym', 'fixed'), tx('2026-09-01', -11000, 'Gym', 'fixed')].map(row => { row._cls.recurring = { intervalMonths: 1, amountMode: 'average' }; return row; });
+  assert.equal(rule_monthly_equivalent(raise).totalCents, 10500);
+});

@@ -106,17 +106,28 @@ export function active_contracts(rows, refDate) {
       const latest = c.rows[0];
       const months = latest._cls?.recurring?.intervalMonths || interval_months(c.rows.map(r => r.date).reverse());
       if (months === null) return null;
+      const amountCents = cluster_amount_cents(c, latest._cls?.recurring?.amountMode);
       return {
         name: latest._cls?.contractName || latest.name || '(ohne Namen)',
         category: latest._cls.category,
         months,
-        amountCents: c.latestCents,
-        monthlyCents: Math.round(c.latestCents / months),
+        amountCents,
+        monthlyCents: Math.round(amountCents / months),
         lastDate: latest.date
       };
     })
     .filter(c => c && contract_is_active(c.lastDate, c.months, refDate))
     .sort((a, b) => b.monthlyCents - a.monthlyCents);
+}
+
+// Amount that represents a payee cluster: the newest booking ('latest',
+// default - follows price rises), the highest one ('max') or the rounded
+// mean of all bookings ('average'). Set per payee in Settings > Fix Expense.
+export function cluster_amount_cents(cluster, mode = 'latest') {
+  const amounts = cluster.rows.map(r => Math.abs(r.betrag_cents));
+  if (mode === 'max') return Math.max(...amounts);
+  if (mode === 'average') return Math.round(amounts.reduce((sum, cents) => sum + cents, 0) / amounts.length);
+  return cluster.latestCents;
 }
 
 // Groups rows by payee name + broadly similar amount (see AMOUNT_TOLERANCE),
@@ -172,13 +183,17 @@ export function rule_monthly_equivalent(rows, overrides = {}, refDate = null) {
     const originalPayee = (latest.name || '').trim().toLowerCase();
     const autoMonths = interval_months(c.rows.map(r => r.date).reverse()) || 1;
     const months = overrides[payee] || overrides[originalPayee] || latest._cls?.recurring?.intervalMonths || autoMonths;
+    const amountMode = latest._cls?.recurring?.amountMode || 'latest';
+    const amountCents = cluster_amount_cents(c, amountMode);
     return {
       payee,
       name: latest._cls?.contractName || transaction_display_name(latest) || '(ohne Namen)',
       months,
       autoMonths,
-      amountCents: c.latestCents,
-      monthlyCents: Math.round(c.latestCents / months),
+      amountMode,
+      amountCents,
+      latestCents: c.latestCents,
+      monthlyCents: Math.round(amountCents / months),
       lastDate: latest.date,
       active: refDate ? contract_is_active(latest.date, months, refDate) : true,
       rows: c.rows
