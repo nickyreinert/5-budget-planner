@@ -93,13 +93,13 @@ test('stored contract classifications remain available if writing the repair fai
   } finally { globalThis.localStorage = originalStorage; console.error = originalError; }
 });
 
-test('both presets group essentials, dining, leisure, child expenses and mobility', () => {
+test('both presets use the five default budgets: everyday, mobility, entertainment, hobbies, accessories', () => {
   for (const file of ['default_rules.json', 'default_rules.en.json']) {
     const preset = validate_budget_settings(JSON.parse(readFileSync(new URL(`../src/${file}`, import.meta.url))));
-    assert.deepEqual(preset.mainCategories.map(m => m.id), ['lebensmittel', 'restaurant', 'freizeit', 'kids', 'mobilitaet']);
+    assert.deepEqual(preset.mainCategories.map(m => m.id), ['alltag', 'mobilitaet', 'entertainment', 'hobbies', 'accessories']);
     const categories = file.includes('.en.')
-      ? [['Drugstore', 'lebensmittel'], ['Food Delivery', 'restaurant'], ['Gaming', 'freizeit'], ['Outing with Kids', 'kids'], ['Fuel', 'mobilitaet']]
-      : [['Drogerie', 'lebensmittel'], ['Lieferdienste', 'restaurant'], ['Gaming', 'freizeit'], ['Ausflug mit Kind', 'kids'], ['Tanken', 'mobilitaet']];
+      ? [['Drugstore', 'alltag'], ['Fuel', 'mobilitaet'], ['Food Delivery', 'entertainment'], ['Gaming', 'hobbies'], ['Hardware & Tools', 'accessories'], ['Car: Repairs, Rental & Accessories', null]]
+      : [['Drogerie', 'alltag'], ['Tanken', 'mobilitaet'], ['Lieferdienste', 'entertainment'], ['Gaming', 'hobbies'], ['Baumarkt & Werkzeug', 'accessories'], ['Auto: Werkstatt, Miete & Zubehör', null]];
     for (const [category, budget] of categories) assert.equal(budget_category(preset, category), budget);
   }
 });
