@@ -2593,6 +2593,16 @@
             `).join('');
         }
 
+        // "Betrag" only supports >, < and =; every other field only supports
+        // text operators. Switching the field leaves the old operator selected,
+        // so coerce it - otherwise an invalid combination gets saved and
+        // rejects the whole rule set (see validate_budget_settings).
+        function matcher_operator_for(field, operator) {
+            const numeric = ['gt', 'lt', 'equals'];
+            if (field === 'amount') return numeric.includes(operator) ? operator : 'gt';
+            return ['gt', 'lt'].includes(operator) ? 'contains' : operator;
+        }
+
         // Keeps every row exactly as edited, including ones with an empty
         // value - filtering those out here used to delete a matcher row the
         // moment you changed e.g. its field to "Betrag" before typing a
@@ -2603,7 +2613,7 @@
         function normalized_matchers(container) {
             return [...container.querySelectorAll('.rule-matcher-row')].map(row => ({
                 field: row.querySelector('[data-matcher-field]').value,
-                operator: row.querySelector('[data-matcher-operator]').value,
+                operator: matcher_operator_for(row.querySelector('[data-matcher-field]').value, row.querySelector('[data-matcher-operator]').value),
                 value: row.querySelector('[data-matcher-value]').value.trim(),
                 exclude: row.querySelector('[data-matcher-exclude]').checked
             }));
@@ -2669,7 +2679,7 @@
                 [element.querySelector('[data-matcher-field]'), element.querySelector('[data-matcher-operator]'), element.querySelector('[data-matcher-exclude]')].forEach(control => control.addEventListener('change', () => {
                     const matcher = {
                         field: element.querySelector('[data-matcher-field]').value,
-                        operator: element.querySelector('[data-matcher-operator]').value,
+                        operator: matcher_operator_for(element.querySelector('[data-matcher-field]').value, element.querySelector('[data-matcher-operator]').value),
                         value: element.querySelector('[data-matcher-value]').value.trim(),
                         exclude: element.querySelector('[data-matcher-exclude]').checked
                     };
@@ -3162,7 +3172,7 @@
                 [element.querySelector('[data-matcher-field]'), element.querySelector('[data-matcher-operator]'), element.querySelector('[data-matcher-exclude]')].forEach(control => control.addEventListener('change', () => {
                     drillTxState.matchers[index] = {
                         field: element.querySelector('[data-matcher-field]').value,
-                        operator: element.querySelector('[data-matcher-operator]').value,
+                        operator: matcher_operator_for(element.querySelector('[data-matcher-field]').value, element.querySelector('[data-matcher-operator]').value),
                         value: element.querySelector('[data-matcher-value]').value.trim(),
                         exclude: element.querySelector('[data-matcher-exclude]').checked
                     };
@@ -4096,7 +4106,7 @@
                 [element.querySelector('[data-matcher-field]'), element.querySelector('[data-matcher-operator]'), element.querySelector('[data-matcher-exclude]')].forEach(control => control.addEventListener('change', () => {
                     wizardBrowserState.matchers[index] = {
                         field: element.querySelector('[data-matcher-field]').value,
-                        operator: element.querySelector('[data-matcher-operator]').value,
+                        operator: matcher_operator_for(element.querySelector('[data-matcher-field]').value, element.querySelector('[data-matcher-operator]').value),
                         value: element.querySelector('[data-matcher-value]').value.trim(),
                         exclude: element.querySelector('[data-matcher-exclude]').checked
                     };
