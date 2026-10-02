@@ -21,7 +21,7 @@ const dataFile = live ? null : resolve(dataPath);
 const outputDir = live ? null : resolve(outputDirectory);
 const bridge = live ? start_bridge({
   port: Number(process.env.FIVE_BRIDGE_PORT || 8765),
-  allowedOrigins: (process.env.FIVE_ALLOWED_ORIGINS || 'http://localhost:3000,http://127.0.0.1:3000,https://5.1-1-1.de').split(',')
+  allowedOrigins: (process.env.FIVE_ALLOWED_ORIGINS || 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000,https://5.1-1-1.de').split(',')
 }) : null;
 const toolNames = ['list_categories', 'list_transactions', 'list_rules', 'propose_rules', 'propose_assignments', 'propose_category_maintenance'];
 const permissions = permissionsPath ? JSON.parse(await readFile(resolve(permissionsPath), 'utf8')) : null;
