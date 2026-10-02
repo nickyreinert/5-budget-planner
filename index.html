@@ -461,6 +461,7 @@
                             <label><input type="checkbox" class="mcp-tool" value="propose_rules"> propose_rules <small data-i18n="ai.proposeRules">Neue Regeln als Importdatei vorschlagen</small></label>
                             <label><input type="checkbox" class="mcp-tool" value="propose_assignments"> propose_assignments <small data-i18n="ai.proposeAssignments">Kategorien für einzelne Buchungen vorschlagen</small></label>
                             <label><input type="checkbox" class="mcp-tool" value="propose_category_maintenance"> propose_category_maintenance <small data-i18n="ai.proposeCategoryMaintenance">Kategorien zusammenführen, umbenennen und Buchungen verschieben</small></label>
+                            <label><input type="checkbox" class="mcp-tool" value="repair_rules"> repair_rules <small data-i18n="ai.repairRules">Ungültige Regelbedingungen reparieren (nur Live-Verbindung)</small></label>
                         </div>
                         <button type="button" id="mcpDownloadPermissionsBtn" data-i18n="ai.downloadPermissions">Berechtigungen herunterladen</button>
                         <p data-i18n="ai.mcpHint">Die Freigaben gelten nur für einen entsprechend eingerichteten lokalen MCP-Client; nach Änderungen neu starten.</p>
@@ -4725,6 +4726,29 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
                 const plan = plan_category_maintenance({ ...ruleSet, subBudgetCaps }, module_data, overridesById, change.operations);
                 await apply_category_plan(plan);
                 return { changes: plan.changes.map(({ action, category, target, affectedIds }) => ({ action, category, target, count: affectedIds.length })) };
+            }
+            if (change.kind === 'repair-rules') {
+                const repaired = [];
+                const rules = (ruleSet.rules || []).map(rule => {
+                    if (!Array.isArray(rule.matchers)) return rule;
+                    let changed = false;
+                    const matchers = rule.matchers.map(matcher => {
+                        const operator = matcher_operator_for(matcher.field, matcher.operator);
+                        const value = matcher.field === 'amount' && String(matcher.value ?? '').trim() && !Number.isFinite(Number(matcher.value)) ? '' : matcher.value;
+                        if (operator === matcher.operator && value === matcher.value) return matcher;
+                        changed = true;
+                        return { ...matcher, operator, value };
+                    });
+                    if (!changed) return rule;
+                    repaired.push(rule.id);
+                    return { ...rule, matchers };
+                });
+                if (!repaired.length) return { repaired };
+                const next = { ...ruleSet, rules };
+                validate_budget_settings(next, { checkSuggestionCaps: false });
+                ruleSet = next;
+                persist_budgets();
+                return { repaired };
             }
             throw new Error(`Unknown change: ${change.kind}`);
         }

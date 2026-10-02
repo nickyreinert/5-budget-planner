@@ -23,7 +23,7 @@ const bridge = live ? start_bridge({
   port: Number(process.env.FIVE_BRIDGE_PORT || 8765),
   allowedOrigins: (process.env.FIVE_ALLOWED_ORIGINS || 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000,https://5.1-1-1.de').split(',')
 }) : null;
-const toolNames = ['list_categories', 'list_transactions', 'list_rules', 'propose_rules', 'propose_assignments', 'propose_category_maintenance'];
+const toolNames = ['list_categories', 'list_transactions', 'list_rules', 'propose_rules', 'propose_assignments', 'propose_category_maintenance', 'repair_rules'];
 const permissions = permissionsPath ? JSON.parse(await readFile(resolve(permissionsPath), 'utf8')) : null;
 if (permissions && (!Array.isArray(permissions.allowedTools) || permissions.allowedTools.some(name => !toolNames.includes(name)))) {
   throw new Error('MCP permissions require an allowedTools array of known tool names');
@@ -103,6 +103,11 @@ if (enabled('propose_category_maintenance')) server.registerTool('propose_catego
   const path = await write_proposal(outputDir, categoryMaintenanceName, proposal);
   return { path, preview: proposal.preview, instruction: 'Review and apply this JSON via Settings > AI > Import category cleanup.' };
 }));
+
+if (live && enabled('repair_rules')) server.registerTool('repair_rules', {
+  description: 'Repair saved rules whose conditions are invalid (e.g. an amount condition with a text operator), which makes every other tool fail with a validation error. Fixes the operators in place and returns what changed. LIVE MODE only; applied to the running app immediately.',
+  inputSchema: {}
+}, run(async () => apply('repair_rules', { kind: 'repair-rules' })));
 
 if (live) {
   const port = await bridge.listening;
