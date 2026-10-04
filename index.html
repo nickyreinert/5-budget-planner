@@ -679,7 +679,13 @@
         <div class="dialog-actions"><button type="button" id="cancelTxRowActions" data-i18n="modal.cancel">Abbrechen</button></div>
     </dialog>
 
-    <dialog id="categoryMaintenanceDialog" class="review-dialog" aria-labelledby="categoryMaintenanceTitle">
+    <dialog id="weekTxDialog" class="review-dialog" aria-labelledby="weekTxTitle">
+        <h2 id="weekTxTitle" data-i18n="week.allBookingsTitle">Alle Buchungen dieser Woche</h2>
+        <div id="weekTxBody"></div>
+        <div class="dialog-actions"><button type="button" id="closeWeekTx" data-i18n="modal.close">Schließen</button></div>
+    </dialog>
+
+    <dialog id="categoryMaintenanceDialog"class="review-dialog" aria-labelledby="categoryMaintenanceTitle">
         <h2 id="categoryMaintenanceTitle" data-i18n="ai.categoryReviewTitle">Kategorie-Bereinigung prüfen</h2>
         <p data-i18n="ai.categoryReviewHint">Regeln und Buchungen werden gemeinsam aktualisiert. Die Originalbuchungen bleiben erhalten.</p>
         <div id="categoryMaintenanceChanges"></div>
@@ -701,7 +707,7 @@
         import { csv_records, csv_import_ranges, reconcile_transactions, transaction_source_label, reconciliation_summary, get_manual_match_days, save_manual_match_days } from './src/transactions.js';
         import { category_catalog, sort_categories, fixed_expense_categories, transaction_category_options, is_budget_category, is_spending_classification, UNCATEGORIZED, ADDITIONAL_INCOME, split_category, join_category } from './src/categories.js';
         import { upsert_imported_entries, load_imported_entries, load_import_ranges, load_reconciliation_decisions, save_reconciliation_decision } from './src/db.js';
-        import { apply_amount_overrides, apply_note_overrides, apply_date_overrides, apply_ignored_transactions, is_real_cashflow, transaction_list_order } from './src/data.js';
+        import { apply_amount_overrides, apply_note_overrides, apply_date_overrides, apply_ignored_transactions, is_real_cashflow, is_visible_transaction, transaction_list_order } from './src/data.js';
         import { load_ignored_transactions, save_ignored_transaction, clear_transaction_data } from './src/db.js';
         import { load_amount_overrides, save_amount_override, load_all_overrides, save_overrides, add_manual_entry, load_manual_entries, delete_manual_entry, load_note_overrides, save_note_override, load_date_overrides, save_date_override, load_effective_period_overrides, save_effective_period_override, clear_effective_period_override } from './src/db.js';
         import {
@@ -1022,10 +1028,32 @@
             weekMonday = add_days(weekMonday, 7);
             render_week();
         });
+        // First click jumps to the current week; clicking again (already on
+        // it) lists that week's transactions.
         document.getElementById('weekLabel').addEventListener('click', () => {
+            if (weekMonday.getTime() === week_start(new Date()).getTime()) {
+                render_week_tx_dialog();
+                document.getElementById('weekTxDialog').showModal();
+                return;
+            }
             weekMonday = week_start(new Date());
             render_week();
         });
+        document.getElementById('closeWeekTx').addEventListener('click', () => document.getElementById('weekTxDialog').close());
+
+        // Newest first. Unlike transaction_list_order, ignored rows are not
+        // pushed to the end - the list is purely by date.
+        function render_week_tx_dialog() {
+            const end = add_days(weekMonday, 7);
+            const rows = module_data
+                .filter(r => is_visible_transaction(r) && r.date >= weekMonday && r.date < end)
+                .sort((a, b) => b.date - a.date);
+            const body = document.getElementById('weekTxBody');
+            body.innerHTML = rows.length
+                ? `<table class="transaction-rows"><colgroup><col><col style="width:20px"></colgroup>${rows.map(render_tx_row).join('')}</table>`
+                : `<p>${t('week.noBookings')}</p>`;
+            wire_tx_rows(body);
+        }
 
         // ===== Shared transaction row: used by both the "Alle Buchungen"
         // breakdown and a sub-budget's expanded transaction list. The name
@@ -1476,6 +1504,7 @@
                 week: iso_week_number(weekMonday)
             });
             document.getElementById('weekLabel').classList.toggle('current-week', weekMonday.getTime() === week_start(new Date()).getTime());
+            if (document.getElementById('weekTxDialog').open) render_week_tx_dialog();
 
             const today = new Date();
             const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
