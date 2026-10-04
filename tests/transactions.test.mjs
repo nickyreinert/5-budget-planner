@@ -92,7 +92,7 @@ test('booked DKB sync matches a manual entry by date and signed cents and retain
   const {transaction_to_row}=await import('../src/gocardless.js');
   const bank={...transaction_to_row({bookingDate:'2026-09-20',transactionAmount:{amount:'-12.34'},creditorName:'Bank merchant'}),id:'gc_dkb_1',source:'gocardless',_account:'DKB'};
   const manual=row({id:'manual-1',_txId:'manual:1',source:'manual',Kategorie:'Dining'});
-  const settings={rules:[{id:'bank',category:'Food',group:'essential',namePattern:'Bank merchant'}],categoryMappings:{Dining:'daily'},mainCategories:[{id:'daily',label:'Daily'}]};
+  const settings={rules:[{id:'bank',category:'Food',group:'essential',namePattern:'Bank merchant'},{id:'dining',category:'Dining',group:'essential',matchers:[{field:'any',operator:'contains',value:'',exclude:false}]}],mainCategories:[{id:'daily',label:'Daily'}]};
   const result=reconcile_transactions([], [bank,manual]);
   classify_all(result,settings);apply_manual_overrides(result,{},settings);
   assert.equal(result.length,1);assert.equal(result[0]._cls.category,'Dining');assert.equal(result[0]._matchedManualId,'manual-1');

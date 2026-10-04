@@ -8,7 +8,6 @@ const origin = 'http://localhost:3000';
 const settings = {
   groups: [{ id: 'discretionary', label: 'Budget' }],
   mainCategories: [{ id: 'food', label: 'Food' }],
-  categoryMappings: { Food: 'food' },
   rules: [{ id: 'old', category: 'Food', label: 'Food', group: 'discretionary', namePattern: 'MARKET', priority: 1 }]
 };
 const data = {

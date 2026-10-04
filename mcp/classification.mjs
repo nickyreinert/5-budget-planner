@@ -81,7 +81,6 @@ export function propose_rule(settings, data, { category, field, text, exact = fa
   if ([UNCATEGORIZED, ADDITIONAL_INCOME].includes(category)) throw new Error('Choose a specific existing expense category');
   if (!['name', 'purpose'].includes(field) || typeof text !== 'string' || !text.trim() || text.length > 200) throw new Error('Provide a name or purpose and nonempty text (max 200 chars)');
   const template = settings.rules.find(rule => (rule.category || rule.label) === category);
-  if (!template && !Object.hasOwn(settings.categoryMappings || {}, category)) throw new Error('Category has no mapping or rule');
   if (template && ['fixed', 'income', 'internal_transfer'].includes(template.group)) throw new Error('Recurring, income and transfer rules require manual review in the app');
   const escaped = text.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const rule = {
@@ -90,7 +89,6 @@ export function propose_rule(settings, data, { category, field, text, exact = fa
     priority: Math.max(0, ...settings.rules.map(item => item.priority || 0)) + 1,
     ...(field === 'name' ? { namePattern: exact ? `^${escaped}$` : escaped } : { verwendungPattern: exact ? `^${escaped}$` : escaped })
   };
-  if (template?.budgetCategory) rule.budgetCategory = template.budgetCategory;
   if (template?.incomeType) rule.incomeType = template.incomeType;
   const before = classified_rows(settings, data);
   const candidate = { ...settings, rules: [...settings.rules, rule] };

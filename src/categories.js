@@ -15,9 +15,9 @@ export function is_budget_category(settings, category, classification = null) {
 
 export function category_catalog(settings, expenseOnly = false) {
   const rules = settings.rules || [];
+  // A budget id on its own is the budget's general category (no subcategory).
   const names = [UNCATEGORIZED, ...(!expenseOnly ? [ADDITIONAL_INCOME] : []), ...rules.map(r => r.category || r.label),
-    ...Object.keys(settings.categoryMappings || {}),
-    ...(settings.mainCategories || []).map(m => m.entryCategory || m.label)];
+    ...(settings.mainCategories || []).map(m => m.id)];
   return [...new Set(names.filter(Boolean))].filter(c => !expenseOnly || is_budget_category(settings, c));
 }
 

@@ -1,4 +1,4 @@
-import { category_catalog, is_spending_classification, UNCATEGORIZED, ADDITIONAL_INCOME } from './categories.js';
+import { category_catalog, is_spending_classification, join_category, UNCATEGORIZED, ADDITIONAL_INCOME } from './categories.js';
 import { ensure_budget_coverage, validate_budget_settings } from './budgets.js';
 import { tx_id } from './data.js';
 
@@ -44,13 +44,18 @@ export function plan_category_maintenance(settings, rows, overrides, operations)
     const names = category_catalog(candidate);
     const source = action === 'move' ? null : categoryName(operation.category);
     const target = operation.target === undefined ? null : categoryName(operation.target);
+    if (action === 'rename' && (candidate.mainCategories || []).some(main => main.id === source)) throw new Error('A budget\'s general category cannot be renamed; rename the budget label instead');
     if (source && protectedCategories.has(source)) throw new Error('The fallback and other-income categories cannot be removed or renamed');
     if (action === 'create') {
       if (names.includes(source)) throw new Error('Category already exists: ' + source);
       if (operation.budgetId && !(candidate.mainCategories || []).some(main => main.id === operation.budgetId)) throw new Error('Unknown budget');
-      candidate.categoryMappings ||= {};
-      candidate.categoryMappings[source] = operation.budgetId || '';
-      changes.push({ action, category: source, target: null, affectedIds: [] });
+      // A new category is an empty rule, like a Fix Expense row without matchers yet.
+      const created = operation.budgetId ? join_category(operation.budgetId, source) : source;
+      if (names.includes(created)) throw new Error('Category already exists: ' + created);
+      let id = 'category_' + Date.now(), n = 0;
+      while (candidate.rules.some(rule => rule.id === id)) id = `category_${Date.now()}_${++n}`;
+      candidate.rules.push({ id, label: created, category: created, group: 'discretionary', matchers: [{ field: 'any', operator: 'contains', value: '', exclude: false }], priority: 0 });
+      changes.push({ action, category: created, target: null, affectedIds: [] });
       continue;
     }
     if (action !== 'move' && !names.includes(source)) throw new Error('Unknown category: ' + source);
@@ -70,7 +75,7 @@ export function plan_category_maintenance(settings, rows, overrides, operations)
       ids = [...currentCategory].filter(([, category]) => category === source).map(([id]) => id);
       if (target && action !== 'rename' && category_role(candidate, source) !== category_role(candidate, target)) throw new Error('Cannot merge recurring, income, transfer and spending categories together');
       if (action === 'delete' && (target || ids.length || Object.values(nextOverrides).includes(source))) throw new Error('Only unused categories can be deleted; merge a used category first');
-      if (action === 'delete' && (candidate.mainCategories || []).some(main => (main.entryCategory || main.label) === source)) throw new Error('Rename a general budget category instead of deleting it');
+      if (action === 'delete' && (candidate.mainCategories || []).some(main => main.id === source)) throw new Error('A budget\'s general category cannot be deleted');
     }
     for (const id of ids) { nextOverrides[id] = target; currentCategory.set(id, target); }
     if (action !== 'move') {
@@ -82,10 +87,6 @@ export function plan_category_maintenance(settings, rows, overrides, operations)
         rule.category = target;
         if (rule.label === source) rule.label = target;
       }
-      candidate.categoryMappings ||= {};
-      if (target && !Object.hasOwn(candidate.categoryMappings, target) && Object.hasOwn(candidate.categoryMappings, source)) candidate.categoryMappings[target] = candidate.categoryMappings[source];
-      delete candidate.categoryMappings[source];
-      for (const main of candidate.mainCategories || []) if ((main.entryCategory || main.label) === source && target) main.entryCategory = target;
       redirects[source] = target;
     }
     changes.push({ action, category: source, target, affectedIds: [...ids] });

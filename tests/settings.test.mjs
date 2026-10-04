@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { settings_changes, apply_settings_changes, manual_rule_ids } from '../src/settings.js';
 import { classify } from '../src/rules.js';
 import { validate_budget_settings } from '../src/budgets.js';
-const baseline = { groups:[],rules:[{id:'a',category:'Food',group:'essential',namePattern:'Shop',priority:1}],mainCategories:[{id:'food',label:'Food'}],categoryMappings:{Food:'food'},subBudgetCaps:{food:5000} };
-test('local rules, deletions, mappings and limits survive default import choices', () => {
-  const local=structuredClone(baseline); local.rules[0].category='Groceries';local.subBudgetCaps.food=7000; delete local.categoryMappings.Food;
+const baseline = { groups:[],rules:[{id:'a',category:'Food',group:'essential',namePattern:'Shop',priority:1}],mainCategories:[{id:'food',label:'Food'}],subBudgetCaps:{food:5000} };
+test('local rules, deletions and limits survive default import choices', () => {
+  const local=structuredClone(baseline); local.rules[0].category='Groceries';local.subBudgetCaps.food=7000;
   const incoming=structuredClone(baseline);incoming.rules[0].category='Shopping';incoming.subBudgetCaps.food=6000;incoming.name='LLM proposal';
   const changes=settings_changes(local,incoming,baseline);
   const merged=apply_settings_changes(local,changes,new Set(changes.map((c,i)=>c.protected?-1:i)));
-  assert.equal(merged.rules[0].category,'Groceries');assert.equal(merged.subBudgetCaps.food,7000);assert.equal(merged.categoryMappings.Food,undefined);assert.equal(merged.name,'LLM proposal');
+  assert.equal(merged.rules[0].category,'Groceries');assert.equal(merged.subBudgetCaps.food,7000);assert.equal(merged.name,'LLM proposal');
 });
 test('manual rule beats imported rule even when imported numeric priority is higher', () => {
   const local=structuredClone(baseline);local.rules[0].category='Local';

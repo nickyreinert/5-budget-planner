@@ -4,10 +4,10 @@ import { category_catalog, fixed_expense_categories, transaction_category_option
 import { classify, classify_all, apply_manual_overrides } from '../src/rules.js';
 import { enrich_row, tx_id } from '../src/data.js';
 import { default_csv_config, get_csv_config } from '../src/csv_config.js';
-const settings = { rules: [{ id: 'food', category: 'Food', group: 'essential', kategoriePattern: 'Groceries' }], mainCategories: [{ id: 'daily', label: 'Daily' }], categoryMappings: { Dining: 'daily' } };
+const settings = { rules: [{ id: 'food', category: 'daily.Food', group: 'essential', kategoriePattern: 'Groceries' }, { id: 'dining', category: 'Dining', group: 'essential' }], mainCategories: [{ id: 'daily', label: 'Daily' }] };
 
 test('only settings names form the catalog, with favorites sorted first', () => {
-  assert.deepEqual(sort_categories(category_catalog(settings), ['Food']), ['Unkategorisiert', 'Food', 'Daily', 'Dining', 'Zusätzliche Einnahmen']);
+  assert.deepEqual(sort_categories(category_catalog(settings), ['daily.Food']), ['Unkategorisiert', 'daily.Food', 'daily', 'Dining', 'Zusätzliche Einnahmen']);
   assert.ok(!category_catalog(settings).includes('Crypto'));
   assert.deepEqual(category_catalog({ rules: [], mainCategories: [] }), ['Unkategorisiert', 'Zusätzliche Einnahmen']);
 });
@@ -23,11 +23,12 @@ test('recurring-contract picker only offers reusable fixed-expense categories', 
   assert.deepEqual(fixed_expense_categories(ruleSet, ['Insurance']), ['Insurance', 'Rent']);
 });
 
-test('spending pickers exclude legacy recurring mappings, including matching main-budget names', () => {
-  const settings = { rules: [{ category: 'Insurance', group: 'fixed' }], mainCategories: [{ id: 'housing', label: 'Insurance' }], categoryMappings: { Insurance: 'housing', Food: 'housing' } };
+test('spending pickers exclude recurring categories; a budget id is its general category', () => {
+  const settings = { rules: [{ category: 'Insurance', group: 'fixed' }, { category: 'housing.Food', group: 'essential' }], mainCategories: [{ id: 'housing', label: 'Housing' }] };
   assert.ok(category_catalog(settings).includes('Insurance'));
   assert.ok(!category_catalog(settings, true).includes('Insurance'));
-  assert.ok(category_catalog(settings, true).includes('Food'));
+  assert.ok(category_catalog(settings, true).includes('housing.Food'));
+  assert.ok(category_catalog(settings, true).includes('housing'));
   assert.deepEqual(fixed_expense_categories(settings), ['Insurance']);
 });
 
@@ -38,7 +39,7 @@ test('transaction pickers keep spending, recurring, income and transfers separat
     { category: 'Salary', group: 'income' },
     { category: 'Between accounts', group: 'internal_transfer' }
   ], mainCategories: [{ id: 'food', label: 'Food' }] };
-  assert.deepEqual(transaction_category_options(settings, 'unclassified'), ['Unkategorisiert', 'Food']);
+  assert.deepEqual(transaction_category_options(settings, 'unclassified'), ['Unkategorisiert', 'food', 'Food']);
   assert.deepEqual(transaction_category_options(settings, 'fixed'), ['Unkategorisiert', 'Software & Abos']);
   assert.deepEqual(transaction_category_options(settings, 'income'), ['Unkategorisiert', 'Salary', 'Zusätzliche Einnahmen']);
   assert.deepEqual(transaction_category_options(settings, 'internal_transfer'), ['Unkategorisiert', 'Between accounts']);
@@ -69,7 +70,7 @@ test('bank labels and obsolete overrides cannot introduce unknown categories', (
 
 test('ignore CSV categories blocks category rules and fallback, but keeps merchant rules', () => {
   const row = enrich_row({ Name: 'Shop', Kategorie: 'Groceries', Betrag: '-10' });
-  assert.equal(classify(row, settings).category, 'Food');
+  assert.equal(classify(row, settings).category, 'daily.Food');
   row._ignoreCsvCategories = true;
   assert.equal(classify(row, settings).category, 'Unkategorisiert');
   assert.equal(classify(row, { rules: [{ id: 'shop', category: 'Food', namePattern: 'Shop' }] }).category, 'Food');

@@ -300,7 +300,7 @@
                     <div id="budgetRecommendation" class="settings-summary-sticky"></div>
                     <section class="settings-section recurring-settings-section">
                     <p data-i18n="budgets.intro">Setze ein wöchentliches Limit für Kategorien, die du im Blick behalten willst. Nur Kategorien mit Limit erscheinen als Sub-Budget auf der Wochenübersicht.</p>
-                    <div id="mainCategoryEditor"></div><button type="button" id="addMainCategory">+ Budget</button><div id="categoryMappingEditor"></div>
+                    <div id="mainCategoryEditor"></div><button type="button" id="addMainCategory">+ Budget</button>
                     </section>
                 </div>
 
@@ -644,10 +644,6 @@
     <dialog id="txEditDialog" class="review-dialog" aria-labelledby="txEditTitle">
         <h2 id="txEditTitle" data-i18n="txEdit.title">Buchung bearbeiten</h2>
         <label><span id="txEditCategoryLabel" data-i18n="table.kategorie">Kategorie</span><button type="button" id="txEditCategory" class="category-picker-btn" data-category=""></button></label>
-        <div id="txEditBudgetField">
-            <label><span data-i18n="txEdit.budget">Hauptbudget</span><select id="txEditBudget"></select></label>
-            <p class="dialog-hint" data-i18n="txEdit.budgetHint">Budgets werden pro Kategorie geführt – die Zuordnung gilt für alle Buchungen dieser Kategorie.</p>
-        </div>
         <label><span data-i18n="txEdit.note">Notiz / Verwendungszweck</span><input type="text" id="txEditNote"></label>
         <label><span data-i18n="txEdit.date">Datum</span><input type="date" id="txEditDate"></label>
         <label><span data-i18n="txEdit.reportingDate">Budget-/Auswertungsdatum für wiederkehrende Buchungen</span><input type="date" id="txEditEffectiveDate"></label>
@@ -713,7 +709,7 @@
             build_budget_basis, build_week_report, build_sub_budget_report, build_main_budget_report, category_color,
             week_start, add_days, iso_week_number, top_categories, rule_monthly_equivalent, interval_months, build_spending_plan, weekly_spending_limit
         } from './src/week.js';
-        import { get_sub_budgets, save_sub_budgets, budget_category, assign_budget_category, validate_budget_settings, ensure_budget_coverage } from './src/budgets.js';
+        import { get_sub_budgets, save_sub_budgets, budget_category, validate_budget_settings, ensure_budget_coverage } from './src/budgets.js';
         import { push_digit, pop_digit, buffer_to_cents } from './src/keypad.js';
         import { init_responsive_selects, fit_picker_dialogs } from './src/pickers.js';
         import { plan_category_maintenance, category_maintenance_revision } from './src/category_maintenance.js';
@@ -789,7 +785,7 @@
             apply_manual_overrides(module_data, overridesById, ruleSet);
             reconcile_paypal(module_data, Math.max(7, get_transfer_max_days()), splitIds, ruleSet);
             apply_ignored_transactions(module_data, ignoredTransactions);
-            ensure_budget_coverage(ruleSet, module_data);
+            ensure_budget_coverage(ruleSet);
             apply_effective_periods(module_data, effectivePeriodOverrides);
         }
 
@@ -858,21 +854,48 @@
         }
 
         // A category typed via a popover's "+ Kategorie hinzufügen" form is
-        // just a raw string, not yet a real rule/category-mapping/main-
-        // budget entry - apply_manual_overrides() only accepts overrides
-        // whose category is already in category_catalog(), so assigning it
-        // straight away was SILENTLY REJECTED (the popover closed, but the
-        // transaction kept its old category and the "new" category never
-        // showed up again anywhere, since it was never actually recorded).
-        // Registering it as an explicitly-unassigned category mapping first
-        // (same as any category with no main-budget yet) makes it "known"
-        // before the assignment, and it can be dragged into a budget
-        // afterward like any other category.
+        // just a raw string until a rule carries it - apply_manual_overrides()
+        // only accepts categories that are in category_catalog(), so the
+        // assignment would be silently rejected. Like a new Fix Expense row,
+        // it is registered as a rule without matchers first; typing
+        // "<budgetId>.<sub>" files it under that budget, anything else stays
+        // unassigned.
         async function create_and_assign_category(id, category) {
-            ruleSet.categoryMappings ||= {};
-            if (!(category in ruleSet.categoryMappings)) ruleSet.categoryMappings[category] = '';
+            if (!category_catalog(ruleSet).includes(category)) {
+                const maxPriority = (ruleSet.rules || []).reduce((m, r) => Math.max(m, r.priority || 0), 0);
+                (ruleSet.rules ||= []).push({
+                    id: RULE_GROUP_EDITORS.spending.idPrefix + Date.now(), group: 'discretionary', category, label: category,
+                    matchers: [{ field: 'any', operator: 'contains', value: '', exclude: false }],
+                    priority: maxPriority + 10
+                });
+            }
             persist_budgets();
             await assign_category([id], category);
+        }
+
+        // Settings in the old model (flat categories + categoryMappings) are
+        // converted by ensure_budget_coverage(), which only knows the settings.
+        // The stored per-transaction assignments, manual entries and favorites
+        // follow here, once.
+        async function apply_category_renames(renames) {
+            if (!renames || !Object.keys(renames).length) return;
+            const renamed = category => Object.hasOwn(renames, category) ? renames[category] : category;
+            const pairs = Object.entries(overridesById).filter(([, category]) => Object.hasOwn(renames, category)).map(([id, category]) => [id, renames[category]]);
+            if (pairs.length) await save_overrides(pairs);
+            pairs.forEach(([id, category]) => { overridesById[id] = category; });
+            for (const record of await load_manual_entries()) {
+                if (Object.hasOwn(renames, record.Kategorie)) await add_manual_entry({ ...record, Kategorie: renames[record.Kategorie] });
+            }
+            favoriteCategories = [...new Set(favoriteCategories.map(renamed))];
+            localStorage.setItem('favoriteCategories', JSON.stringify(favoriteCategories));
+        }
+
+        // Applies and clears the renames the settings migration left behind.
+        async function finish_category_migration() {
+            if (!ruleSet._categoryRenames) return;
+            await apply_category_renames(ruleSet._categoryRenames);
+            delete ruleSet._categoryRenames;
+            save_rule_set(ruleSet);
         }
 
         // ===== THEME TOGGLE (light/dark, next to the settings gear) =====
@@ -1242,27 +1265,31 @@
             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         }
 
-        // Budgets are tracked per transaction category, not per booking - so
-        // both this dropdown and the drag & drop below re-file the whole
-        // category, which the dialog hint spells out.
-        function render_tx_budget_select(category, row) {
-            const select = document.getElementById('txEditBudget');
+        function render_tx_category_label(category, row) {
             const classification = category === row._cls?.category ? row._cls : null;
-            const allowed = row.in_out === 'out' && is_budget_category(ruleSet, category, classification);
-            document.getElementById('txEditBudgetField').hidden = !allowed;
-            select.disabled = !allowed;
-            select.replaceChildren();
-            select.add(new Option(t('budgets.unassigned'), ''));
-            if (allowed) (ruleSet.mainCategories || []).forEach(m => select.add(new Option(m.label, m.id)));
-            select.value = allowed ? category_to_main(category, classification) || '' : '';
-            const recurring = classification ? classification.group === 'fixed' : !allowed && fixed_expense_categories(ruleSet).includes(category);
+            const recurring = classification ? classification.group === 'fixed' : fixed_expense_categories(ruleSet).includes(category);
             const label = document.getElementById('txEditCategoryLabel');
             label.dataset.i18n = recurring ? 'txEdit.recurringCategory' : 'table.kategorie';
             label.textContent = t(label.dataset.i18n);
         }
 
-        function assign_category_to_budget(category, budgetId) {
-            if (!assign_budget_category(ruleSet, category, budgetId)) return;
+        // A spending category is "<budgetId>[.<sub>]", so moving it to another
+        // budget (drag & drop on the Week tab) only changes the parent part and
+        // follows the rule, assignments and favorites through apply_category_change().
+        // Categories outside any budget keep their whole name as the sub part.
+        function category_in_budget(category, budgetId) {
+            const { parent, sub } = split_category(category);
+            const rest = (ruleSet.mainCategories || []).some(m => m.id === parent) ? sub : category;
+            return budgetId ? join_category(budgetId, rest) : (rest ?? t('fixExpense.generalSubcategory'));
+        }
+
+        async function assign_category_to_budget(category, budgetId) {
+            if (!is_budget_category(ruleSet, category) || (ruleSet.mainCategories || []).some(m => m.id === category)) return;
+            if (budgetId && !(ruleSet.mainCategories || []).some(m => m.id === budgetId)) return;
+            const next = category_in_budget(category, budgetId);
+            if (next === category) return;
+            if (collect_category_options().includes(next)) { alert(t('budgets.categoryExists')); return; }
+            await apply_category_change(category, next, false);
             persist_budgets();
             reclassify();
             render_all();
@@ -1281,9 +1308,9 @@
             categoryButton.onclick = () => open_category_popover(categoryButton, transaction_category_options(ruleSet, row._cls?.group, favoriteCategories), (category) => {
                 categoryButton.dataset.category = category;
                 categoryButton.textContent = category;
-                render_tx_budget_select(category, row);
+                render_tx_category_label(category, row);
             });
-            render_tx_budget_select(row._cls?.category || '', row);
+            render_tx_category_label(row._cls?.category || '', row);
             document.getElementById('txEditNote').value = row.verwendungszweck || '';
             document.getElementById('txEditDate').value = iso_date_string(row.date);
             document.getElementById('txEditEffectiveDate').value = iso_date_string(reporting_date(row));
@@ -1424,11 +1451,6 @@
             }
             await Promise.all(tasks);
             if (row.source === 'manual') await merge_manual_entries();
-            const budgetSelect = document.getElementById('txEditBudget');
-            const classification = category === row._cls?.category ? row._cls : null;
-            if (!budgetSelect.disabled && row.in_out === 'out' && is_budget_category(ruleSet, category, classification) && budgetSelect.value !== (category_to_main(category, classification) || '')) {
-                assign_category_to_budget(category, budgetSelect.value);
-            }
             reclassify();
             render_all();
             render_week();
@@ -1611,17 +1633,12 @@
             // A plain rename follows the renamed rules by itself - only merging
             // into another category pins the currently matched rows as overrides.
             const affected = remove ? module_data.filter(r => r._cls?.category === old).map(tx_id) : [];
-            const nextBudget = category_to_main(remove ? next : old);
             const nextGroup = ruleSet.rules.find(r => r.category === next)?.group;
             ruleSet.rules.forEach(r => {
                 if ((r.category || r.label) !== old) return;
                 r.category = next; r.label = next;
-                if (remove) { r.group = nextGroup || 'discretionary'; r.budgetCategory = nextBudget; }
+                if (remove) r.group = nextGroup || 'discretionary';
             });
-            ruleSet.categoryMappings ||= {};
-            delete ruleSet.categoryMappings[old];
-            if (nextBudget) ruleSet.categoryMappings[next] = nextBudget;
-            (ruleSet.mainCategories || []).forEach(m => { if ((m.entryCategory || m.label) === old) m.entryCategory = next; });
             favoriteCategories = [...new Set(favoriteCategories.map(c => c === old ? next : c))];
             localStorage.setItem('favoriteCategories', JSON.stringify(favoriteCategories));
             const overrideIds = new Set([...affected, ...Object.keys(overridesById).filter(id => overridesById[id] === old)]);
@@ -2036,15 +2053,6 @@
             container.querySelectorAll('[data-chart-target]').forEach(btn => btn.onclick = () => jump_to_chart(btn.dataset.chartTarget));
         }
 
-        // Last-3-months preview rows for one already-classified transaction
-        // category - shared by the Budgets category chips and reused as the
-        // model for the Fix Expense / Income rule previews below.
-        function preview_rows_for_category(category) {
-            const now = module_data.length ? build_budget_basis(module_data).refDate : new Date();
-            const windowStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-            return category_transactions(module_data, category, { includeIgnored: true }).filter(r => is_spending_classification(r._cls) && r.date >= windowStart && r.date <= now);
-        }
-
         function format_month_year(date) {
             return date.toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
         }
@@ -2090,7 +2098,7 @@
         // expense" merging (e.g. a PayPal settlement leg + the merchant
         // charge it pays for both showing up separately) - keyed by ruleId,
         // survives re-renders but not page reloads (purely a transient
-        // selection, same tier as expandedCatChips/RULE_GROUP_EDITORS
+        // selection, same tier as RULE_GROUP_EDITORS
         // Sets elsewhere).
         const ruleMergeSelections = new Map();
         // Clustering uses the FULL match history (see rule_all_matches), so a
@@ -2230,36 +2238,30 @@
         }
 
         // One merged row per budget: name, weekly cap, reorder/remove - plus
-        // a collapsible, drag & drop-enabled list of the transaction
-        // categories currently assigned to it. A permanent, uneditable
-        // "Unassigned" group (id "") catches everything with no mapping;
-        // dragging a category there (or its − button) explicitly clears the
-        // mapping instead of letting it fall back to a rule's default budget.
-        // Each category chip is itself a second expand/collapse level,
-        // previewing that category's last 3 months of transactions.
-        let expandedCatChips = new Set();
+        // a collapsible list of the budget's subcategories. A subcategory is a
+        // rule whose category is "<budgetId>.<sub>" (exactly like Fix Expense
+        // rows are "<parent>.<sub>"), so the budget follows from the name.
+        // A permanent, uneditable "Unassigned" group catches rules whose
+        // category has no budget id in front; dragging a row there removes
+        // that prefix.
         // Spending rules (the ones that put transactions into a transaction
         // category) - everything except fixed costs, income and transfers.
-        function spending_rules_for(category) {
-            if (category === UNCATEGORIZED) return [];
-            return (ruleSet.rules || []).filter(r => (r.category || r.label) === category && !['fixed', 'income', 'internal_transfer'].includes(r.group) && !r.excludeFromTotals);
+        function spending_rules() {
+            return (ruleSet.rules || []).filter(r => (r.category || r.label) !== UNCATEGORIZED && is_spending_classification({ group: r.group, excluded: r.excludeFromTotals }));
         }
 
         function render_main_category_editor() {
             const editor = document.getElementById('mainCategoryEditor');
-            const cfg = RULE_GROUP_EDITORS.spending;
             const openPreviews = new Set([...editor.querySelectorAll('details[open]')].map(el => el.dataset.rule));
             const mains = ruleSet.mainCategories || [];
-            const allCategories = collect_category_options(true);
+            const rules = spending_rules();
             const groups = [
                 ...mains.map(m => ({ id: m.id, label: m.label, unassigned: false })),
                 { id: UNASSIGNED_BUDGET_ID, label: t('budgets.unassigned'), unassigned: true }
             ];
 
             editor.innerHTML = groups.map((g, i) => {
-                // Categories with an auto-assignment rule first, plain ones after.
-                const categories = allCategories.filter(c => (category_to_main(c) || '') === g.id)
-                    .sort((a, b) => Number(!spending_rules_for(a).length) - Number(!spending_rules_for(b).length));
+                const budgetRules = rules.filter(r => (category_to_main(r.category || r.label) || '') === g.id);
                 const expanded = expandedBudgetGroups.has(g.id);
                 const capCents = g.unassigned ? 0 : (subBudgetCaps[g.id] || 0);
                 return `
@@ -2274,51 +2276,25 @@
                     <div class="main-budget-group-categories budget-card-body" data-budget="${escape_budget(g.id)}" ${expanded ? '' : 'hidden'}>
                         <section class="budget-category-section">
                             <h4>${t('budgets.ruleCategoriesTitle')}</h4><p>${t('budgets.ruleCategoriesHint')}</p>
-                            ${categories.filter(c => spending_rules_for(c).length).map(c => spending_rules_for(c).map((rule, n) => build_rule_row_html('spending', rule, c, { openPreviews }).html.replace('<input value=', n ? '<input readonly value=' : '<input value=')).join('')).join('') || `<p>${t('budgets.noAutomaticCategories')}</p>`}
+                            ${budgetRules.map(rule => {
+                                const category = rule.category || rule.label;
+                                const shown = g.unassigned ? category : (split_category(category).sub ?? t('fixExpense.generalSubcategory'));
+                                const first = budgetRules.find(r => (r.category || r.label) === category) === rule;
+                                return build_rule_row_html('spending', rule, shown, { openPreviews }).html.replace('<input value=', first ? '<input value=' : '<input readonly value=');
+                            }).join('') || `<p>${t('budgets.noAutomaticCategories')}</p>`}
                         </section>
-                        <section class="budget-category-section">
-                            <h4>${t('budgets.manualCategoriesTitle')}</h4><p>${t('budgets.manualCategoriesHint')}</p>
-                            ${categories.filter(c => !spending_rules_for(c).length).map(c => {
-                            const chipJson = escape_budget(JSON.stringify(c));
-                            const chipExpanded = expandedCatChips.has(c);
-                            const rows = chipExpanded ? preview_rows_for_category(c) : [];
-                            return `
-                                <div class="cat-chip-row rg-item" data-rg-key="cat:${escape_budget(c)}" draggable="true" data-category='${chipJson}'>
-                                    <button type="button" class="cat-chip-toggle" data-category='${chipJson}' title="${t('budgets.toggleTransactions')}">${chipExpanded ? '▼' : '▶'}</button>
-                                    <span>${escape_budget(c)}</span>
-                                    ${c === UNCATEGORIZED ? '' : `<button type="button" class="cat-rule-btn" data-category='${chipJson}' data-budget="${escape_budget(g.id)}">${t('budgets.addRule')}</button>`}
-                                    <button type="button" class="cat-remove-btn" data-category='${chipJson}' title="${t('budgets.removeCategory')}">−</button>
-                                </div>
-                                ${chipExpanded ? `<div class="cat-chip-preview">
-                                    <p class="cat-chip-preview-count">${t('fixExpense.previewToggle', { count: rows.length })}</p>
-                                    ${render_transaction_preview_table(rows)}
-                                </div>` : ''}
-                            `;
-                        }).join('') || `<p class="cat-chip-empty">${t('budgets.noCategoriesInGroup')}</p>`}
-                        </section>
-                        ${!g.unassigned ? `<div class="budget-card-actions"><div><button type="button" class="cat-new-btn" data-budget="${escape_budget(g.id)}">${t('budgets.newCategory')}</button><small>${t('budgets.newCategoryHint')}</small></div><div><button type="button" class="cat-add-btn" data-budget="${escape_budget(g.id)}">${t('budgets.addCategory')}</button><small>${t('budgets.addCategoryHint')}</small></div></div>` : ''}
+                        <div class="budget-card-actions"><div><button type="button" class="cat-new-btn" data-budget="${escape_budget(g.id)}">${t('budgets.newCategory')}</button><small>${t('budgets.newCategoryHint')}</small></div></div>
                     </div>
                   </div>
                 `;
             }).join('');
 
-            editor.querySelectorAll('.cat-chip-row').forEach(row => row.prepend(favorite_button(JSON.parse(row.dataset.category))));
             wire_main_category_editor();
             wire_rule_group_list('spending');
-            render_category_mapping_editor(mains);
         }
 
         function wire_main_category_editor() {
             const editor = document.getElementById('mainCategoryEditor');
-
-            editor.querySelectorAll('.cat-chip-toggle').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const category = JSON.parse(btn.dataset.category);
-                    if (expandedCatChips.has(category)) expandedCatChips.delete(category); else expandedCatChips.add(category);
-                    render_main_category_editor();
-                });
-            });
 
             editor.querySelectorAll('.main-budget-group-row .group-toggle-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -2328,12 +2304,12 @@
                 });
             });
 
+            // Only the label changes; the id (the prefix of every subcategory) stays.
             editor.querySelectorAll('.main-budget-group-row > input[aria-label="Budgetname"]').forEach(input => {
                 input.onchange = () => {
                     const m = (ruleSet.mainCategories || []).find(x => x.id === input.dataset.budget);
                     if (!m) return;
                     if (!input.value.trim()) { input.value = m.label; return; }
-                    m.entryCategory ||= m.label;
                     m.label = input.value.trim();
                     persist_budgets(); render_sub_budget_settings();
                 };
@@ -2366,6 +2342,8 @@
                 });
             });
 
+            // Removing a budget leaves its subcategories in place; without a
+            // budget id in front they simply show up as unassigned.
             editor.querySelectorAll('.main-budget-group-row .remove-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const id = btn.dataset.budget;
@@ -2373,116 +2351,64 @@
                     if (i === -1) return;
                     ruleSet.mainCategories.splice(i, 1);
                     delete subBudgetCaps[id]; save_sub_budgets(subBudgetCaps);
-                    Object.keys(ruleSet.categoryMappings || {}).forEach(c => { if (ruleSet.categoryMappings[c] === id) ruleSet.categoryMappings[c] = UNASSIGNED_BUDGET_ID; });
-                    ruleSet.rules.forEach(r => { if (r.budgetCategory === id) delete r.budgetCategory; });
                     persist_budgets(); render_sub_budget_settings();
                 });
             });
 
-            const unassign = (category) => {
-                ruleSet.categoryMappings ||= {};
-                ruleSet.categoryMappings[category] = UNASSIGNED_BUDGET_ID;
-                persist_budgets(); render_sub_budget_settings();
-            };
-            editor.querySelectorAll('.cat-remove-btn').forEach(btn => {
-                btn.addEventListener('click', () => unassign(JSON.parse(btn.dataset.category)));
-            });
-
-            // Rename a spending category straight from its rule row.
+            // Rename a spending subcategory straight from its rule row: the
+            // budget prefix is kept, only the part after it is edited.
             editor.querySelectorAll('.budget-card-body .fixexpense-row input[data-field="category"]:not([readonly])').forEach(input => {
                 input.onchange = async () => {
                     const rule = (ruleSet.rules || []).find(r => r.id === input.dataset.rule);
                     const old = rule && (rule.category || rule.label);
-                    const next = input.value.trim();
-                    if (!rule || !next || next === old) { if (rule) input.value = old; return; }
-                    if (collect_category_options().includes(next)) { alert(t('budgets.categoryExists')); input.value = old; return; }
+                    const typed = input.value.trim();
+                    const unassigned = !category_to_main(old);
+                    const next = unassigned ? typed : join_category(split_category(old).parent, typed);
+                    if (!rule || !typed || next === old) { if (rule) input.value = unassigned ? old : (split_category(old).sub ?? t('fixExpense.generalSubcategory')); return; }
+                    if (collect_category_options().includes(next)) { alert(t('budgets.categoryExists')); input.value = unassigned ? old : (split_category(old).sub ?? t('fixExpense.generalSubcategory')); return; }
                     await apply_category_change(old, next, false);
                     persist_budgets(); render_sub_budget_settings();
                 };
             });
 
-            // Auto-assignment: a spending rule makes matching transactions
-            // land in its category (and therefore in this budget) by itself.
-            const new_spending_rule = (category, budgetId) => {
-                const maxPriority = (ruleSet.rules || []).reduce((m, r) => Math.max(m, r.priority || 0), 0);
-                const id = RULE_GROUP_EDITORS.spending.idPrefix + Date.now();
-                const rule = {
-                    id, group: 'discretionary', category, label: category,
-                    matchers: [{ field: 'any', operator: 'contains', value: '', exclude: false }],
-                    priority: maxPriority + 10
-                };
-                if (budgetId) rule.budgetCategory = budgetId;
-                (ruleSet.rules ||= []).push(rule);
-                RULE_GROUP_EDITORS.spending.expandedRules.add(id);
-                expandedBudgetGroups.add(budgetId || UNASSIGNED_BUDGET_ID);
-                persist_budgets(); render_sub_budget_settings();
-            };
-            editor.querySelectorAll('.cat-rule-btn').forEach(btn => {
-                btn.addEventListener('click', () => new_spending_rule(JSON.parse(btn.dataset.category), btn.dataset.budget));
-            });
+            // A new subcategory is a rule; matching transactions land in it
+            // (and therefore in this budget) by themselves.
             editor.querySelectorAll('.cat-new-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
+                    const budgetId = btn.dataset.budget;
                     const base = t('budgets.newCategoryLabel');
-                    let name = base, n = 2;
-                    while (collect_category_options().includes(name)) name = `${base} ${n++}`;
-                    ruleSet.categoryMappings ||= {};
-                    ruleSet.categoryMappings[name] = btn.dataset.budget;
-                    new_spending_rule(name, btn.dataset.budget);
-                });
-            });
-
-            editor.querySelectorAll('.cat-add-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const targetId = btn.dataset.budget;
-                    const options = collect_category_options(true).filter(c => (category_to_main(c) || '') !== targetId);
-                    open_category_popover(btn, options, (category) => {
-                        if (!assign_budget_category(ruleSet, category, targetId)) return;
-                        persist_budgets(); render_sub_budget_settings();
+                    const name_for = label => budgetId ? join_category(budgetId, label) : label;
+                    let label = base, n = 2;
+                    while (collect_category_options().includes(name_for(label))) label = `${base} ${n++}`;
+                    const maxPriority = (ruleSet.rules || []).reduce((m, r) => Math.max(m, r.priority || 0), 0);
+                    const id = RULE_GROUP_EDITORS.spending.idPrefix + Date.now();
+                    (ruleSet.rules ||= []).push({
+                        id, group: 'discretionary', category: name_for(label), label: name_for(label),
+                        matchers: [{ field: 'any', operator: 'contains', value: '', exclude: false }],
+                        priority: maxPriority + 10
                     });
+                    RULE_GROUP_EDITORS.spending.expandedRules.add(id);
+                    expandedBudgetGroups.add(budgetId);
+                    persist_budgets(); render_sub_budget_settings();
                 });
             });
 
-            editor.querySelectorAll('.cat-chip-row').forEach(chip => {
-                chip.addEventListener('dragstart', (e) => {
-                    e.dataTransfer.setData('text/plain', chip.dataset.category);
-                    e.dataTransfer.effectAllowed = 'move';
-                });
-            });
+            // Dragging a rule row onto another budget re-files its category.
             editor.querySelectorAll('.main-budget-group-row, .budget-card-body').forEach(dropzone => {
                 dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag-over'); });
                 dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
-                dropzone.addEventListener('drop', (e) => {
+                dropzone.addEventListener('drop', async (e) => {
                     e.preventDefault();
                     dropzone.classList.remove('drag-over');
                     const raw = e.dataTransfer.getData('text/plain');
                     if (!raw) return;
                     const category = JSON.parse(raw);
                     const targetId = dropzone.dataset.budget;
-                    if (!assign_budget_category(ruleSet, category, targetId)) return;
                     expandedBudgetGroups.add(targetId);
-                    persist_budgets(); render_sub_budget_settings();
+                    await assign_category_to_budget(category, targetId);
+                    render_sub_budget_settings();
                 });
             });
-        }
-
-        // Second, simpler way to (re)assign a category: one dropdown per
-        // known transaction category, kept alongside the drag & drop editor.
-        function render_category_mapping_editor(mains) {
-            const mapping = document.getElementById('categoryMappingEditor');
-            const wasOpen = mapping.querySelector('details')?.open || false;
-            mapping.replaceChildren();
-            const details = document.createElement('details'); details.open = wasOpen;
-            const summary = document.createElement('summary'); summary.textContent = t('budgets.mappingTitle'); details.append(summary);
-            collect_category_options(true).forEach(category => {
-                const row = document.createElement('div'); row.className = 'main-budget-editor-row';
-                const name = document.createElement('span'); name.textContent = category;
-                const select = document.createElement('select'); select.add(new Option(t('budgets.unassigned'), ''));
-                mains.forEach(m => select.add(new Option(m.label, m.id)));
-                select.value = category_to_main(category) || '';
-                select.onchange = () => { if (!assign_budget_category(ruleSet, category, select.value)) return; persist_budgets(); render_main_category_editor(); };
-                row.append(favorite_button(category), name, select); details.append(row);
-            });
-            mapping.append(details);
         }
 
         function render_budget_summary() {
@@ -3860,7 +3786,6 @@
                     const budget = budgets.find(item => item.id === input.dataset.wizardBudgetName);
                     const label = input.value.trim();
                     if (!budget || !label) { input.value = budget?.label || ''; return; }
-                    budget.entryCategory ||= budget.label;
                     budget.label = label;
                     persist_budgets();
                     render_wizard_budgets_step();
@@ -3878,10 +3803,6 @@
                     ruleSet.mainCategories = ruleSet.mainCategories.filter(item => item.id !== id);
                     delete wizardState.budgetCaps[id];
                     delete subBudgetCaps[id];
-                    Object.keys(ruleSet.categoryMappings || {}).forEach(category => {
-                        if (ruleSet.categoryMappings[category] === id) ruleSet.categoryMappings[category] = UNASSIGNED_BUDGET_ID;
-                    });
-                    ruleSet.rules.forEach(rule => { if (rule.budgetCategory === id) delete rule.budgetCategory; });
                     persist_budgets();
                     save_sub_budgets(subBudgetCaps);
                     render_wizard_budgets_step();
@@ -4480,6 +4401,8 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             validate_budget_settings(imported);
             Object.keys(imported).filter(k => k.startsWith('_')).forEach(k => delete imported[k]);
             ensure_budget_coverage(imported);
+            const legacyRenames = imported._categoryRenames;
+            delete imported._categoryRenames;
             imported.subBudgetCaps ||= {};
             const current = { ...ruleSet, subBudgetCaps };
             const baseline = { ...settingsBaseline, subBudgetCaps: settingsBaseline?.subBudgetCaps || {} };
@@ -4489,12 +4412,16 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             if (pristine) next = imported;
             else next = await review_settings_import(current, changes);
             if (!next) return null;
+            await apply_category_renames(legacyRenames);
+            // Categories still used by manual assignments stay selectable: keep
+            // their budget and re-add them as rules without matchers.
             for (const category of new Set(Object.values(overridesById))) {
                 if (!category_catalog(ruleSet).includes(category) || category_catalog(next).includes(category)) continue;
                 const id = budget_category(ruleSet, category);
                 const main = ruleSet.mainCategories.find(m => m.id === id);
                 if (main && !next.mainCategories.some(m => m.id === id)) next.mainCategories.push(structuredClone(main));
-                next.categoryMappings[category] = id || '';
+                const group = ruleSet.rules.find(r => r.category === category)?.group || 'discretionary';
+                next.rules.push({ id: RULE_GROUP_EDITORS.spending.idPrefix + Date.now() + '_' + next.rules.length, group, category, label: category, matchers: [{ field: 'any', operator: 'contains', value: '', exclude: false }], priority: 0 });
             }
             ensure_budget_coverage(next);
             validate_budget_settings(next, { checkSuggestionCaps: false });
@@ -5152,6 +5079,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
                     effectivePeriodOverrides = await load_effective_period_overrides();
                     ignoredTransactions = await load_ignored_transactions();
                 }
+                await finish_category_migration();
                 await merge_manual_entries();
                 reclassify();
                 render_main_category_editor();
@@ -5263,6 +5191,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             try { settingsBaseline = JSON.parse(localStorage.getItem('settingsImportBaseline') || 'null'); } catch {}
             settingsBaseline ||= structuredClone(defaultRuleSet);
             ensure_budget_coverage(settingsBaseline);
+            delete settingsBaseline._categoryRenames;
             ensure_budget_coverage(ruleSet);
             ruleSet._manualRuleIds = manual_rule_ids(ruleSet, settingsBaseline);
             amountOverrides = await load_amount_overrides();
@@ -5271,6 +5200,7 @@ ${JSON.stringify(change.after ?? '(entfernen)',null,2)}`;
             dateOverrides = await load_date_overrides();
             effectivePeriodOverrides = await load_effective_period_overrides();
                     ignoredTransactions = await load_ignored_transactions();
+            await finish_category_migration();
             subBudgetCaps = get_sub_budgets();
 
             // Merge quick-entries and reclassify unconditionally - even with

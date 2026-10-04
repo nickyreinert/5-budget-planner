@@ -5,8 +5,10 @@ import { classified_rows, categories, transactions, propose_rule, propose_rules,
 const settings = {
   groups: [{ id: 'discretionary', label: 'Budget' }],
   mainCategories: [{ id: 'food', label: 'Lebensmittel' }],
-  categoryMappings: { Essen: 'food', Wohnen: '' },
-  rules: [{ id: 'market', label: 'Essen', category: 'Essen', group: 'discretionary', namePattern: 'MARKET', priority: 10 }]
+  rules: [
+    { id: 'market', label: 'Essen', category: 'food.Essen', group: 'discretionary', namePattern: 'MARKET', priority: 10 },
+    { id: 'housing', label: 'Wohnen', category: 'Wohnen', group: 'discretionary', matchers: [{ field: 'any', operator: 'contains', value: '', exclude: false }] }
+  ]
 };
 const entry = (id, name, amount = '-10.00') => ({ id, Datum: '01.10.2026', Name: name, Verwendungszweck: '', Betrag: amount });
 const data = {
@@ -16,9 +18,9 @@ const data = {
 
 test('MCP reads existing rule and manual classifications with transaction IDs', () => {
   assert.deepEqual(classified_rows(settings, data).map(row => [row.id, row.category, row.source]), [
-    ['csv:1', 'Essen', 'rule'], ['csv:2', 'Unkategorisiert', 'none'], ['csv:3', 'Wohnen', 'manual']
+    ['csv:1', 'food.Essen', 'rule'], ['csv:2', 'Unkategorisiert', 'none'], ['csv:3', 'Wohnen', 'manual']
   ]);
-  assert.equal(categories(settings, data).find(item => item.category === 'Essen').budget, 'Lebensmittel');
+  assert.equal(categories(settings, data).find(item => item.category === 'food.Essen').budget, 'Lebensmittel');
   assert.equal(transactions(settings, data, { category: 'Unkategorisiert' }).rows[0].id, 'csv:2');
 });
 
@@ -32,7 +34,7 @@ test('MCP transaction listing filters by inclusive date range', () => {
 });
 
 test('AI category exports never present recurring categories as spending-budget assignments', () => {
-  const settings = { rules: [{ id: 'insurance', category: 'Insurance.Legal', group: 'fixed', namePattern: 'Contract' }], mainCategories: [{ id: 'housing', label: 'Housing' }], categoryMappings: { 'Insurance.Legal': 'housing' } };
+  const settings = { rules: [{ id: 'insurance', category: 'Insurance.Legal', group: 'fixed', namePattern: 'Contract' }], mainCategories: [{ id: 'housing', label: 'Housing' }] };
   const data = { importedEntries: [entry('csv:contract', 'Contract provider')], manualEntries: [], overrides: {} };
   const category = categories(settings, data).find(item => item.category === 'Insurance.Legal');
   assert.equal(category.budget, null);
@@ -44,7 +46,7 @@ test('rule proposal matches unknown rows without changing prior classifications'
   const { candidate, affected } = propose_rule(settings, data, { category: 'Wohnen', field: 'name', text: 'LANDLORD', exact: true });
   assert.equal(affected.length, 1);
   assert.equal(affected[0].id, 'csv:2');
-  assert.equal(candidate.rules.length, 2);
+  assert.equal(candidate.rules.length, 3);
   assert.equal(classified_rows(candidate, data)[1].category, 'Wohnen');
   assert.throws(() => propose_rule(settings, data, { category: 'Wohnen', field: 'name', text: 'MARKET' }), /already classified/);
   assert.equal(propose_rules(settings, data, [{ category: 'Wohnen', field: 'name', text: 'LANDLORD' }]).proposals.length, 1);
@@ -53,8 +55,8 @@ test('rule proposal matches unknown rows without changing prior classifications'
 });
 
 test('individual assignments cannot overwrite manual labels or invent categories', () => {
-  assert.deepEqual(propose_assignments(settings, data, [{ id: 'csv:2', category: 'Essen' }]), { overrides: { 'csv:2': 'Essen' } });
-  assert.throws(() => propose_assignments(settings, data, [{ id: 'csv:3', category: 'Essen' }]), /already has a manual/);
+  assert.deepEqual(propose_assignments(settings, data, [{ id: 'csv:2', category: 'food.Essen' }]), { overrides: { 'csv:2': 'food.Essen' } });
+  assert.throws(() => propose_assignments(settings, data, [{ id: 'csv:3', category: 'food.Essen' }]), /already has a manual/);
   assert.throws(() => propose_assignments(settings, data, [{ id: 'csv:2', category: 'NotExisting' }]), /Unknown category/);
 });
 
@@ -95,14 +97,14 @@ test('MCP uses exported import coverage and review decisions without relabeling 
   const exported = {
     importedEntries: [],
     manualEntries: [
-      { ...entry('manual:covered', 'Example purchase'), Datum: '15.09.2026', source: 'manual', _txId: 'manual:covered', Kategorie: 'Essen' },
+      { ...entry('manual:covered', 'Example purchase'), Datum: '15.09.2026', source: 'manual', _txId: 'manual:covered', Kategorie: 'food.Essen' },
       { ...entry('manual:pending', 'Example purchase'), source: 'manual', _txId: 'manual:pending', Kategorie: 'Wohnen' }
     ], overrides: {},
     importRanges: [{ id: 'range:1', account: 'Checking', from: '2026-09-01', to: '2026-09-30' }]
   };
   const rows = classified_rows(settings, exported);
   assert.deepEqual(rows.map(row => [row.id, row.reconciliation.status, row.category]), [
-    ['manual:covered', 'unassigned', 'Essen'], ['manual:pending', 'pending', 'Wohnen']
+    ['manual:covered', 'unassigned', 'food.Essen'], ['manual:pending', 'pending', 'Wohnen']
   ]);
   const cash = classified_rows(settings, {
     ...exported, reconciliationDecisions: { 'manual:covered': { kind: 'cash' } }
@@ -136,7 +138,7 @@ import { apply_ignored_transactions } from '../src/data.js';
 test('MCP maintenance intentionally moves manual labels and records ignored status in its reviewed revision', () => {
   const exported = { ...data, ignoredTransactions: { 'csv:3': true } };
   assert.equal(classified_rows(settings, exported).find(row => row.id === 'csv:3').ignored, true);
-  const proposal = propose_category_maintenance(settings, exported, [{ action: 'move', ids: ['csv:3'], target: 'Essen' }]);
+  const proposal = propose_category_maintenance(settings, exported, [{ action: 'move', ids: ['csv:3'], target: 'food.Essen' }]);
   assert.deepEqual(proposal.preview[0].affectedIds, ['csv:3']);
   const browserRows = reconcile_transactions(exported.importedEntries, exported.manualEntries);
   browserRows.forEach(row => { row._ignoreCsvCategories = true; });

@@ -185,9 +185,8 @@
     {
       "id": "supermarket",
       "label": "Lebensmittel",
-      "category": "Lebensmittel",
+      "category": "lebensmittel.Lebensmittel",
       "group": "essential",
-      "budgetCategory": "lebensmittel",
       "namePattern": "REWE|EDEKA|Lidl|Aldi|Kaufland|\\bNetto\\b|\\bPenny\\b|Denns|real,-|Getränke",
       "verwendungPattern": "",
       "kategoriePattern": "Lebensmittel",
@@ -197,9 +196,8 @@
     {
       "id": "tankstelle",
       "label": "Tanken",
-      "category": "Tanken",
+      "category": "mobilitaet.Tanken",
       "group": "essential",
-      "budgetCategory": "mobilitaet",
       "namePattern": "\\bShell\\b|\\bAral\\b|\\bEsso\\b|\\bTotal\\b|Tankstelle|\\bJet\\b|Autobahn-Rastst",
       "verwendungPattern": "",
       "kategoriePattern": "Tankstelle",
@@ -209,9 +207,8 @@
     {
       "id": "oepnv",
       "label": "Öffentlicher Nahverkehr & Bahn",
-      "category": "Öffentlicher Nahverkehr & Bahn",
+      "category": "mobilitaet.Öffentlicher Nahverkehr & Bahn",
       "group": "essential",
-      "budgetCategory": "mobilitaet",
       "namePattern": "\\bBVG\\b|\\bHVV\\b|\\bMVV\\b|\\bVBB\\b|Deutsche Bahn|DB Vertrieb|DB Fernverkehr",
       "verwendungPattern": "",
       "kategoriePattern": "",
@@ -265,9 +262,8 @@
     {
       "id": "carsharing",
       "label": "Carsharing / Mobility",
-      "category": "Carsharing",
+      "category": "mobilitaet.Carsharing",
       "group": "discretionary",
-      "budgetCategory": "mobilitaet",
       "namePattern": "Miles Mobility|Share ?Now|SIXT share",
       "verwendungPattern": "",
       "kategoriePattern": "Miles",
@@ -288,9 +284,8 @@
     {
       "id": "gaming",
       "label": "Gaming (Steam, PSN, Xbox, Nintendo, Epic)",
-      "category": "Gaming",
+      "category": "tech.Gaming",
       "group": "discretionary",
-      "budgetCategory": "tech",
       "namePattern": "Steam|steampowered|PlayStation|Sony Interactive Entertainment|Nintendo|Xbox|Epic Games",
       "verwendungPattern": "",
       "kategoriePattern": "Steam",
@@ -311,9 +306,8 @@
     {
       "id": "appstore",
       "label": "App- & Play-Store-Käufe",
-      "category": "App- & Play-Store-Käufe",
+      "category": "tech.App- & Play-Store-Käufe",
       "group": "discretionary",
-      "budgetCategory": "tech",
       "namePattern": "Google Play|Google Payment|Apple\\.com|iTunes|App Store",
       "verwendungPattern": "",
       "kategoriePattern": "",
@@ -323,9 +317,8 @@
     {
       "id": "delivery",
       "label": "Lieferdienste",
-      "category": "Lieferdienste",
+      "category": "freizeit.Lieferdienste",
       "group": "discretionary",
-      "budgetCategory": "freizeit",
       "namePattern": "Lieferando|\\bWolt\\b|Uber Eats|Takeaway",
       "verwendungPattern": "",
       "kategoriePattern": "Lieferando|Wolt",
@@ -335,9 +328,8 @@
     {
       "id": "restaurants",
       "label": "Restaurants, Bars & Cafés",
-      "category": "Restaurants, Bars & Cafés",
+      "category": "freizeit.Restaurants, Bars & Cafés",
       "group": "discretionary",
-      "budgetCategory": "freizeit",
       "namePattern": "Restaurant|Café|Backerei|Bäckerei|Gastro|Gelateria|McDonald",
       "verwendungPattern": "",
       "kategoriePattern": "\\bBar$|Snacks",
@@ -413,31 +405,118 @@
     {
       "id": "drugstore",
       "label": "Drogerie",
-      "category": "Drogerie",
+      "category": "lebensmittel.Drogerie",
       "group": "essential",
-      "budgetCategory": "lebensmittel",
       "namePattern": "dm[.\\- ]?drogerie|Rossmann|M(ü|ue)ller",
       "kategoriePattern": "Drogerie",
       "matchType": "or",
       "priority": 610
+    },
+    {
+      "id": "category_restaurant",
+      "label": "Restaurant",
+      "category": "freizeit.Restaurant",
+      "group": "discretionary",
+      "matchers": [
+        {
+          "field": "any",
+          "operator": "contains",
+          "value": "",
+          "exclude": false
+        }
+      ],
+      "priority": 0
+    },
+    {
+      "id": "category_food_delivery",
+      "label": "Food Delivery",
+      "category": "freizeit.Food Delivery",
+      "group": "discretionary",
+      "matchers": [
+        {
+          "field": "any",
+          "operator": "contains",
+          "value": "",
+          "exclude": false
+        }
+      ],
+      "priority": 0
+    },
+    {
+      "id": "category_cinema",
+      "label": "Cinema",
+      "category": "freizeit.Cinema",
+      "group": "discretionary",
+      "matchers": [
+        {
+          "field": "any",
+          "operator": "contains",
+          "value": "",
+          "exclude": false
+        }
+      ],
+      "priority": 0
+    },
+    {
+      "id": "category_kino",
+      "label": "Kino",
+      "category": "freizeit.Kino",
+      "group": "discretionary",
+      "matchers": [
+        {
+          "field": "any",
+          "operator": "contains",
+          "value": "",
+          "exclude": false
+        }
+      ],
+      "priority": 0
+    },
+    {
+      "id": "category_ausflug_mit_kind",
+      "label": "Ausflug mit Kind",
+      "category": "kids.Ausflug mit Kind",
+      "group": "discretionary",
+      "matchers": [
+        {
+          "field": "any",
+          "operator": "contains",
+          "value": "",
+          "exclude": false
+        }
+      ],
+      "priority": 0
+    },
+    {
+      "id": "category_tech_gadgets",
+      "label": "Tech gadgets",
+      "category": "tech.Tech gadgets",
+      "group": "discretionary",
+      "matchers": [
+        {
+          "field": "any",
+          "operator": "contains",
+          "value": "",
+          "exclude": false
+        }
+      ],
+      "priority": 0
+    },
+    {
+      "id": "category_supermarkt_drogerie",
+      "label": "Supermarkt & Drogerie",
+      "category": "lebensmittel.Supermarkt & Drogerie",
+      "group": "discretionary",
+      "matchers": [
+        {
+          "field": "any",
+          "operator": "contains",
+          "value": "",
+          "exclude": false
+        }
+      ],
+      "priority": 0
     }
   ],
-  "categoryMappings": {
-    "Lebensmittel": "lebensmittel",
-    "Drogerie": "lebensmittel",
-    "Restaurant": "freizeit",
-    "Food Delivery": "freizeit",
-    "Cinema": "freizeit",
-    "Kino": "freizeit",
-    "Ausflug mit Kind": "kids",
-    "Tech gadgets": "tech",
-    "Supermarkt & Drogerie": "lebensmittel",
-    "Auto: Werkstatt, Miete & Zubehör": "",
-    "Flüge": "",
-    "Wohnen: Einrichtung": "",
-    "Spenden": "",
-    "Urlaub & Reisen": "",
-    "Unkategorisiert": ""
-  },
   "subBudgetCaps": {}
 }

@@ -150,17 +150,24 @@ classified transfer rows on different known accounts.
 
 ## Settings and imports
 
-Settings JSON contains budgets (`mainCategories`), transaction-to-budget
-mappings (`categoryMappings`), classification rules, and optional budget
-recommendations. Amounts are integer cents. Rules can identify salary,
-recurring contracts, transfers, and transaction purposes using JavaScript
-regular expressions.
+Settings JSON contains budgets (`mainCategories`), classification rules, and
+optional budget recommendations. Amounts are integer cents. Rules can identify
+salary, recurring contracts, transfers, and transaction purposes using
+JavaScript regular expressions.
+
+A spending category is a rule whose name is `"<budgetId>.<sub>"`, for example
+`"alltag.Lebensmittel"`; the budget is the part before the first dot, exactly
+like a recurring category can be `"Versicherungen.HDI Leben"`. The budget id
+alone (`"alltag"`) is the budget's general category. A name without a budget id,
+such as `Unkategorisiert`, stays unassigned. There is no separate mapping from
+categories to budgets. Settings in the earlier format (`categoryMappings`,
+`budgetCategory`, `entryCategory`) are converted once when loaded or imported,
+including stored per-transaction assignments, manual entries and favorites;
+categories that only existed as a mapping become rules without matchers.
 
 Recurring-cost categories (`group: "fixed"`) describe contracts and are separate
-from spending categories. Only non-recurring spending categories can have a
-`categoryMappings` or `budgetCategory` assignment. The app removes old budget
-assignments from recurring, income, and transfer categories when settings are
-loaded or saved. Recurring payments reduce the available budget through their
+from spending categories: only non-recurring spending categories can belong to
+a budget, even if their name starts with a budget id. Recurring payments reduce the available budget through their
 monthly fixed-cost value; their transactions never consume a spending budget.
 Category names alone do not determine the role: the classification group does.
 

@@ -1,6 +1,6 @@
 // Three-way settings import: local edits/deletions survive a later LLM proposal.
 const arrayFields = new Set(['rules', 'mainCategories', 'groups']);
-const mapFields = new Set(['categoryMappings', 'subBudgetCaps', 'categoryGroupFallback']);
+const mapFields = new Set(['subBudgetCaps', 'categoryGroupFallback']);
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const clone = x => x === undefined ? undefined : structuredClone(x);
 export function settings_changes(current, incoming, baseline = {}) {
